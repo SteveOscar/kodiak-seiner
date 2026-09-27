@@ -1,0 +1,21 @@
+{
+  "source": "AWS Terrain Tiles (Terrarium), Mapzen/Linux Foundation; see THIRD_PARTY_NOTICES.md",
+  "size": 2048,
+  "zoom": 10,
+  "worldHalf": 8000,
+  "lat0": 57.65,
+  "lon0": -153.4,
+  "latMin": 56.80467625899281,
+  "latMax": 58.49532374100719,
+  "lonMin": -154.97807632003733,
+  "lonMax": -151.82192367996268,
+  "kmPerDegLat": 111.2,
+  "kmPerDegLon": 59.5661938566926,
+  "encoding": {
+    "offset": 1000,
+    "scale": 4,
+    "note": "metres = (R*256 + G) / scale - offset; B = 128 + signed distance to coast in texels (positive offshore, clamped); row 0 = north, col 0 = west"
+  },
+  "realMinMetres": -1367,
+  "realMaxMetres": 2204
+}
