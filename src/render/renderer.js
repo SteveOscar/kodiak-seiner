@@ -9,8 +9,8 @@ export function createRenderer({ canvas, config, quality }) {
     canvas,
     antialias: !quality.postfx,
     powerPreference: 'high-performance',
-    // Reversed-Z (EXT_clip_control) keeps depth precise from 0.5 m to 40 km, so distant coastlines do not z-fight
-    // with the sea. three.js falls back to a normal depth buffer where the extension is missing.
+    // Reversed-Z (EXT_clip_control). It only adds precision with a 32-bit float depth attachment, which the postfx scene
+    // target provides; the canvas path (quality 'low') has 24-bit depth. three.js falls back where unsupported.
     reversedDepthBuffer: true,
     stencil: true,
   });
@@ -20,7 +20,11 @@ export function createRenderer({ canvas, config, quality }) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
   renderer.shadowMap.enabled = !!quality.shadows;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap; // soft in r186 via light.shadow.radius
+  // The shadow map is redrawn once per frame (pipeline.frame sets needsUpdate), not on every secondary render.
+  renderer.shadowMap.autoUpdate = false;
+  // Counters accumulate over the whole frame (reset by main.js), so perf() sees every pass, not just the last.
+  renderer.info.autoReset = false;
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(
@@ -37,13 +41,21 @@ export function createRenderer({ canvas, config, quality }) {
   const resizeHandlers = [];
 
   const pipeline = {
+    // Hooks run every frame after the debug camera override: put camera-following work (sky dome, shadow box, rain,
+    // camera-centred grids) and secondary renders here.
     beforeRender(fn) {
       before.push(fn);
-      return () => before.splice(before.indexOf(fn), 1);
+      return () => {
+        const i = before.indexOf(fn);
+        if (i >= 0) before.splice(i, 1);
+      };
     },
     afterRender(fn) {
       after.push(fn);
-      return () => after.splice(after.indexOf(fn), 1);
+      return () => {
+        const i = after.indexOf(fn);
+        if (i >= 0) after.splice(i, 1);
+      };
     },
     onResize(fn) {
       resizeHandlers.push(fn);
@@ -53,6 +65,7 @@ export function createRenderer({ canvas, config, quality }) {
       renderer.render(scene, camera);
     },
     frame(dt) {
+      renderer.shadowMap.needsUpdate = true;
       for (const fn of before) fn(dt);
       pipeline.render(dt);
       for (const fn of after) fn(dt);

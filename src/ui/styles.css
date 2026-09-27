@@ -3,7 +3,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1620; }
 #app { position: fixed; inset: 0; }
 #gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
 #ui { position: absolute; inset: 0; pointer-events: none; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #f3f1ea; }
-#ui * { pointer-events: auto; }
+/* HUD elements default to pointer-events: none (so the canvas keeps orbit/zoom/binoculars); interactive widgets opt in. */
+#ui .ui-interactive, #ui .ui-interactive * { pointer-events: auto; }
 #boot { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
   background: radial-gradient(ellipse at 50% 60%, #1c3446 0%, #0b1620 70%); color: #e9e4d6; transition: opacity 0.8s; z-index: 10; }
 #boot.hidden { opacity: 0; pointer-events: none; }

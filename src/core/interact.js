@@ -10,7 +10,9 @@
 // Offers with hold: true are display-only prompts for press-and-hold mechanics that the owner polls itself via
 // input.action(key); they still block lower-priority offers on the same key.
 //
-// Priority guide: 100 fishing set actions, 80 skiff/boarding, 60 deliver/dock, 40 go ashore, 20 inspect/landmark.
+// Offers are only accepted in mode 'play' and never on the first frame after a mode change.
+// Priority guide: 100 fishing set actions, 80 skiff/boarding, 70 sleep, 60 deliver/dock, 40 go ashore,
+// 20 inspect/landmark.
 
 export function createInteract(input) {
   let offers = [];
@@ -37,6 +39,11 @@ export function createInteract(input) {
         }
       }
       offers = [];
+    },
+    // Drops pending offers and prompts (every non-play frame and on mode transitions).
+    clear() {
+      offers = [];
+      interact.current = {};
     },
   };
   return interact;

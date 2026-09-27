@@ -4,7 +4,9 @@
 //
 // Usage:
 //   node tools/smoke.mjs [--scenario=basic|<file.json>] [--out=qa/run] [--params="autostart&time=19"]
-//                        [--width=1280 --height=720] [--dist] [--timeout=120000]
+//                        [--width=1280 --height=720] [--dist] [--timeout=180000] [--bench] [--strict]
+//   --bench   disables vsync / frame-rate limiting so frameMsAvg and gpuMs show real cost (use for budgets)
+//   --strict  also fail on console warnings
 //
 // Scenario = JSON array of steps (all optional keys, run in order):
 //   { "wait": 500 }                          real milliseconds
@@ -23,11 +25,16 @@
 //   { "perf": "label", "ms": 3000 }          wait ms then record __KODIAK__.perf()
 //   { "click": [x, y] }                      mouse click at viewport pixel
 //   { "drag": [dx, dy], "button": "left" }   mouse drag from the viewport centre
+//   { "wheel": 300 }                         mouse wheel at the viewport centre (positive = zoom out)
+//   { "clickSel": "#ui .menu-new" }          click a DOM element by CSS selector
+//   { "reload": true }                       reload the page (localStorage survives)
+//   { "timeScale": 30 }                      game minutes per real second
 // Writes <out>/report.json. Exit code 1 on page errors, console errors, failed `until`, or systems that failed.
 
 import { chromium } from 'playwright';
 import { createServer, preview } from 'vite';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -95,10 +102,16 @@ const timeout = Number(args.timeout ?? 180000);
 let server;
 let baseUrl;
 if (args.dist) {
-  server = await preview({ root: ROOT, logLevel: 'error', preview: { port: 0, host: '127.0.0.1' } });
+  server = await preview({ root: ROOT, logLevel: 'error', cacheDir: path.join(os.tmpdir(), `kodiak-vite-${process.pid}`), preview: { port: 0, host: '127.0.0.1' } });
   baseUrl = server.resolvedUrls.local[0];
 } else {
-  server = await createServer({ root: ROOT, logLevel: 'error', server: { port: 0, host: '127.0.0.1', strictPort: false } });
+  // A private deps cache per run: concurrent runs never 504 or reload each other's pages on re-optimisation.
+  server = await createServer({
+    root: ROOT,
+    logLevel: 'error',
+    cacheDir: path.join(os.tmpdir(), `kodiak-vite-${process.pid}`),
+    server: { port: 0, host: '127.0.0.1', strictPort: false },
+  });
   await server.listen();
   baseUrl = server.resolvedUrls.local[0];
 }
@@ -106,7 +119,15 @@ if (args.dist) {
 const report = { url: baseUrl + params, scenario: scen, errors: [], warnings: [], states: {}, perf: {}, evals: [], shots: [], failures: [] };
 const browser = await chromium.launch({
   headless: true,
-  args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'],
+  args: [
+    '--use-angle=metal',
+    '--enable-gpu',
+    '--ignore-gpu-blocklist',
+    '--autoplay-policy=no-user-gesture-required',
+    '--disable-background-timer-throttling',
+    '--disable-renderer-backgrounding',
+    ...(args.bench ? ['--disable-gpu-vsync', '--disable-frame-rate-limit'] : []),
+  ],
 });
 const page = await browser.newPage({ viewport: { width, height } });
 page.on('pageerror', (e) => report.errors.push(`pageerror: ${e.message}`));
@@ -135,8 +156,9 @@ async function finish(code) {
   console.log(`systems: ${JSON.stringify(report.systemStatus)}`);
   for (const [k, v] of Object.entries(report.perf)) console.log(`perf ${k}: ${JSON.stringify(v)}`);
   if (report.errors.length) console.log(`errors (${report.errors.length}):\n  ${report.errors.slice(0, 20).join('\n  ')}`);
+  if (report.warnings.length) console.log(`warnings (${report.warnings.length}):\n  ${[...new Set(report.warnings)].slice(0, 20).join('\n  ')}`);
   if (report.failures.length) console.log(`failures:\n  ${report.failures.join('\n  ')}`);
-  const bad = report.errors.length || report.failures.length || failedSystems.length;
+  const bad = report.errors.length || report.failures.length || failedSystems.length || (args.strict && report.warnings.length);
   console.log(bad ? 'SMOKE: FAIL' : 'SMOKE: PASS');
   process.exit(code || (bad ? 1 : 0));
 }
@@ -175,6 +197,19 @@ try {
       await K(step.camera ? `__KODIAK__.camera(${JSON.stringify(step.camera.pos)}, ${JSON.stringify(step.camera.look)})` : '__KODIAK__.camera(null)');
     }
     if (step.click) await page.mouse.click(step.click[0], step.click[1]);
+    if (step.clickSel) {
+      try {
+        await page.click(step.clickSel, { timeout: step.timeout ?? 5000 });
+      } catch (e) {
+        report.failures.push(`clickSel failed: ${step.clickSel}: ${e.message.split('\n')[0]}`);
+      }
+    }
+    if (step.wheel) {
+      await page.mouse.move(width / 2, height / 2);
+      await page.mouse.wheel(0, step.wheel);
+    }
+    if (step.reload) await page.reload({ waitUntil: 'load' });
+    if (step.timeScale !== undefined) await K(`__KODIAK__.ctx.clock.scale = ${Number(step.timeScale)}`);
     if (step.drag) {
       await page.mouse.move(width / 2, height / 2);
       await page.mouse.down({ button: step.button ?? 'left' });

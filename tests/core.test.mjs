@@ -46,6 +46,6 @@ test('clock advances, wraps days and emits hour events', () => {
   assert.ok(Math.abs(clock.hours - 1.5) < 1e-9);
   assert.deepEqual(hours, [23, 0, 1]);
   assert.equal(days, 1);
-  assert.equal(clock.date(0).label, 'Jun 20');
-  assert.equal(clock.date(11).label, 'Jul 1');
+  assert.equal(clock.date(0).label, 'Jul 6');
+  assert.equal(clock.date(26).label, 'Aug 1');
 });

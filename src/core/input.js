@@ -6,6 +6,7 @@
 //   input.axis('steer')               -1..1 (keys or gamepad left stick x)
 //   input.axis('throttle')            -1..1 (keys or gamepad left stick y / triggers)
 //   input.mouse.dx / dy               pixels dragged this frame while a button is held (or pointer-locked)
+//   input.mouse.buttons               bitmask (1 = left drag/orbit, 2 = right = binoculars)
 //   input.mouse.wheel                 wheel delta this frame (positive = zoom out)
 //   input.keyPressed('KeyF')          raw key edge, for debug keys
 //
@@ -25,15 +26,17 @@ const BINDINGS = {
   photo: ['KeyH'], // hide HUD
   sprint: ['ShiftLeft', 'ShiftRight'],
   horn: ['KeyG'],
+  binoculars: ['KeyB'], // also: hold right mouse
   lights: ['KeyN'],
   help: ['F1', 'Slash'],
 };
 
 // Gamepad (standard mapping) button indices per action.
-const PAD = { action: [0], interact: [2], camera: [3], map: [8], pause: [9], sprint: [10], horn: [1] };
+const PAD = { action: [0], interact: [2], camera: [3], map: [8], pause: [9], sprint: [10], horn: [1], binoculars: [4] };
 
 export function createInput(target = window) {
   const down = new Set();
+  const suppressed = new Set(); // held across a mode change; ignored until released
   const pressedKeys = new Set();
   const releasedKeys = new Set();
   const padDown = new Set();
@@ -53,11 +56,13 @@ export function createInput(target = window) {
   };
   const onKeyUp = (e) => {
     down.delete(e.code);
+    suppressed.delete(e.code);
     releasedKeys.add(e.code);
   };
   const onBlur = () => {
     for (const c of down) releasedKeys.add(c);
     down.clear();
+    suppressed.clear();
   };
   const onMouseDown = (e) => {
     if (e.target && e.target.id !== 'gl') return;
@@ -93,6 +98,8 @@ export function createInput(target = window) {
   target.addEventListener('contextmenu', onContext);
 
   const dz = (v) => (Math.abs(v) < 0.15 ? 0 : v);
+  const live = (c) => down.has(c) && !suppressed.has(c);
+  const edge = (c) => pressedKeys.has(c) && !suppressed.has(c);
 
   const input = {
     mouse,
@@ -134,18 +141,19 @@ export function createInput(target = window) {
       releasedKeys.clear();
     },
 
-    keyDown: (code) => down.has(code),
-    keyPressed: (code) => pressedKeys.has(code),
+    keyDown: (code) => live(code),
+    keyPressed: (code) => edge(code),
     keyReleased: (code) => releasedKeys.has(code),
 
     action(name) {
       if (input.gameplayBlocked && name !== 'pause') return false;
-      return (BINDINGS[name] ?? []).some((c) => down.has(c)) || (PAD[name] ?? []).some((b) => padDown.has(b));
+      if (name === 'binoculars' && mouse.buttons & 2) return true;
+      return (BINDINGS[name] ?? []).some(live) || (PAD[name] ?? []).some((b) => padDown.has(b));
     },
     pressed(name) {
       if (input.gameplayBlocked && name !== 'pause' && name !== 'map' && name !== 'logbook') return false;
       return (
-        (BINDINGS[name] ?? []).some((c) => pressedKeys.has(c)) ||
+        (BINDINGS[name] ?? []).some(edge) ||
         (PAD[name] ?? []).some((b) => padDown.has(b) && !padPrev.has(b))
       );
     },
@@ -165,6 +173,14 @@ export function createInput(target = window) {
       return 0;
     },
     bindings: BINDINGS,
+
+    // Called by core on every mode change: this frame's edges are dropped and keys currently held stay inert until
+    // released, so a key that opened/closed a menu never also triggers gameplay.
+    consume() {
+      pressedKeys.clear();
+      for (const c of down) suppressed.add(c);
+      for (const b of padDown) padPrev.add(b);
+    },
 
     dispose() {
       target.removeEventListener('keydown', onKeyDown);

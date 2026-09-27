@@ -10,6 +10,8 @@
 //   isWater(x, z)           heightAt < 0
 //   depthAt(x, z)           max(0, -heightAt)
 //   raymarch(o, d, max)     first terrain hit distance along a ray, or -1
+//   nearestWater(x, z, o)   nearest open water >= o.minShore offshore, or null
+//   seabedAt(x, z)          'sand' | 'gravel' | 'mud' | 'rock' | 'land'
 //
 // GPU: heightmap.texture is an RG float DataTexture (R = game height, G = signed shore distance), row 0 = north.
 // Sample it at uv = ((x + half) / (2 * half), (z + half) / (2 * half)). Published as ctx.uniforms.uHeightMap.
@@ -58,7 +60,26 @@ export function createHeightmap({ size, pixels, meta, config }) {
     texData[k * 2 + 1] = shore[k];
   }
   const texture = new THREE.DataTexture(texData, size, size, THREE.RGFormat, THREE.FloatType);
-  texture.minFilter = THREE.LinearFilter;
+  // Box-filtered mip chain so grazing views of distant shelf colour and shore foam do not shimmer.
+  // Vertex-shader lookups should use textureLod(uHeightMap, uv, 0.0).
+  texture.mipmaps = [{ data: texData, width: size, height: size }];
+  for (let w = size, prev = texData; w > 1; ) {
+    const n = w >> 1;
+    const next = new Float32Array(n * n * 2);
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) {
+        for (let c = 0; c < 2; c++) {
+          const a = ((2 * j) * w + 2 * i) * 2 + c;
+          const b = ((2 * j + 1) * w + 2 * i) * 2 + c;
+          next[(j * n + i) * 2 + c] = 0.25 * (prev[a] + prev[a + 2] + prev[b] + prev[b + 2]);
+        }
+      }
+    }
+    texture.mipmaps.push({ data: next, width: n, height: n });
+    prev = next;
+    w = n;
+  }
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
   texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
   texture.generateMipmaps = false;
@@ -161,10 +182,68 @@ export function createHeightmap({ size, pixels, meta, config }) {
       return null;
     },
 
+    // Seabed type under open water: 'rock' off cliffs and steep capes (nets hang up), 'mud' at enclosed bay heads,
+    // 'gravel' close along beaches, 'sand' elsewhere. Land returns 'land'. Classified lazily on a 512² grid.
+    seabedAt(x, z) {
+      if (hm.shoreDistance(x, z) <= 0) return 'land';
+      if (!seabed) seabed = classifySeabed();
+      const n = SEABED_RES;
+      const i = Math.min(n - 1, Math.max(0, Math.floor(((x + half) / (2 * half)) * n)));
+      const j = Math.min(n - 1, Math.max(0, Math.floor(((z + half) / (2 * half)) * n)));
+      return SEABED_KINDS[seabed[j * n + i]];
+    },
+
     // World (x, z) -> texture uv (row 0 = north).
     uv(x, z) {
       return { u: (x + half) / (2 * half), v: (z + half) / (2 * half) };
     },
   };
+  const SEABED_RES = 512;
+  const SEABED_KINDS = ['sand', 'gravel', 'mud', 'rock', 'land'];
+  let seabed = null;
+  function classifySeabed() {
+    const n = SEABED_RES;
+    const out = new Uint8Array(n * n);
+    const cell = (2 * half) / n;
+    const dirs = 16;
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) {
+        const x = -half + (i + 0.5) * cell;
+        const z = -half + (j + 0.5) * cell;
+        const sd = hm.shoreDistance(x, z);
+        if (sd <= 0) {
+          out[j * n + i] = 4;
+          continue;
+        }
+        if (sd > 260) {
+          out[j * n + i] = 0;
+          continue;
+        }
+        let steep = 0;
+        let enclosed = 0;
+        for (let k = 0; k < dirs; k++) {
+          const a = (k / dirs) * Math.PI * 2;
+          const cx = Math.cos(a);
+          const cz = Math.sin(a);
+          for (const r of [60, 120]) {
+            const h = hm.heightAt(x + cx * r, z + cz * r);
+            if (h > 0) steep = Math.max(steep, h / Math.max(1, r - sd));
+          }
+          for (let r = 100; r <= 800; r += 100) {
+            if (hm.heightAt(x + cx * r, z + cz * r) > 0) {
+              enclosed++;
+              break;
+            }
+          }
+        }
+        let kind = sd < 60 ? 1 : 0;
+        if (enclosed / dirs > 0.8 && sd < 150) kind = 2;
+        if (steep > 0.14) kind = 3; // ~15% of the nearshore band: cliffs and steep capes
+        out[j * n + i] = kind;
+      }
+    }
+    return out;
+  }
+
   return hm;
 }

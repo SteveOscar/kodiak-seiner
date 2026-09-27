@@ -1,6 +1,6 @@
 // Game clock. ctx.clock.hours is local time of day in [0, 24); ctx.clock.day counts days since the season start.
 // The clock only runs while ctx.state.mode === 'play' (the main loop calls update). Emits 'time:hour' on each whole
-// hour and 'time:day' at midnight. advance() jumps forward (sleep, fast travel) and emits the skipped events once.
+// hour and 'time:day' at midnight. skip() jumps forward (sleep, fast travel) and emits 'time:skip' instead of hours.
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -10,8 +10,8 @@ export function createClock(config, events) {
   const clock = {
     day: t.startDay,
     hours: t.startHours,
-    scale: t.minutesPerSecond, // game minutes per real second
-    frozen: false, // true = time does not advance (title screen, photo mode, debug)
+    scale: t.minutesPerSecond, // game minutes per real second; written only by the UI time-speed setting
+    frozen: false, // written only by core setMode: time runs only in mode 'play'
 
     update(dt) {
       if (clock.frozen) return;
@@ -33,6 +33,22 @@ export function createClock(config, events) {
         if (hour === 0) events.emit('time:day', { day });
         events.emit('time:hour', { day, hour });
       }
+    },
+
+    // Jump forward (sleep, fast travel, waiting for an opener). Emits one 'time:skip' plus 'time:day' per crossed
+    // midnight, but never 'time:hour' for skipped hours. Systems re-seed/recompute on 'time:skip'.
+    skip(hours, reason = 'skip') {
+      const fromDay = clock.day;
+      const fromHours = clock.hours;
+      clock.advance(hours, { silent: true });
+      for (let d = fromDay + 1; d <= clock.day; d++) events.emit('time:day', { day: d });
+      events.emit('time:skip', { fromDay, fromHours, day: clock.day, hours: clock.hours, reason });
+    },
+
+    // Hours until the given time of day (0..24), always > 0.
+    hoursUntil(targetHours) {
+      const d = (((targetHours - clock.hours) % 24) + 24) % 24;
+      return d === 0 ? 24 : d;
     },
 
     set(hours, day = clock.day) {
@@ -67,7 +83,8 @@ export function createClock(config, events) {
       return `${h12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
     },
 
-    isOpener(hours = clock.hours) {
+    // Daily fishing window only. Whether fishing is actually open is season.openerActive() (period schedule).
+    inOpenerHours(hours = clock.hours) {
       return hours >= t.openerStart && hours < t.openerEnd;
     },
   };

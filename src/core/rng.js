@@ -27,7 +27,9 @@ export function createRng(seed = 1) {
       while (v === 0) v = next();
       return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
     },
-    fork: (salt) => createRng((seed * 1664525 + 1013904223 + salt * 2654435761) >>> 0),
+    // Independent stream that depends only on (seed, salt), so other systems' draws never shift yours.
+    fork: (salt) =>
+      createRng((Math.imul(seed, 1664525) + 1013904223 + Math.imul(typeof salt === 'string' ? hashString(salt) : salt >>> 0, 2654435761)) >>> 0),
   };
   return rng;
 }

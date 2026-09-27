@@ -1,13 +1,23 @@
 // Shared shader uniforms. Custom materials reference these objects directly (not copies) so one write per frame
 // updates every shader. Owners write, everyone else reads:
-//   uTime, uCameraPos          main loop
+//   uTime, uCameraPos          main loop (uCameraPos is for LOD/culling only; view-dependent shading uses the
+//                              built-in cameraPosition, which is correct in reflection/cube renders too)
 //   uSunDir, uSunColor, uSkyColor, uHorizonColor, uFogColor, uFogDensity, uDaylight, uWindDir, uWindSpeed, uRain,
-//   uCloudCover                sky
+//   uCloudCover                sky (uFogColor/uFogDensity mirror scene.fog for shaders that cannot use fog chunks)
 //   uHeightMap, uWorldHalf     heightmap (RG float texture: R = game height m, G = signed shore distance m)
-//   uTerrainShadow             terrain (optional sun-occlusion mask over the heightmap footprint; 1 = lit)
+//   uTerrainShadow             terrain (R: 1 = sunlit, same uv/orientation as uHeightMap; defaults to 1×1 white)
 //   uWaveState                 water (x = amplitude scale, y = choppiness, z = foam amount, w = unused)
+//   uWaterAbsorb, uWaterScatter water (underwater colour attenuation used by the kodiak_underwater chunk)
+//
+// Colours are linear (THREE.Color converts sRGB hex on construction).
 
 import * as THREE from 'three';
+
+function whiteTexture() {
+  const t = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat);
+  t.needsUpdate = true;
+  return t;
+}
 
 export function createUniforms() {
   return {
@@ -26,7 +36,9 @@ export function createUniforms() {
     uCloudCover: { value: 0.3 },
     uHeightMap: { value: null },
     uWorldHalf: { value: 8000 },
-    uTerrainShadow: { value: null },
+    uTerrainShadow: { value: whiteTexture() },
     uWaveState: { value: new THREE.Vector4(1, 0.5, 0.5, 0) },
+    uWaterAbsorb: { value: new THREE.Vector3(0.45, 0.09, 0.07) }, // per metre of water path, RGB
+    uWaterScatter: { value: new THREE.Color('#0b3a44') }, // colour of the water column
   };
 }
