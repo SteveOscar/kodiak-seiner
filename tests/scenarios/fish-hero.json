@@ -1,0 +1,122 @@
+[
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode !== 'loading'",
+  "timeout": 90000
+ },
+ {
+  "start": {}
+ },
+ {
+  "eval": "(() => { const s = document.createElement('style'); s.textContent = '#ui, #hud, .ui-root { display: none !important; }'; document.head.appendChild(s); return 'ui hidden'; })()"
+ },
+ {
+  "time": 13
+ },
+ {
+  "weather": "clear"
+ },
+ {
+  "eval": "window.__H = { K: __KODIAK__, fish: __KODIAK__.systems.fish, freezeAt(j, frac) { const f = this.fish, K = this.K; const target = j.t0 + j.dur * frac; const tick = () => { if (f.sim.now >= target) K.ctx.game.setMode('photo'); else requestAnimationFrame(tick); }; requestAnimationFrame(tick); }, play() { this.K.ctx.game.setMode('play'); }, portrait(school, frac, dist, h) { const j = this.fish.debugJump(school.id); if (!j) return 'no jump'; const sd = this.K.ctx.uniforms.uSunDir.value; const L = Math.hypot(sd.x, sd.z) || 1; const seg = j.segs[0]; const f = Math.min(1, frac); const cx = j.x + Math.sin(j.heading) * seg.len * f, cz = j.z - Math.cos(j.heading) * seg.len * f; const px = Math.cos(j.heading), pz = Math.sin(j.heading); const side = (px * sd.x + pz * sd.z) >= 0 ? 1 : -1; this.K.camera([cx + (px * side * 0.8 + sd.x / L * 0.2) * dist, h, cz + (pz * side * 0.8 + sd.z / L * 0.2) * dist], [cx, 0.45, cz]); this.freezeAt(j, frac); return { style: j.style, species: j.species }; } }; 'ok'"
+ },
+ {
+  "teleport": [
+   3620,
+   -2560,
+   90
+  ]
+ },
+ {
+  "eval": "window.__shore = __H.fish.spawnSchool({ x: 3744, z: -2590, species: 'pink', count: 7000, milling: true, spookable: false }); window.__shore.radius = 18; 'ok'"
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "eval": "(() => { const p = window.__shore.position; __KODIAK__.camera([p.x - 30, 16, p.z + 12], [p.x + 3, -3, p.z - 1]); })()"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "shot": "a-shore-school-crowsnest"
+ },
+ {
+  "eval": "window.__chum = __H.fish.spawnSchool({ x: 3560, z: -2330, species: 'chum', count: 1600, milling: true, spookable: false, depth: 1.2 }); window.__chum.radius = 14; 'ok'"
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "eval": "(() => { const p = window.__chum.position; __KODIAK__.camera([p.x + 16, 4.5, p.z + 16], [p.x, 0, p.z]); })()"
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "shot": "b-chum-finning"
+ },
+ {
+  "time": 19.6
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "eval": "__H.portrait(window.__chum, 0.47, 2.4, 0.8)"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 4000
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "c-portrait-chum-evening"
+ },
+ {
+  "eval": "__H.play()"
+ },
+ {
+  "eval": "window.__coho = __H.fish.spawnSchool({ x: 3600, z: -2420, species: 'coho', count: 900, milling: true, spookable: false }); 'ok'"
+ },
+ {
+  "wait": 1200
+ },
+ {
+  "eval": "__H.portrait(window.__coho, 0.3, 3.0, 0.9)"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 4000
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "d-portrait-coho-evening"
+ },
+ {
+  "eval": "__H.play()"
+ },
+ {
+  "eval": "__H.portrait(window.__shore, 0.5, 2.0, 0.6)"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 4000
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "e-portrait-pink-evening"
+ },
+ {
+  "eval": "__H.play()"
+ },
+ {
+  "perf": "perf",
+  "ms": 2000
+ }
+]

@@ -1,0 +1,17 @@
+[
+  {"until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 60000},
+  {"start": {}},
+  {"eval": "(document.getElementById('ui')||{style:{}}).style.visibility='hidden'; 1"},
+  {"weather": "partly"},
+  {"eval": "__KODIAK__.setTime(6, 0)"},
+  {"wait": 1000},
+  {"eval": "JSON.stringify(__KODIAK__.systems.sky.debugMist().filter(b=>b.kind==='bay').sort((a,b)=>b.p-a.p).slice(0,5))"},
+  {"eval": "const b=__KODIAK__.systems.sky.debugMist().filter(b=>b.kind==='bay').sort((a,b)=>b.p-a.p)[0]; window.__b=b; __KODIAK__.camera([b.x, 6, b.z], [b.x+400, 20, b.z-300]); 1"},
+  {"wait": 2500},
+  {"shot": "inbank-6m"},
+  {"eval": "JSON.stringify(__KODIAK__.state().sky)"},
+  {"eval": "const b=window.__b; __KODIAK__.camera([b.x, 70, b.z], [b.x+400, 0, b.z-300]); 1"},
+  {"wait": 2500},
+  {"shot": "abovebank-70m"},
+  {"eval": "JSON.stringify(__KODIAK__.state().sky)"}
+]

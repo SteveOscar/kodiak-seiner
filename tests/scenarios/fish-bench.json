@@ -1,0 +1,18 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode !== 'loading'", "timeout": 90000 },
+  { "start": {} },
+  { "time": 10 },
+  { "weather": "partly" },
+  { "wait": 2000 },
+  { "eval": "(() => { const s = __KODIAK__.systems.seiner.position; const f = __KODIAK__.systems.fish; const t = f.schools?.find?.(q => q.tutorial) ?? f.schools?.[0]; const p = t ? t.position : s; __KODIAK__.camera([p.x + 22, 18, p.z + 22], [p.x, -2, p.z]); return !!t; })()" },
+  { "wait": 1500 },
+  { "perf": "school", "ms": 5000 },
+  { "shot": "school" },
+  { "eval": "(() => { const f = __KODIAK__.systems.fish; if (f.debugBag) f.debugBag({ hauled: 0.8, count: 6000 }); const s = __KODIAK__.systems.seiner.position; const h = __KODIAK__.systems.seiner.heading; __KODIAK__.camera([s.x + Math.cos(h) * 3, 7, s.z + Math.sin(h) * 3 + 6], [s.x + Math.cos(h) * 14, -0.5, s.z + Math.sin(h) * 14]); })()" },
+  { "wait": 2500 },
+  { "perf": "bag", "ms": 5000 },
+  { "shot": "bag" },
+  { "eval": "__KODIAK__.camera(null)" },
+  { "wait": 1500 },
+  { "perf": "chase", "ms": 4000 }
+]

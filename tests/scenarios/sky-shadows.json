@@ -1,0 +1,21 @@
+[
+  {"until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 60000},
+  {"start": {}},
+  {"eval": "(document.getElementById('ui')||{style:{}}).style.visibility='hidden'; 1"},
+  {"weather": "clear"},
+  {"eval": "__KODIAK__.setTime(13, 0)"},
+  {"wait": 800},
+  {"eval": "const p=__KODIAK__.systems.seiner.position; __KODIAK__.camera([p.x+22, 9, p.z+14], [p.x, 2, p.z]); JSON.stringify([p.x,p.z])"},
+  {"wait": 1500},
+  {"shot": "sh-noon"},
+  {"eval": "__KODIAK__.setTime(20.5, 0)"},
+  {"wait": 1500},
+  {"shot": "sh-golden"},
+  {"eval": "const p=__KODIAK__.systems.seiner.position; __KODIAK__.camera([p.x-18, 7, p.z-16], [p.x, 3, p.z]); 1"},
+  {"wait": 1200},
+  {"shot": "sh-golden-2"},
+  {"eval": "__KODIAK__.setTime(1.5, 0)"},
+  {"wait": 1500},
+  {"shot": "sh-night"},
+  {"eval": "JSON.stringify(__KODIAK__.state().sky)"}
+]

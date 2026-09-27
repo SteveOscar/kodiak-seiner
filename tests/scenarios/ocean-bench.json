@@ -1,0 +1,14 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 60000 },
+  { "start": {} },
+  { "eval": "document.getElementById('boot')?.remove(); const ui = document.getElementById('ui'); if (ui) ui.style.visibility = 'hidden'; 1" },
+  { "weather": "partly" },
+  { "time": 9 },
+  { "wait": 2000 },
+  { "perf": "refl-on", "ms": 5000 },
+  { "eval": "__KODIAK__.systems.water?.setReflections?.(false); 1" },
+  { "perf": "refl-off", "ms": 5000 },
+  { "eval": "__KODIAK__.systems.water?.setReflections?.(true); 1" },
+  { "perf": "refl-on-2", "ms": 5000 },
+  { "shot": "bench-view" }
+]

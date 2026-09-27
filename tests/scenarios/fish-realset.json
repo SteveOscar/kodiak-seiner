@@ -1,0 +1,161 @@
+[
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode !== 'loading'",
+  "timeout": 90000
+ },
+ {
+  "start": {
+   "freeExplore": true
+  }
+ },
+ {
+  "eval": "(() => { const s = document.createElement('style'); s.textContent = '#ui, #hud, .ui-root { display: none !important; }'; document.head.appendChild(s); return 'ui hidden'; })()"
+ },
+ {
+  "time": 19.8
+ },
+ {
+  "teleport": [
+   5850,
+   -520,
+   90
+  ]
+ },
+ {
+  "eval": "window.__S = __KODIAK__.systems.fish.spawnSchool({ x: 5850, z: -580, species: 'pink', count: 6000, milling: true }); window.__S.radius = 16; 'ok'"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "press": "Space"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "eval": "const F = __KODIAK__.systems.fishing; F.debug.pilot.circle({ cx: 5850, cz: -580, r: 60, turn: -1, turns: 0.99, until: () => F.hud.closeReady || F.state !== 'setting' }); 'ok'"
+ },
+ {
+  "wait": 12000
+ },
+ {
+  "eval": "(() => { const p = __KODIAK__.systems.seiner.position; __KODIAK__.camera([p.x, 22, p.z], [5850, -1, -580]); })()"
+ },
+ {
+  "wait": 400
+ },
+ {
+  "shot": "a-setting-crow"
+ },
+ {
+  "eval": "__KODIAK__.camera(null)"
+ },
+ {
+  "until": "__KODIAK__.systems.fishing.hud.closeReady || __KODIAK__.systems.fishing.state === 'holding'",
+  "timeout": 80000
+ },
+ {
+  "eval": "__KODIAK__.systems.fishing.debug.pilot.stop(); 'ok'"
+ },
+ {
+  "state": "laid"
+ },
+ {
+  "press": "Space"
+ },
+ {
+  "until": "__KODIAK__.systems.fishing.state === 'pursing'",
+  "timeout": 30000
+ },
+ {
+  "state": "closed"
+ },
+ {
+  "eval": "__KODIAK__.systems.fishing.debug.pilot.purse(); 'ok'"
+ },
+ {
+  "wait": 6000
+ },
+ {
+  "eval": "(() => { const s = window.__S; const p = s.position; __KODIAK__.camera([p.x + 14, 14, p.z + 14], [p.x, -2, p.z]); return { state: s.state, count: s.count, net: __KODIAK__.systems.fish.sim.view.phase }; })()"
+ },
+ {
+  "wait": 400
+ },
+ {
+  "shot": "b-pursing-school"
+ },
+ {
+  "eval": "__KODIAK__.camera(null)"
+ },
+ {
+  "until": "__KODIAK__.systems.fishing.state === 'hauling'",
+  "timeout": 60000
+ },
+ {
+  "state": "trapped"
+ },
+ {
+  "wait": 14000
+ },
+ {
+  "eval": "__KODIAK__.systems.fishing.debug.cam('bag', { height: 7 })"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "c-hauling-bag"
+ },
+ {
+  "eval": "__KODIAK__.systems.fishing.debug.cam('crow')"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "d-hauling-crow"
+ },
+ {
+  "eval": "__KODIAK__.systems.fishing.debug.cam(null)"
+ },
+ {
+  "until": "__KODIAK__.systems.fishing.state === 'brailing' || __KODIAK__.systems.net.hauled > 0.85",
+  "timeout": 60000
+ },
+ {
+  "eval": "__KODIAK__.systems.fishing.debug.cam('bag', { height: 6 })"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "e-bag-dry"
+ },
+ {
+  "eval": "(() => { const f = __KODIAK__.systems.fish; const v = f.sim.view; const s = __KODIAK__.systems.seiner.position; __KODIAK__.camera([v.ellipse.x + (s.x - v.ellipse.x) * 0.4, 5, v.ellipse.z + (s.z - v.ellipse.z) * 0.4 + 5], [v.ellipse.x, -0.3, v.ellipse.z]); return { a: v.ellipse.a, b: v.ellipse.b, hauled: v.hauled }; })()"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "f-bag-close"
+ },
+ {
+  "eval": "__KODIAK__.camera(null)"
+ },
+ {
+  "until": "__KODIAK__.systems.fishing.state === 'report' || __KODIAK__.systems.fishing.state === 'idle' || __KODIAK__.systems.fishing.lastSet",
+  "timeout": 90000
+ },
+ {
+  "state": "done"
+ },
+ {
+  "eval": "JSON.stringify(__KODIAK__.systems.fishing.lastSet)"
+ },
+ {
+  "eval": "JSON.stringify(__KODIAK__.systems.fish.debugState())"
+ }
+]

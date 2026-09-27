@@ -1,0 +1,6 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 90000 },
+  { "eval": "JSON.stringify(__KODIAK__.systems.terrain.verifyGpuParity(96))" },
+  { "until": "__KODIAK__.systems.terrain.verifyGpuParity(64).maxErr < 0.02", "timeout": 3000 },
+  { "state": "boot" }
+]

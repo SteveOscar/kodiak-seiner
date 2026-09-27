@@ -1,0 +1,14 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 120000 },
+  { "start": {} },
+  { "time": 16 },
+  { "wait": 1500 },
+  { "eval": "const S=__KODIAK__.systems,p=S.seiner.position; S.ui.setWaypoint({x:p.x-250,z:p.z-1400}); S.discovery.addSighting?.({schoolId:'c1', species:'chum', heading:0.4, x:p.x+500, z:p.z-700, source:'binoculars'}); 'ok'" },
+  { "wait": 9000 },
+  { "shot": "01-compass" },
+  { "hold": "KeyA", "ms": 2500 },
+  { "shot": "02-turning" },
+  { "time": 22.7 },
+  { "wait": 1500 },
+  { "shot": "03-night" }
+]

@@ -1,0 +1,19 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 60000 },
+  { "start": {} },
+  { "weather": "clear" },
+  { "time": 12 },
+  { "teleport": [6083, -852, 60] },
+  { "eval": "__KODIAK__.systems.water.overrideSea({ windSpeed: 1, swell: 0.3 }); 1" },
+  { "wait": 1500 },
+  { "eval": "JSON.stringify({ calm: __KODIAK__.systems.water.verify(256) })" },
+  { "eval": "__KODIAK__.systems.water.overrideSea({ windSpeed: 9, swell: 1.2 }); 1" },
+  { "wait": 1500 },
+  { "eval": "JSON.stringify({ moderate: __KODIAK__.systems.water.verify(256) })" },
+  { "eval": "__KODIAK__.systems.water.overrideSea({ windSpeed: 17, swell: 3.5 }); 1" },
+  { "wait": 1500 },
+  { "eval": "JSON.stringify({ storm: __KODIAK__.systems.water.verify(256) })" },
+  { "eval": "JSON.stringify({ stormNearShore: __KODIAK__.systems.water.verify(256, -6470, 3755, 40) })" },
+  { "eval": "(() => { const W = __KODIAK__.systems.water; const p = __KODIAK__.systems.seiner.position; let n = 0, t0 = performance.now(); for (let i = 0; i < 2000; i++) n += W.heightAt(p.x + (i % 50), p.z + (i % 37)); return JSON.stringify({ heightAtUs: +((performance.now() - t0) / 2000 * 1000).toFixed(2) }); })()" },
+  { "eval": "__KODIAK__.systems.water.overrideSea(null); 1" }
+]

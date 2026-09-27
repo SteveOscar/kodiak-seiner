@@ -1,0 +1,19 @@
+[
+  {"until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 60000},
+  {"start": {}},
+  {"eval": "(document.getElementById('ui')||{style:{}}).style.visibility='hidden'; 1"},
+  {"weather": "clear"},
+  {"eval": "__KODIAK__.setTime(14, 0)"},
+  {"camera": {"pos": [5235, 22, -840], "look": [4300, 95, -1250]}},
+  {"wait": 2000}, {"shot": "clear-1400"},
+  {"weather": "storm"},
+  {"eval": "__KODIAK__.setTime(23.8, 3)"},
+  {"wait": 2000}, {"shot": "storm-night"},
+  {"eval": "window.__flashes=0; __KODIAK__.ctx.events.on('sky:lightning', ()=>window.__flashes++); 1"},
+  {"eval": "new Promise(res => { const s=__KODIAK__.systems.sky; const t0=performance.now(); const tick=()=>{ if (s.lightning > 0.5 || performance.now()-t0 > 40000) res(1); else requestAnimationFrame(tick); }; tick(); })"},
+  {"shot": "storm-lightning"},
+  {"eval": "JSON.stringify({flashes: window.__flashes, l: __KODIAK__.systems.sky.lightning, sky: __KODIAK__.state().sky})"},
+  {"weather": "overcast"},
+  {"eval": "__KODIAK__.setTime(22.2, 3)"},
+  {"wait": 2000}, {"shot": "overcast-dusk"}
+]

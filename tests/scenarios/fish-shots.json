@@ -1,0 +1,221 @@
+[
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode !== 'loading'",
+  "timeout": 90000
+ },
+ {
+  "start": {}
+ },
+ {
+  "eval": "(() => { const s = document.createElement('style'); s.textContent = '#ui, #hud, .ui-root { display: none !important; }'; document.head.appendChild(s); return 'ui hidden'; })()"
+ },
+ {
+  "time": 10
+ },
+ {
+  "eval": "window.__H = { K: __KODIAK__, fish: __KODIAK__.systems.fish, freezeAt(j, frac) { const f = this.fish, K = this.K; const target = j.t0 + j.dur * frac; const tick = () => { if (f.sim.now >= target) K.ctx.game.setMode('photo'); else requestAnimationFrame(tick); }; requestAnimationFrame(tick); }, jumpShot(school, frac, dist, h, side) { const j = this.fish.debugJump(school.id); if (!j) return 'no jump'; const a = j.heading + (side ?? Math.PI / 2); const cx = j.x + Math.sin(j.heading) * j.segs[0].len * 0.5, cz = j.z - Math.cos(j.heading) * j.segs[0].len * 0.5; this.K.camera([cx + Math.sin(a) * dist, h, cz - Math.cos(a) * dist], [cx, 0.35, cz]); this.freezeAt(j, frac); return { style: j.style, species: j.species, dur: j.dur }; }, play() { this.K.ctx.game.setMode('play'); }, portrait(school, frac, dist, h) { const j = this.fish.debugJump(school.id); if (!j) return 'no jump'; const sd = this.K.ctx.uniforms.uSunDir.value; const L = Math.hypot(sd.x, sd.z) || 1; const seg = j.segs[0]; const f = Math.min(1, frac); const cx = j.x + Math.sin(j.heading) * seg.len * f, cz = j.z - Math.cos(j.heading) * seg.len * f; const px = Math.cos(j.heading), pz = Math.sin(j.heading); const side = (px * sd.x + pz * sd.z) >= 0 ? 1 : -1; this.K.camera([cx + (px * side * 0.8 + sd.x / L * 0.2) * dist, h, cz + (pz * side * 0.8 + sd.z / L * 0.2) * dist], [cx, 0.45, cz]); this.freezeAt(j, frac); return { style: j.style, species: j.species }; } }; 'ok'"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "eval": "(() => { const s = __H.fish.schools.find(q => q.tutorial); window.__tut = s; const p = s.position; __KODIAK__.camera([p.x + 20, 17, p.z + 20], [p.x, -2, p.z]); return {depth: s.depth, r: s.radius}; })()"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "shot": "a-crowsnest"
+ },
+ {
+  "eval": "(() => { const p = window.__tut.position; __KODIAK__.camera([p.x + 4, 5, p.z + 4], [p.x - 2, -2.5, p.z - 2]); })()"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "shot": "b-close-above"
+ },
+ {
+  "eval": "__H.jumpShot(window.__tut, 0.45, 3.2, 0.9)"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 4000
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "c-jump-pink-apex"
+ },
+ {
+  "eval": "__H.play()"
+ },
+ {
+  "eval": "__H.jumpShot(window.__tut, 0.88, 3.2, 0.9)"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 4000
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "d-jump-pink-entry"
+ },
+ {
+  "eval": "__H.play()"
+ },
+ {
+  "eval": "(() => { const p = window.__tut.position; ['chum','sockeye','coho'].forEach((sp, i) => { window['__s_' + sp] = __H.fish.spawnSchool({ x: p.x + 60 + i * 60, z: p.z + 40, species: sp, count: 1200, milling: true, spookable: false }); }); return 'spawned'; })()"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "eval": "__H.jumpShot(window.__s_chum, 0.5, 4, 1.0)"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 4000
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "e-jump-chum-mid"
+ },
+ {
+  "eval": "__H.play()"
+ },
+ {
+  "eval": "__H.jumpShot(window.__s_chum, 0.93, 4, 1.0)"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 4000
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "f-jump-chum-flop"
+ },
+ {
+  "eval": "__H.play()"
+ },
+ {
+  "eval": "__H.jumpShot(window.__s_sockeye, 0.62, 4.5, 1.0)"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 4000
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "g-jump-sockeye"
+ },
+ {
+  "eval": "__H.play()"
+ },
+ {
+  "eval": "__H.jumpShot(window.__s_coho, 0.2, 5, 1.2)"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 4000
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "h-jump-coho"
+ },
+ {
+  "eval": "__H.play()"
+ },
+ {
+  "eval": "__H.portrait(window.__tut, 0.5, 2.2, 0.7)"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 4000
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "p-portrait-pink"
+ },
+ {
+  "eval": "__H.play()"
+ },
+ {
+  "eval": "__H.portrait(window.__s_chum, 0.45, 2.2, 0.7)"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 4000
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "p-portrait-chum"
+ },
+ {
+  "eval": "__H.play()"
+ },
+ {
+  "eval": "__H.portrait(window.__s_sockeye, 0.5, 2.2, 0.7)"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 4000
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "p-portrait-sockeye"
+ },
+ {
+  "eval": "__H.play()"
+ },
+ {
+  "eval": "__H.portrait(window.__s_coho, 0.3, 2.2, 0.7)"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 4000
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "p-portrait-coho"
+ },
+ {
+  "eval": "__H.play()"
+ },
+ {
+  "eval": "(() => { const s = __KODIAK__.systems.seiner; const b = __H.fish.debugBag({ hauled: 0.75, count: 6000 }); const p = s.position; const h = s.heading; const bx = p.x + Math.cos(h) * 14, bz = p.z + Math.sin(h) * 14; __KODIAK__.camera([p.x + Math.cos(h) * 3, 7, p.z + Math.sin(h) * 3 + 6], [bx, -0.5, bz]); return b.id; })()"
+ },
+ {
+  "wait": 3500
+ },
+ {
+  "shot": "i-bag"
+ },
+ {
+  "state": "bag"
+ },
+ {
+  "perf": "perf",
+  "ms": 2000
+ }
+]

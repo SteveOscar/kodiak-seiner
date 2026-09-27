@@ -1,0 +1,23 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 60000 },
+  { "start": {} },
+  { "eval": "document.getElementById('boot')?.remove(); const ui = document.getElementById('ui'); if (ui) ui.style.visibility = 'hidden'; 1" },
+  { "weather": "clear" },
+  { "eval": "__KODIAK__.systems.water.overrideSea({ windSpeed: 0.8, swell: 0.3 }); 1" },
+  { "time": 6.2 },
+  { "teleport": [6083, -852, 250] },
+  { "camera": { "pos": [6300, 9, -700], "look": [5000, 30, -1250] } },
+  { "wait": 3000 },
+  { "shot": "r-dawn" },
+  { "eval": "__KODIAK__.systems.water.setReflections(false); 1" },
+  { "wait": 400 },
+  { "shot": "r-dawn-off" },
+  { "eval": "__KODIAK__.systems.water.setReflections(true); JSON.stringify(__KODIAK__.systems.water.debugState())" },
+  { "time": 20.8 },
+  { "camera": { "pos": [5230, 6, -1060], "look": [5000, 25, -1300] } },
+  { "wait": 2000 },
+  { "shot": "r-bay-evening" },
+  { "eval": "__KODIAK__.systems.water.overrideSea({ windSpeed: 5, swell: 0.5 }); 1" },
+  { "wait": 3000 },
+  { "shot": "r-bay-evening-5ms" }
+]

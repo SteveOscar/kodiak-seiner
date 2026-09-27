@@ -1,0 +1,79 @@
+[
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"kodiak-golden\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(20.6); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([5900, 22, -500], [4950, 45, -1350]);  window.__tkShot = { name: \"kodiak-golden\", t: performance.now() }; } else { K.camera([5900, 22, -500], [4950, 45, -1350]); } return performance.now() - window.__tkShot.t > 2200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "kodiak-golden"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"kodiak-noon\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(12.5); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([5900, 22, -500], [4950, 45, -1350]);  window.__tkShot = { name: \"kodiak-noon\", t: performance.now() }; } else { K.camera([5900, 22, -500], [4950, 45, -1350]); } return performance.now() - window.__tkShot.t > 2200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "kodiak-noon"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"uyak-noon\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(13); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([-2500, 25, 1300], [-3100, 70, -200]);  window.__tkShot = { name: \"uyak-noon\", t: performance.now() }; } else { K.camera([-2500, 25, 1300], [-3100, 70, -200]); } return performance.now() - window.__tkShot.t > 2200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "uyak-noon"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"uyak-golden\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(20.8); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([-2500, 25, 1300], [-2000, 60, -300]);  window.__tkShot = { name: \"uyak-golden\", t: performance.now() }; } else { K.camera([-2500, 25, 1300], [-2000, 60, -300]); } return performance.now() - window.__tkShot.t > 2200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "uyak-golden"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"high-noon\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(12.5); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([2500, 1500, 7400], [200, 0, 800]);  window.__tkShot = { name: \"high-noon\", t: performance.now() }; } else { K.camera([2500, 1500, 7400], [200, 0, 800]); } return performance.now() - window.__tkShot.t > 2200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "high-noon"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"peninsula-noon\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(12.5); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([-2400, 30, -3000], [-5300, 300, -7300]);  window.__tkShot = { name: \"peninsula-noon\", t: performance.now() }; } else { K.camera([-2400, 30, -3000], [-5300, 300, -7300]); } return performance.now() - window.__tkShot.t > 2200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "peninsula-noon"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"peninsula-golden\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(21.2); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([-2400, 30, -3000], [-5300, 300, -7300]);  window.__tkShot = { name: \"peninsula-golden\", t: performance.now() }; } else { K.camera([-2400, 30, -3000], [-5300, 300, -7300]); } return performance.now() - window.__tkShot.t > 2200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "peninsula-golden"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"shadow-2130\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(21.5); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([1200, 900, 5200], [-200, 0, 1800]);  window.__tkShot = { name: \"shadow-2130\", t: performance.now() }; } else { K.camera([1200, 900, 5200], [-200, 0, 1800]); } return performance.now() - window.__tkShot.t > 2200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "shadow-2130"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"hill-onfoot\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(13); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-800, 2400), 0); const ly = Math.max(t.heightAt(-400, 2000), 0); K.camera([-800, hy + 2, 2400], [-400, ly + 2, 2000]); }  window.__tkShot = { name: \"hill-onfoot\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-800, 2400), 0); const ly = Math.max(t.heightAt(-400, 2000), 0); K.camera([-800, hy + 2, 2400], [-400, ly + 2, 2000]); } } return performance.now() - window.__tkShot.t > 2200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "hill-onfoot"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"hill-onfoot-golden\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(20.6); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-800, 2400), 0); const ly = Math.max(t.heightAt(-1200, 2000), 0); K.camera([-800, hy + 2, 2400], [-1200, ly + 8, 2000]); }  window.__tkShot = { name: \"hill-onfoot-golden\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-800, 2400), 0); const ly = Math.max(t.heightAt(-1200, 2000), 0); K.camera([-800, hy + 2, 2400], [-1200, ly + 8, 2000]); } } return performance.now() - window.__tkShot.t > 2200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "hill-onfoot-golden"
+ },
+ {
+  "perf": "end",
+  "ms": 1500
+ },
+ {
+  "state": "end"
+ }
+]

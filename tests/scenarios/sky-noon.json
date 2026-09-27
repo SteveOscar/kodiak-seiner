@@ -1,0 +1,17 @@
+[
+  {"until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 60000},
+  {"start": {}},
+  {"eval": "(document.getElementById('ui')||{style:{}}).style.visibility='hidden'; 1"},
+  {"weather": "clear"},
+  {"eval": "__KODIAK__.setTime(13, 0)"},
+  {"camera": {"pos": [5235, 22, -840], "look": [4300, 95, -1250]}},
+  {"wait": 2000}, {"shot": "noon-clear"},
+  {"camera": {"pos": [5235, 22, -840], "look": [4800, 700, -1250]}},
+  {"wait": 1000}, {"shot": "noon-clear-up"},
+  {"weather": "partly"},
+  {"camera": {"pos": [5235, 22, -840], "look": [4300, 95, -1250]}},
+  {"wait": 1500}, {"shot": "noon-partly"},
+  {"eval": "__KODIAK__.setTime(22.75, 0)"},
+  {"camera": {"pos": [5235, 22, -840], "look": [3300, 130, -3300]}},
+  {"wait": 1500}, {"shot": "twilight"}
+]

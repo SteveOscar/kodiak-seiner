@@ -1,0 +1,9 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 60000 },
+  { "start": {} },
+  { "wait": 800 },
+  { "eval": "JSON.stringify(__KODIAK__.systems.sky.debugFogCheck())" },
+  { "weather": "storm" },
+  { "wait": 500 },
+  { "eval": "JSON.stringify(__KODIAK__.systems.sky.debugFogCheck().allPass)" }
+]

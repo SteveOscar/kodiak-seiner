@@ -1,0 +1,232 @@
+[
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+  "timeout": 90000
+ },
+ {
+  "start": {
+   "freeExplore": true
+  }
+ },
+ {
+  "weather": "clear"
+ },
+ {
+  "eval": "window.__aim = (x, y, z, dist, h, turn, lookDy) => { const K = __KODIAK__; const hm = K.ctx.heightmap; const g = hm.shoreGradient(x, z); const c = Math.cos(turn || 0), s = Math.sin(turn || 0); const gx = g.x * c - g.z * s, gz = g.x * s + g.z * c; const cx = x + gx * dist, cz = z + gz * dist; const w = hm.nearestWater(x + gx * Math.min(dist, 120), z + gz * Math.min(dist, 120), { minShore: 30 }) || { x: cx, z: cz }; K.teleport(w.x, w.z, 0); K.camera([cx, h, cz], [x, y + (lookDy || 0), z]); return [Math.round(cx), Math.round(cz)]; }; window.__boatAt = (x, z, dist, turn) => { const K = __KODIAK__; const hm = K.ctx.heightmap; const g = hm.shoreGradient(x, z); const c = Math.cos(turn), s = Math.sin(turn); const w = hm.nearestWater(x + (g.x * c - g.z * s) * dist, z + (g.x * s + g.z * c) * dist, { minShore: 40 }); if (w) K.teleport(w.x, w.z, 0); return !!w; }; window.__pad = () => { const K = __KODIAK__; const s = K.systems.places.layout.spaceport; const c = Math.cos(s.rot), n = Math.sin(s.rot); const L = (lx, lz) => ({ x: s.x + lx * c + lz * n, z: s.z - lx * n + lz * c }); const cam = L(-62, 92); const tw = L(-9, 0); const gy = K.ctx.heightmap.heightAt(s.x, s.z); K.camera([cam.x, gy + 12, cam.z], [tw.x, gy + 21, tw.z]); return [Math.round(cam.x), Math.round(cam.z)]; }; window.__light = (id) => __KODIAK__.systems.places.layout.lights.find((l) => l.id === id); true"
+ },
+ {
+  "time": 12.5
+ },
+ {
+  "teleport": [
+   5150,
+   -900,
+   330
+  ]
+ },
+ {
+  "camera": {
+   "pos": [
+    5200,
+    24,
+    -835
+   ],
+   "look": [
+    5055,
+    12,
+    -1170
+   ]
+  }
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "shot": "kodiak-approach-noon"
+ },
+ {
+  "camera": {
+   "pos": [
+    5230,
+    180,
+    -760
+   ],
+   "look": [
+    5060,
+    0,
+    -1180
+   ]
+  }
+ },
+ {
+  "wait": 1200
+ },
+ {
+  "shot": "kodiak-overview-noon"
+ },
+ {
+  "eval": "const t = __KODIAK__.systems.places.layout.turbines; __KODIAK__.camera([5010, 78, -1205], [t[2].x, t[2].hub - 8, t[2].z]); true"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "shot": "turbines-noon"
+ },
+ {
+  "eval": "const c = __KODIAK__.systems.places.layout.kodiak.cathedral; __KODIAK__.camera([c.x + 45, 24, c.z + 85], [c.x, 13, c.z]); true"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "shot": "cathedral-noon"
+ },
+ {
+  "eval": "const s = __KODIAK__.systems.places.get('fort-abercrombie'); __aim(s.x, 5, s.z + 40, 190, 30, 0.1, 0)"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "shot": "fort-noon"
+ },
+ {
+  "eval": "const m = __KODIAK__.systems.places.layout.markers.find((q) => q.streamId === 'buskin'); const hm = __KODIAK__.ctx.heightmap; const g = hm.shoreGradient(m.x, m.z); __KODIAK__.camera([m.x + g.x * 14 - g.z * 6, 3.2, m.z + g.z * 14 + g.x * 6], [m.x, 3.2, m.z]); true"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "shot": "marker-buskin-noon"
+ },
+ {
+  "eval": "__boatAt(__KODIAK__.systems.places.layout.spaceport.x, __KODIAK__.systems.places.layout.spaceport.z, 260, 0.9); __pad()"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "shot": "spaceport-noon"
+ },
+ {
+  "time": 21.3
+ },
+ {
+  "eval": "const t = __KODIAK__.systems.places.layout.turbines; __KODIAK__.teleport(5090, -1010, 300); __KODIAK__.camera([5040, 60, -1170], [t[3].x, t[3].hub - 12, t[3].z]); true"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "shot": "turbines-golden"
+ },
+ {
+  "eval": "const p = __KODIAK__.systems.places.get('ouzinkie'); __aim(p.x, 6, p.z, 230, 26, 0.3, 0)"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "shot": "village-ouzinkie-golden"
+ },
+ {
+  "eval": "const p = __KODIAK__.systems.places.get('old-harbor'); __aim(p.x, 6, p.z, 240, 28, 0.2, 0)"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "shot": "village-oldharbor-golden"
+ },
+ {
+  "eval": "const p = __KODIAK__.systems.places.get('larsen-bay-cannery'); const d = p.dock; __aim(d.x, 8, d.z, 200, 24, 0.4, 0)"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "shot": "cannery-larsen-golden"
+ },
+ {
+  "time": 22.75
+ },
+ {
+  "eval": "const l = __light('cape-chiniak-light'); __aim(l.x, l.y - 5, l.z, 150, 9, 0.35, 0); __boatAt(l.x, l.z, 190, 1.1)"
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "shot": "light-chiniak-dusk-a"
+ },
+ {
+  "wait": 2100
+ },
+ {
+  "shot": "light-chiniak-dusk-b"
+ },
+ {
+  "wait": 2300
+ },
+ {
+  "shot": "light-chiniak-dusk-c"
+ },
+ {
+  "time": 0.4
+ },
+ {
+  "teleport": [
+   5150,
+   -900,
+   330
+  ]
+ },
+ {
+  "camera": {
+   "pos": [
+    5200,
+    24,
+    -835
+   ],
+   "look": [
+    5055,
+    12,
+    -1170
+   ]
+  }
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "shot": "kodiak-approach-night"
+ },
+ {
+  "camera": {
+   "pos": [
+    5090,
+    16,
+    -1000
+   ],
+   "look": [
+    5010,
+    12,
+    -1170
+   ]
+  }
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "shot": "kodiak-harbor-night"
+ },
+ {
+  "state": "night"
+ },
+ {
+  "perf": "shots",
+  "ms": 1500
+ }
+]

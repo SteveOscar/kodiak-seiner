@@ -1,0 +1,106 @@
+[
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode !== 'loading'",
+  "timeout": 90000
+ },
+ {
+  "start": {}
+ },
+ {
+  "eval": "(() => { const s = document.createElement('style'); s.textContent = '#ui, #hud, .ui-root { display: none !important; }'; document.head.appendChild(s); return 'ui hidden'; })()"
+ },
+ {
+  "time": 21.2
+ },
+ {
+  "weather": "clear"
+ },
+ {
+  "eval": "(() => { const K = __KODIAK__, hm = K.ctx.heightmap, fish = K.systems.fish; const sd = K.ctx.uniforms.uSunDir.value; const L = Math.hypot(sd.x, sd.z) || 1; const off = 0.62; const ux = (sd.x * Math.cos(off) - sd.z * Math.sin(off)) / L, uz = (sd.x * Math.sin(off) + sd.z * Math.cos(off)) / L; let best = null; for (let i = 0; i < 400 && !best; i++) { const c = hm.nearestWater(-3000 + (i % 20) * 300, -2500 + Math.floor(i / 20) * 250, { minShore: 150 }); if (!c) continue; let ok = true; for (const a of [-0.5, -0.25, 0, 0.25, 0.5]) { const ca = Math.cos(a), sa = Math.sin(a); const vx = ux * ca - uz * sa, vz = ux * sa + uz * ca; for (let d = 100; d <= 1000; d += 100) if (hm.depthAt(c.x + vx * d, c.z + vz * d) < 9) { ok = false; break; } if (!ok) break; } if (ok) best = c; } if (!best) return 'no spot'; K.teleport(best.x, best.z, Math.atan2(ux, -uz) * 180 / Math.PI); const out = []; const specs = [[190, -0.3, 'pink'], [300, 0.22, 'pink'], [430, -0.08, 'chum'], [560, 0.3, 'pink'], [680, -0.34, 'coho'], [250, 0.45, 'sockeye'], [800, 0.1, 'pink']]; for (const [d, a, sp] of specs) { const ca = Math.cos(a + 0.12), sa = Math.sin(a + 0.12); const vx = ux * ca - uz * sa, vz = ux * sa + uz * ca; const s = fish.spawnSchool({ x: best.x + vx * d, z: best.z + vz * d, species: sp, count: 3000, milling: true, spookable: false, jumpRateMul: sp === 'pink' ? 5 : 12 }); out.push(s.id); } window.__cam = [best.x + uz * 25, 17, best.z - ux * 25]; K.camera(window.__cam, [best.x + ux * 420, 0, best.z + uz * 420]); return out; })()"
+ },
+ {
+  "wait": 4000
+ },
+ {
+  "shot": "g0-live"
+ },
+ {
+  "eval": "(() => { const K = __KODIAK__, r = K.systems.fish.debugRender; const n0 = r.stats.glints; let tFire = null; requestAnimationFrame(function tick() { if (tFire === null && r.stats.glints > n0) tFire = K.ctx.time.elapsed; if (tFire !== null && K.ctx.time.elapsed - tFire > 0.1) { K.ctx.game.setMode('photo'); return; } requestAnimationFrame(tick); }); return n0; })()"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 8000
+ },
+ {
+  "wait": 250
+ },
+ {
+  "shot": "g1-glint"
+ },
+ {
+  "eval": "__KODIAK__.ctx.game.setMode('play')"
+ },
+ {
+  "wait": 700
+ },
+ {
+  "eval": "(() => { const K = __KODIAK__, r = K.systems.fish.debugRender; const n0 = r.stats.glints; let tFire = null; requestAnimationFrame(function tick() { if (tFire === null && r.stats.glints > n0) tFire = K.ctx.time.elapsed; if (tFire !== null && K.ctx.time.elapsed - tFire > 0.1) { K.ctx.game.setMode('photo'); return; } requestAnimationFrame(tick); }); return n0; })()"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 8000
+ },
+ {
+  "wait": 250
+ },
+ {
+  "shot": "g2-glint"
+ },
+ {
+  "eval": "__KODIAK__.ctx.game.setMode('play')"
+ },
+ {
+  "wait": 700
+ },
+ {
+  "eval": "(() => { const K = __KODIAK__, r = K.systems.fish.debugRender; const n0 = r.stats.glints; let tFire = null; requestAnimationFrame(function tick() { if (tFire === null && r.stats.glints > n0) tFire = K.ctx.time.elapsed; if (tFire !== null && K.ctx.time.elapsed - tFire > 0.1) { K.ctx.game.setMode('photo'); return; } requestAnimationFrame(tick); }); return n0; })()"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 8000
+ },
+ {
+  "wait": 250
+ },
+ {
+  "shot": "g3-glint"
+ },
+ {
+  "eval": "__KODIAK__.ctx.game.setMode('play')"
+ },
+ {
+  "wait": 700
+ },
+ {
+  "eval": "(() => { const K = __KODIAK__, r = K.systems.fish.debugRender; const n0 = r.stats.glints; let tFire = null; requestAnimationFrame(function tick() { if (tFire === null && r.stats.glints > n0) tFire = K.ctx.time.elapsed; if (tFire !== null && K.ctx.time.elapsed - tFire > 0.1) { K.ctx.game.setMode('photo'); return; } requestAnimationFrame(tick); }); return n0; })()"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 8000
+ },
+ {
+  "wait": 250
+ },
+ {
+  "shot": "g4-glint"
+ },
+ {
+  "eval": "__KODIAK__.ctx.game.setMode('play')"
+ },
+ {
+  "wait": 700
+ },
+ {
+  "state": "s"
+ }
+]

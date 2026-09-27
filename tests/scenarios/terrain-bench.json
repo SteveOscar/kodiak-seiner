@@ -1,0 +1,58 @@
+[
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"boat-kodiak\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(12.5); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([5900, 22, -500], [4950, 45, -1350]);  window.__tkShot = { name: \"boat-kodiak\", t: performance.now() }; } else { K.camera([5900, 22, -500], [4950, 45, -1350]); } return performance.now() - window.__tkShot.t > 2500; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "boat-kodiak"
+ },
+ {
+  "perf": "boat-kodiak",
+  "ms": 3000
+ },
+ {
+  "state": "boat-kodiak"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"high\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(12.5); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([2500, 1500, 7400], [200, 0, 800]);  window.__tkShot = { name: \"high\", t: performance.now() }; } else { K.camera([2500, 1500, 7400], [200, 0, 800]); } return performance.now() - window.__tkShot.t > 2500; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "high"
+ },
+ {
+  "perf": "high",
+  "ms": 3000
+ },
+ {
+  "state": "high"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"onfoot\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(13); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-800, 2400), 0); const ly = Math.max(t.heightAt(-400, 2000), 0); K.camera([-800, hy + 2, 2400], [-400, ly + 2, 2000]); }  window.__tkShot = { name: \"onfoot\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-800, 2400), 0); const ly = Math.max(t.heightAt(-400, 2000), 0); K.camera([-800, hy + 2, 2400], [-400, ly + 2, 2000]); } } return performance.now() - window.__tkShot.t > 2500; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "onfoot"
+ },
+ {
+  "perf": "onfoot",
+  "ms": 3000
+ },
+ {
+  "state": "onfoot"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"forest\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(12.5); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(4600, -2000), 0); const ly = Math.max(t.heightAt(4700, -2080), 0); K.camera([4600, hy + 1.8, -2000], [4700, ly + 4, -2080]); }  window.__tkShot = { name: \"forest\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(4600, -2000), 0); const ly = Math.max(t.heightAt(4700, -2080), 0); K.camera([4600, hy + 1.8, -2000], [4700, ly + 4, -2080]); } } return performance.now() - window.__tkShot.t > 2500; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "forest"
+ },
+ {
+  "perf": "forest",
+  "ms": 3000
+ },
+ {
+  "state": "forest"
+ }
+]

@@ -1,0 +1,2603 @@
+[
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+  "timeout": 90000
+ },
+ {
+  "start": {}
+ },
+ {
+  "time": 9
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "eval": "(() => {\n  const K = __KODIAK__, S = K.systems;\n  const wrap = (a) => ((((a + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI;\n  const hdg = (vx, vz) => Math.atan2(vx, -vz);\n  const p0 = S.seiner.position;\n  const sc = S.fish.nearestSchool(p0.x, p0.z, 1500).school;\n  const R = 58;\n  const dx = sc.position.x - p0.x, dz = sc.position.z - p0.z, d = Math.hypot(dx, dz);\n  const ux = dx / d, uz = dz / d;\n  const P = { x: sc.position.x - uz * R, z: sc.position.z + ux * R };\n  const pos = () => S.seiner.position;\n  const fwd = () => ({ x: Math.sin(S.seiner.heading), z: -Math.cos(S.seiner.heading) });\n  const F = () => S.fishing;\n  const band = () => F().hud.tensionBand;\n  window.__T = {\n    school: sc, P, R,\n    // Follow the approach line through P (parallel to spawn → school): heading correction from cross-track error.\n    aErr: () => {\n      const p = pos();\n      const ct = (p.x - P.x) * -uz + (p.z - P.z) * ux;\n      return wrap(hdg(ux, uz) - Math.atan(ct / 40) - S.seiner.heading);\n    },\n    distP: () => (P.x - pos().x) * ux + (P.z - pos().z) * uz,\n    abeam: () => { const f = fwd(); return (sc.position.x - pos().x) * f.x + (sc.position.z - pos().z) * f.z < 3; },\n    cErr: () => {\n      const p = pos(), cx = sc.position.x, cz = sc.position.z;\n      const ddx = p.x - cx, ddz = p.z - cz, dd = Math.hypot(ddx, ddz) || 1;\n      const k = Math.max(-0.8, Math.min(0.8, (dd - R) / 25));\n      return wrap(hdg(ddz / dd - (ddx / dd) * k, -ddx / dd - (ddz / dd) * k) - S.seiner.heading);\n    },\n    done: () => F().hud.closeReady || F().state !== 'setting',\n    st: () => F().state,\n    tHi: () => F().state !== 'pursing' || F().hud.tension > band()[0] + (band()[1] - band()[0]) * 0.68,\n    tLo: () => F().state !== 'pursing' || F().hud.tension < band()[0] + (band()[1] - band()[0]) * 0.3,\n    view: (mode) => {\n      if (K.systemStatus.cameraRig === 'ok') { K.camera(null); S.cameraRig.setMode(mode); return 'rig:' + mode; }\n      F().debug.cam(mode === 'crowsnest' ? 'crow' : mode); return 'debug:' + mode;\n    },\n  };\n  return JSON.stringify({ school: [Math.round(sc.position.x), Math.round(sc.position.z), sc.count, sc.species], P, d: Math.round(d) });\n})()"
+ },
+ {
+  "eval": "__T.view('chase')"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "shot": "00-start-chase"
+ },
+ {
+  "state": "start"
+ },
+ {
+  "key": "KeyW",
+  "down": true
+ },
+ {
+  "wait": 2600
+ },
+ {
+  "key": "KeyW",
+  "up": true
+ },
+ {
+  "until": "__KODIAK__.systems.seiner.speed > 3",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() < 0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() > -0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.distP() < 520",
+  "timeout": 180000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() < 0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() > -0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.distP() < 450",
+  "timeout": 180000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() < 0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() > -0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.distP() < 380",
+  "timeout": 180000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() < 0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() > -0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "eval": "__T.view('crowsnest')"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "shot": "01-approach-crowsnest"
+ },
+ {
+  "until": "__T.distP() < 310",
+  "timeout": 180000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() < 0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() > -0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.distP() < 250",
+  "timeout": 180000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() < 0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() > -0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.distP() < 190",
+  "timeout": 180000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() < 0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() > -0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "press": "KeyS"
+ },
+ {
+  "wait": 150
+ },
+ {
+  "press": "KeyS"
+ },
+ {
+  "wait": 150
+ },
+ {
+  "press": "KeyS"
+ },
+ {
+  "wait": 150
+ },
+ {
+  "press": "KeyS"
+ },
+ {
+  "wait": 150
+ },
+ {
+  "until": "__T.distP() < 130",
+  "timeout": 90000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() < 0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() > -0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.distP() < 80",
+  "timeout": 90000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() < 0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() > -0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.distP() < 40",
+  "timeout": 90000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() < 0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() > -0.01",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.abeam()",
+  "timeout": 90000
+ },
+ {
+  "state": "letgo"
+ },
+ {
+  "press": "Space"
+ },
+ {
+  "wait": 200
+ },
+ {
+  "state": "released"
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "shot": "02-setting-crowsnest"
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "eval": "__T.view('chase')"
+ },
+ {
+  "wait": 600
+ },
+ {
+  "shot": "03-setting-chase"
+ },
+ {
+  "eval": "__T.view('crowsnest')"
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "shot": "04-setting-crowsnest-late"
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.cErr() >= -0.004 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.cErr() < -0.07 || __T.done()",
+  "timeout": 40000
+ },
+ {
+  "until": "__KODIAK__.systems.fishing.hud.closeReady || __KODIAK__.systems.fishing.state === 'holding'",
+  "timeout": 120000
+ },
+ {
+  "state": "closeReady"
+ },
+ {
+  "shot": "05-close-ready-crowsnest"
+ },
+ {
+  "press": "Space"
+ },
+ {
+  "wait": 300
+ },
+ {
+  "state": "closing"
+ },
+ {
+  "wait": 3500
+ },
+ {
+  "eval": "__T.view('chase')"
+ },
+ {
+  "wait": 1200
+ },
+ {
+  "shot": "06-closing-chase"
+ },
+ {
+  "eval": "__T.view('crowsnest')"
+ },
+ {
+  "until": "__KODIAK__.systems.fishing.state === 'pursing'",
+  "timeout": 90000
+ },
+ {
+  "state": "pursing-start"
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "shot": "07-pursing-crowsnest"
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "eval": "__T.view('chase')"
+ },
+ {
+  "wait": 900
+ },
+ {
+  "shot": "08-pursing-chase"
+ },
+ {
+  "eval": "__T.view('crowsnest')"
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "down": true
+ },
+ {
+  "until": "__T.tHi()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyE",
+  "up": true
+ },
+ {
+  "until": "__T.tLo()",
+  "timeout": 40000
+ },
+ {
+  "until": "__KODIAK__.systems.fishing.state === 'hauling'",
+  "timeout": 40000
+ },
+ {
+  "state": "hauling-start"
+ },
+ {
+  "wait": 6000
+ },
+ {
+  "shot": "09-hauling-crowsnest"
+ },
+ {
+  "eval": "__T.view('chase')"
+ },
+ {
+  "wait": 5000
+ },
+ {
+  "shot": "10-hauling-chase"
+ },
+ {
+  "eval": "__T.view('crowsnest')"
+ },
+ {
+  "until": "__KODIAK__.systems.fishing.state === 'brailing'",
+  "timeout": 180000
+ },
+ {
+  "state": "brailing"
+ },
+ {
+  "wait": 800
+ },
+ {
+  "shot": "11-brailing-crowsnest"
+ },
+ {
+  "eval": "__T.view('chase')"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "shot": "12-brailing-chase"
+ },
+ {
+  "until": "__KODIAK__.systems.fishing.state === 'report'",
+  "timeout": 90000
+ },
+ {
+  "state": "report"
+ },
+ {
+  "eval": "JSON.stringify(__KODIAK__.systems.fishing.lastSet)"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "shot": "13-set-report"
+ },
+ {
+  "eval": "(() => { if (__KODIAK__.ctx.state.mode !== 'paused') return 'no panel'; for (const t of ['keydown', 'keyup']) window.dispatchEvent(new KeyboardEvent(t, { code: 'Escape', key: 'Escape' })); return 'dismissed'; })()"
+ },
+ {
+  "until": "__KODIAK__.systems.fishing.state === 'idle'",
+  "timeout": 90000
+ },
+ {
+  "wait": 500
+ },
+ {
+  "shot": "14-done"
+ },
+ {
+  "state": "done"
+ }
+]

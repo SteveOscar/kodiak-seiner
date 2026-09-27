@@ -1,0 +1,15 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 120000 },
+  { "wait": 5000 },
+  { "shot": "01-title" },
+  { "press": "ArrowDown" },
+  { "wait": 600 },
+  { "shot": "02-title-select" },
+  { "clickSel": "#ui .title-item:last-child" },
+  { "wait": 700 },
+  { "shot": "03-credits" },
+  { "press": "Escape" },
+  { "wait": 500 },
+  { "wait": 9000 },
+  { "shot": "04-title-shot2" }
+]

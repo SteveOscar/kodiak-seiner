@@ -1,0 +1,13 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 120000 },
+  { "perf": "title", "ms": 4000 },
+  { "start": {} },
+  { "time": 12 },
+  { "key": "KeyW", "down": true },
+  { "wait": 2000 },
+  { "perf": "play-underway", "ms": 5000 },
+  { "key": "KeyW", "up": true },
+  { "eval": "__KODIAK__.systems.ui?.openMap?.(); 'ok'" },
+  { "perf": "map", "ms": 4000 },
+  { "shot": "map" }
+]

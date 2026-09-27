@@ -1,0 +1,172 @@
+[
+  {
+    "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+    "timeout": 60000
+  },
+  {
+    "start": {}
+  },
+  {
+    "weather": "partly"
+  },
+  {
+    "time": 21.0
+  },
+  {
+    "wait": 1200
+  },
+  {
+    "state": "fleet"
+  },
+  {
+    "eval": "window.__K = __KODIAK__; window.__F = __K.systems.fleet; window.__near = (t, dist, az, h, lookH = 3) => { const p = t.position; const hd = (t.heading ?? 0) + az * Math.PI / 180; __K.camera([p.x + Math.sin(hd) * dist, h, p.z - Math.cos(hd) * dist], [p.x, lookH, p.z]); return t.name; }; window.__wet = (t, dist, h, lookH = 3, prefer = 90) => { const p = t.position; const hm = __K.ctx.heightmap; for (let k = 0; k < 24; k++) { const az = (t.heading ?? 0) + (prefer + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 15) * Math.PI / 180; const x = p.x + Math.sin(az) * dist, z = p.z - Math.cos(az) * dist; let ok = true; for (let f = 0.2; f <= 1; f += 0.2) if (hm.heightAt(p.x + (x - p.x) * f, p.z + (z - p.z) * f) > -0.5) ok = false; if (ok) { __K.camera([x, h, z], [p.x, lookH, p.z]); return t.name + ' az ' + Math.round(az * 180 / Math.PI); } } __K.camera([p.x, h + 60, p.z + dist], [p.x, lookH, p.z]); return 'fallback'; }; true"
+  },
+  {
+    "eval": "__near(__F.tenders[0], 70, 55, 9, 5)"
+  },
+  {
+    "wait": 900
+  },
+  {
+    "shot": "tender-0"
+  },
+  {
+    "eval": "__near(__F.tenders[1], 75, 125, 10, 5)"
+  },
+  {
+    "wait": 900
+  },
+  {
+    "shot": "tender-1"
+  },
+  {
+    "eval": "__near(__F.tenders[2], 70, -60, 8, 5)"
+  },
+  {
+    "wait": 900
+  },
+  {
+    "shot": "tender-2"
+  },
+  {
+    "eval": "__near(__F.tenders[3], 70, 100, 9, 5)"
+  },
+  {
+    "wait": 900
+  },
+  {
+    "shot": "tender-3"
+  },
+  {
+    "eval": "__near(__F.tenders[4], 70, -120, 9, 5)"
+  },
+  {
+    "wait": 900
+  },
+  {
+    "shot": "tender-4"
+  },
+  {
+    "eval": "__near(__F.tenders[5], 70, 60, 9, 5)"
+  },
+  {
+    "wait": 900
+  },
+  {
+    "shot": "tender-5"
+  },
+  {
+    "eval": "const b = __F.boats.filter(b => b.kind === 'seiner').sort((a, c) => c.speed - a.speed)[0]; window.__run = b; __near(b, 40, 35, 4, 3.5)"
+  },
+  {
+    "wait": 300
+  },
+  {
+    "shot": "fleet-seiner-running"
+  },
+  {
+    "eval": "const b = window.__run; const p = b.position; const h = b.heading; __K.camera([p.x + Math.sin(h + 2.5) * 70, 22, p.z - Math.cos(h + 2.5) * 70], [p.x, 0, p.z]); b.name + ' ' + b.state + ' ' + b.speed.toFixed(1)"
+  },
+  {
+    "wait": 300
+  },
+  {
+    "shot": "fleet-seiner-running-above"
+  },
+  {
+    "eval": "const b = __F.boats.find(b => b.kind === 'seiner' && ['set','close','purse','haul'].includes(b.state)); if (!b) 'none setting'; else { window.__set = b; const p = b.position; __K.camera([p.x + 70, 45, p.z + 70], [p.x, 0, p.z]); b.name + ' ' + b.state; }"
+  },
+  {
+    "wait": 500
+  },
+  {
+    "shot": "fleet-seiner-set-above"
+  },
+  {
+    "eval": "const b = window.__set; if (!b) 'none'; else { const p = b.position; __K.camera([p.x + 520, 16, p.z + 380], [p.x, 3, p.z]); 'ok'; }"
+  },
+  {
+    "wait": 500
+  },
+  {
+    "shot": "fleet-seiner-set-distance"
+  },
+  {
+    "eval": "__wet(__F.ferry, 230, 30, 10, 70)"
+  },
+  {
+    "wait": 900
+  },
+  {
+    "shot": "ferry"
+  },
+  {
+    "eval": "__wet(__F.cutter, 200, 20, 8, 110)"
+  },
+  {
+    "wait": 900
+  },
+  {
+    "shot": "cutter"
+  },
+  {
+    "time": 23.7
+  },
+  {
+    "wait": 1500
+  },
+  {
+    "eval": "__near(__F.tenders[0], 150, 60, 18, 5)"
+  },
+  {
+    "wait": 1200
+  },
+  {
+    "shot": "tender-night"
+  },
+  {
+    "eval": "__near(__F.ferry, 400, 90, 30, 10)"
+  },
+  {
+    "wait": 900
+  },
+  {
+    "shot": "ferry-night"
+  },
+  {
+    "eval": "const t = __F.tenders[0]; const p = t.position; __K.camera([p.x + 1400, 60, p.z + 900], [p.x, 0, p.z]); true"
+  },
+  {
+    "wait": 900
+  },
+  {
+    "shot": "grounds-night-far"
+  },
+  {
+    "state": "fleet2"
+  },
+  {
+    "perf": "fleet",
+    "ms": 2000
+  }
+]

@@ -1,0 +1,18 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 120000 },
+  { "wait": 4500 },
+  { "shot": "01-title" },
+  { "eval": "document.querySelectorAll('#ui .title-item').length" },
+  { "clickSel": "#ui .title-item.primary" },
+  { "wait": 2500 },
+  { "time": 12.2 },
+  { "wait": 2500 },
+  { "shot": "02-hud-noon" },
+  { "state": "hud-noon" },
+  { "hold": "KeyW", "ms": 3000 },
+  { "shot": "03-underway" },
+  { "time": 23.4 },
+  { "wait": 2500 },
+  { "shot": "04-hud-night" },
+  { "perf": "hud", "ms": 3000 }
+]

@@ -1,0 +1,65 @@
+[
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"kodiak-noon\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(12.5); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([5750, 35, -600], [4700, 40, -1500]);  window.__tkShot = { name: \"kodiak-noon\", t: performance.now() }; } else { K.camera([5750, 35, -600], [4700, 40, -1500]); } return performance.now() - window.__tkShot.t > 2200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "kodiak-noon"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"kodiak-close\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(12.5); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([5250, 18, -1650], [4750, 30, -1950]);  window.__tkShot = { name: \"kodiak-close\", t: performance.now() }; } else { K.camera([5250, 18, -1650], [4750, 30, -1950]); } return performance.now() - window.__tkShot.t > 2200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "kodiak-close"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"forest-onfoot\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(12.5); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(4600, -2000), 0); const ly = Math.max(t.heightAt(4700, -2080), 0); K.camera([4600, hy + 1.8, -2000], [4700, ly + 4, -2080]); }  window.__tkShot = { name: \"forest-onfoot\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(4600, -2000), 0); const ly = Math.max(t.heightAt(4700, -2080), 0); K.camera([4600, hy + 1.8, -2000], [4700, ly + 4, -2080]); } } return performance.now() - window.__tkShot.t > 2200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "forest-onfoot"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"beach-close\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(12.5); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(5925, -1245), 0); const ly = Math.max(t.heightAt(5990, -1300), 0); K.camera([5925, hy + 1.7, -1245], [5990, ly + -1, -1300]); }  window.__tkShot = { name: \"beach-close\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(5925, -1245), 0); const ly = Math.max(t.heightAt(5990, -1300), 0); K.camera([5925, hy + 1.7, -1245], [5990, ly + -1, -1300]); } } return performance.now() - window.__tkShot.t > 2200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "beach-close"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"beach-back\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(12.5); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(5935, -1255), 0); const ly = Math.max(t.heightAt(5880, -1200), 0); K.camera([5935, hy + 1.7, -1255], [5880, ly + 3, -1200]); }  window.__tkShot = { name: \"beach-back\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(5935, -1255), 0); const ly = Math.max(t.heightAt(5880, -1200), 0); K.camera([5935, hy + 1.7, -1255], [5880, ly + 3, -1200]); } } return performance.now() - window.__tkShot.t > 2200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "beach-back"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"kelp-boat\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(12.5); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([6060, 5, -1380], [5960, 0, -1270]);  window.__tkShot = { name: \"kelp-boat\", t: performance.now() }; } else { K.camera([6060, 5, -1380], [5960, 0, -1270]); } return performance.now() - window.__tkShot.t > 2200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "kelp-boat"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"hill-onfoot\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(13); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-800, 2400), 0); const ly = Math.max(t.heightAt(-400, 2000), 0); K.camera([-800, hy + 2, 2400], [-400, ly + 2, 2000]); }  window.__tkShot = { name: \"hill-onfoot\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-800, 2400), 0); const ly = Math.max(t.heightAt(-400, 2000), 0); K.camera([-800, hy + 2, 2400], [-400, ly + 2, 2000]); } } return performance.now() - window.__tkShot.t > 2200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "hill-onfoot"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"afognak-high\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(12.5); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([3000, 450, -2800], [3800, 60, -4600]);  window.__tkShot = { name: \"afognak-high\", t: performance.now() }; } else { K.camera([3000, 450, -2800], [3800, 60, -4600]); } return performance.now() - window.__tkShot.t > 2200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "afognak-high"
+ },
+ {
+  "perf": "end",
+  "ms": 1500
+ },
+ {
+  "state": "end"
+ }
+]

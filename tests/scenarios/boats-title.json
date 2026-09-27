@@ -1,0 +1,106 @@
+[
+  {
+    "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+    "timeout": 60000
+  },
+  {
+    "wait": 2500
+  },
+  {
+    "shot": "title-live"
+  },
+  {
+    "eval": "__KODIAK__.systems.cameraRig.seekTitle(0, 0.2)"
+  },
+  {
+    "wait": 1800
+  },
+  {
+    "shot": "title-0-a"
+  },
+  {
+    "wait": 5000
+  },
+  {
+    "shot": "title-0-b"
+  },
+  {
+    "eval": "__KODIAK__.systems.cameraRig.seekTitle(1, 0.2)"
+  },
+  {
+    "wait": 1800
+  },
+  {
+    "shot": "title-1-a"
+  },
+  {
+    "eval": "__KODIAK__.systems.cameraRig.seekTitle(2, 0.2)"
+  },
+  {
+    "wait": 1800
+  },
+  {
+    "shot": "title-2-a"
+  },
+  {
+    "wait": 5000
+  },
+  {
+    "shot": "title-2-b"
+  },
+  {
+    "eval": "__KODIAK__.systems.cameraRig.seekTitle(3, 0.2)"
+  },
+  {
+    "wait": 1800
+  },
+  {
+    "shot": "title-3-a"
+  },
+  {
+    "eval": "__KODIAK__.systems.cameraRig.seekTitle(4, 0.2)"
+  },
+  {
+    "wait": 1800
+  },
+  {
+    "shot": "title-4-a"
+  },
+  {
+    "eval": "__KODIAK__.systems.cameraRig.seekTitle(5, 0.2)"
+  },
+  {
+    "wait": 1800
+  },
+  {
+    "shot": "title-5-a"
+  },
+  {
+    "eval": "__KODIAK__.systems.cameraRig.seekTitle(6, 0.2)"
+  },
+  {
+    "wait": 1800
+  },
+  {
+    "shot": "title-6-a"
+  },
+  {
+    "state": "title"
+  },
+  {
+    "perf": "title",
+    "ms": 2000
+  },
+  {
+    "start": {}
+  },
+  {
+    "wait": 1500
+  },
+  {
+    "shot": "after-start"
+  },
+  {
+    "state": "play"
+  }
+]

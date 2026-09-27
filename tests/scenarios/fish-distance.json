@@ -1,0 +1,113 @@
+[
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode !== 'loading'",
+  "timeout": 90000
+ },
+ {
+  "start": {}
+ },
+ {
+  "eval": "(() => { const s = document.createElement('style'); s.textContent = '#ui, #hud, .ui-root { display: none !important; }'; document.head.appendChild(s); return 'ui hidden'; })()"
+ },
+ {
+  "time": 21.5
+ },
+ {
+  "eval": "window.__H = { K: __KODIAK__, fish: __KODIAK__.systems.fish, freezeAt(j, frac) { const f = this.fish, K = this.K; const target = j.t0 + j.dur * frac; const tick = () => { if (f.sim.now >= target) K.ctx.game.setMode('photo'); else requestAnimationFrame(tick); }; requestAnimationFrame(tick); }, play() { this.K.ctx.game.setMode('play'); }, fov(v) { const c = this.K.ctx.camera; c.fov = v; c.updateProjectionMatrix(); }, place(dist, species, rate, off) { const K = this.K, hm = K.ctx.heightmap; const sd = K.ctx.uniforms.uSunDir.value; let dx = sd.x, dz = sd.z; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l; for (let turn = 0; turn < 24; turn++) { const a = (off ?? 0) + turn * 0.13 * (turn % 2 ? 1 : -1); const ca = Math.cos(a), sa = Math.sin(a); const ux = dx * ca - dz * sa, uz = dx * sa + dz * ca; for (let tries = 0; tries < 40; tries++) { const cx = -2000 + tries * 350 + turn * 40, cz = -1500 + turn * 180; const c = hm.nearestWater(cx, cz, { minShore: 120 }); if (!c) continue; const tx = c.x + ux * dist, tz = c.z + uz * dist; if (hm.shoreDistance(tx, tz) < 150 || hm.depthAt(tx, tz) < 10) continue; let clear = true; for (let k = 1; k < 20; k++) { if (hm.heightAt(c.x + ux * dist * k / 20, c.z + uz * dist * k / 20) > -0.5) { clear = false; break; } } if (!clear) continue; const s = this.fish.spawnSchool({ x: tx, z: tz, species, count: 5000, milling: true, spookable: false, jumpRateMul: rate }); K.teleport(c.x - ux * 10, c.z - uz * 10, Math.atan2(ux, -uz) * 180 / Math.PI); this.cam = { x: c.x, z: c.z }; this.school = s; K.camera([c.x, 12, c.z], [tx, 1, tz]); return { cam: this.cam, school: [tx, tz], sun: [sd.x, sd.y, sd.z] }; } } return 'no spot'; }, jumpFreeze(frac) { const j = this.fish.debugJump(this.school.id); if (!j) return 'no jump'; this.K.camera([this.cam.x, 12, this.cam.z], [j.x, 0.6, j.z]); this.freezeAt(j, frac); return { style: j.style, d: Math.round(Math.hypot(j.x - this.cam.x, j.z - this.cam.z)) }; } }; 'ok'"
+ },
+ {
+  "eval": "__H.place(800, 'pink', 6, 0.95)"
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "shot": "a-800m-golden"
+ },
+ {
+  "eval": "__H.jumpFreeze(0.55)"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 4000
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "b-800m-jump-apex"
+ },
+ {
+  "eval": "__H.play()"
+ },
+ {
+  "eval": "__H.jumpFreeze(1.08)"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 4000
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "c-800m-splash"
+ },
+ {
+  "eval": "__H.play()"
+ },
+ {
+  "eval": "__H.place(3000, 'chum', 8, -0.9)"
+ },
+ {
+  "eval": "__H.fov(12)"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "eval": "__H.jumpFreeze(0.5)"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 4000
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "d-3km-binoculars-apex"
+ },
+ {
+  "eval": "__H.play()"
+ },
+ {
+  "eval": "__H.jumpFreeze(1.12)"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.mode === 'photo'",
+  "timeout": 4000
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "e-3km-binoculars-splash"
+ },
+ {
+  "eval": "__H.play()"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "shot": "f-3km-binoculars-live"
+ },
+ {
+  "eval": "__H.fov(55)"
+ },
+ {
+  "perf": "perf",
+  "ms": 2000
+ }
+]

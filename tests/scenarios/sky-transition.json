@@ -1,0 +1,16 @@
+[
+  {"until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 60000},
+  {"start": {}},
+  {"eval": "(document.getElementById('ui')||{style:{}}).style.visibility='hidden'; 1"},
+  {"weather": "clear"},
+  {"eval": "__KODIAK__.setTime(15, 0)"},
+  {"camera": {"pos": [5235, 22, -840], "look": [4300, 95, -1250]}},
+  {"wait": 1500},
+  {"eval": "window.__wc=[]; __KODIAK__.ctx.events.on('weather:change', (e)=>window.__wc.push(e.preset)); __KODIAK__.setWeather('storm', 12); 1"},
+  {"shot": "tr-0"},
+  {"wait": 4000}, {"shot": "tr-4"},
+  {"eval": "JSON.stringify(__KODIAK__.state().sky)"},
+  {"wait": 4000}, {"shot": "tr-8"},
+  {"wait": 4500}, {"shot": "tr-12"},
+  {"eval": "JSON.stringify({sky: __KODIAK__.state().sky, events: window.__wc, env: __KODIAK__.systems.sky.envMap.uuid, stats: __KODIAK__.systems.sky.debugEnvStats()})"}
+]

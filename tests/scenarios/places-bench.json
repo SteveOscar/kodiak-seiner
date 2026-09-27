@@ -1,0 +1,17 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 90000 },
+  { "start": { "freeExplore": true } },
+  { "weather": "clear" },
+  { "time": 12.5 },
+  { "teleport": [5150, -900, 330] },
+  { "camera": { "pos": [5200, 24, -835], "look": [5055, 12, -1170] } },
+  { "wait": 2000 },
+  { "perf": "approach-noon", "ms": 4000 },
+  { "camera": { "pos": [5230, 180, -760], "look": [5060, 0, -1180] } },
+  { "wait": 1000 },
+  { "perf": "overview-noon", "ms": 4000 },
+  { "time": 0.4 },
+  { "camera": { "pos": [5200, 24, -835], "look": [5055, 12, -1170] } },
+  { "wait": 1500 },
+  { "perf": "approach-night", "ms": 4000 }
+]

@@ -1,0 +1,20 @@
+[
+  {"until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 60000},
+  {"start": {}},
+  {"eval": "(document.getElementById('ui')||{style:{}}).style.visibility='hidden'; 1"},
+  {"weather": "partly"},
+  {"eval": "__KODIAK__.setTime(20.5, 0)"},
+  {"camera": {"pos": [5235, 22, -840], "look": [4300, 95, -1250]}},
+  {"wait": 2000},
+  {"shot": "pfx-on"},
+  {"eval": "JSON.stringify({pfx: __KODIAK__.systems.postfx.debugState(), graded: __KODIAK__.systems.postfx.debugOutputGraded?.(), exp: __KODIAK__.ctx.renderer.toneMappingExposure})"},
+  {"eval": "__KODIAK__.systems.postfx.setEnabled(false); 1"},
+  {"wait": 1200},
+  {"shot": "pfx-off"},
+  {"eval": "JSON.stringify({pfx: __KODIAK__.systems.postfx.debugState(), exp: __KODIAK__.ctx.renderer.toneMappingExposure})"},
+  {"eval": "__KODIAK__.systems.postfx.setEnabled(true); 1"},
+  {"eval": "__KODIAK__.setTime(1.5, 0)"},
+  {"wait": 1500},
+  {"shot": "pfx-night"},
+  {"eval": "__KODIAK__.systems.postfx.debugTimings(30, true).then(r => JSON.stringify(r))"}
+]

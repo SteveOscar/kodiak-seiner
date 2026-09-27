@@ -1,0 +1,11 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 120000 },
+  { "start": {} },
+  { "time": 14 },
+  { "teleport": [-350, 5600, 226] },
+  { "wait": 1500 },
+  { "eval": "typeof __KODIAK__.systems.player.debugAshore === 'function' ? (__KODIAK__.systems.player.debugAshore(), 'ashore') : 'no debugAshore'" },
+  { "wait": 4000 },
+  { "state": "foot" },
+  { "shot": "01-on-foot" }
+]

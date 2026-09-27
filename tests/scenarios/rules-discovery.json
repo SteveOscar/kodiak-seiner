@@ -1,0 +1,21 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 90000 },
+  { "eval": "window.__toasts = []; window.__disc = []; const ev = __KODIAK__.ctx.events; ev.on('ui:toast', (e) => __toasts.push(e.text)); ev.on('place:discovered', (e) => __disc.push(`${e.id} (${e.kind}) +$${e.bonus}`)); window.__go = (id, minShore = 60) => { const K = __KODIAK__; const p = K.systems.places.get(id); const w = K.ctx.heightmap.nearestWater(p.x, p.z, { minShore }); K.teleport(w.x, w.z, 45); return `${id} → ${Math.round(w.x)},${Math.round(w.z)}`; }; 'ok'" },
+  { "start": {} },
+  { "time": 14 },
+  { "wait": 2000 },
+  { "eval": "JSON.stringify({ home: [...__KODIAK__.systems.discovery.discovered], toasts: __toasts })" },
+  { "eval": "__go('spruce-cape', 120)" },
+  { "wait": 1500 },
+  { "shot": "d1-spruce-cape" },
+  { "eval": "__go('monashka-bay', 80)" },
+  { "wait": 1500 },
+  { "eval": "__go('buskin-river', 60)" },
+  { "wait": 1500 },
+  { "shot": "d2-buskin" },
+  { "eval": "__go('woody-island', 80)" },
+  { "wait": 1500 },
+  { "eval": "__KODIAK__.ctx.events.emit('wildlife:sighted', { kind: 'humpback', x: 0, z: 0, first: true }); __KODIAK__.systems.discovery.addSighting({ schoolId: __KODIAK__.systems.fish.schools[0]?.id, species: 'pink', heading: 1 }); 'sighted'" },
+  { "eval": "const d = __KODIAK__.systems.discovery; JSON.stringify({ disc: __disc, toasts: __toasts, progress: d.progress(), intel: d.intel.map((i) => `${i.kind}: ${i.text}`), cards: d.cards().map((c) => `${c.date} ${c.name} (${c.kind})`), marks: d.recentSightings().length, cash: __KODIAK__.systems.economy.cash })" },
+  { "state": "end" }
+]

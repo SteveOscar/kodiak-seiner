@@ -1,0 +1,160 @@
+[
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+  "timeout": 60000
+ },
+ {
+  "start": {}
+ },
+ {
+  "time": 21.3
+ },
+ {
+  "weather": "clear"
+ },
+ {
+  "teleport": [
+   -2800,
+   -950,
+   190
+  ]
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "eval": "window.__K = __KODIAK__; window.__P = __K.systems.player; window.__trk = (dist, angDeg, h, lookH) => { cancelAnimationFrame(window.__trkId); const f = () => { const p = __P.position; const a = __P.heading + angDeg * Math.PI / 180; __K.camera([p.x + Math.sin(a) * dist, p.y + h, p.z - Math.cos(a) * dist], [p.x, p.y + lookH, p.z]); window.__trkId = requestAnimationFrame(f); }; f(); }; window.__stop = () => { cancelAnimationFrame(window.__trkId); __K.camera(null); }; window.__follow = (pts, run) => { window.__done = false; let i = 0; cancelAnimationFrame(window.__folId); const f = () => { const p = __P.position; while (i < pts.length && Math.hypot(pts[i][0] - p.x, pts[i][1] - p.z) < 1.6) i++; if (i >= pts.length) { __P.debugDrive(null); window.__done = true; return; } const dx = pts[i][0] - p.x, dz = pts[i][1] - p.z, d = Math.hypot(dx, dz); __P.debugDrive({ mx: dx / d, mz: dz / d, run }); window.__folId = requestAnimationFrame(f); }; f(); }; window.__orbit = (yawRad, dPitchPx) => { const c = __K.ctx.camera; const v = new __K.ctx.THREE.Vector3(); c.getWorldDirection(v); const cur = Math.atan2(v.x, -v.z); let d = yawRad - cur; d = Math.atan2(Math.sin(d), Math.cos(d)); const dx = -d / 0.0048; const gl = document.getElementById('gl'); gl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, buttons: 1 })); window.dispatchEvent(new MouseEvent('mousemove', { movementX: dx, movementY: dPitchPx || 0 })); setTimeout(() => window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, buttons: 0 })), 150); return d; }; window.__toBoat = () => { const p = __P.position, s = __K.systems.seiner.position; return Math.atan2(s.x - p.x, -(s.z - p.z)); }; window.__hero = (back, up, side, lookDist, lookDrop) => { const p = __P.position; const h = __toBoat(); __K.camera([p.x - Math.sin(h) * back + Math.cos(h) * side, p.y + up, p.z + Math.cos(h) * back + Math.sin(h) * side], [p.x + Math.sin(h) * lookDist, p.y - lookDrop, p.z - Math.cos(h) * lookDist]); return true; }; true"
+ },
+ {
+  "eval": "__P.debugAshore()"
+ },
+ {
+  "state": "ashore"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "shot": "a01-beach-skiff"
+ },
+ {
+  "eval": "__P.placeAt(-2681, -918); __follow([[-2665, -910], [-2649, -902], [-2637, -902], [-2621, -910], [-2609, -914], [-2601, -914]], false)"
+ },
+ {
+  "wait": 4000
+ },
+ {
+  "shot": "a02-hike-follow"
+ },
+ {
+  "eval": "__trk(10, 75, 2.0, 1.0)"
+ },
+ {
+  "wait": 900
+ },
+ {
+  "shot": "a03-hike-side"
+ },
+ {
+  "eval": "__trk(9, -60, 3.0, 1.0)"
+ },
+ {
+  "wait": 900
+ },
+ {
+  "shot": "a04-hike-side2"
+ },
+ {
+  "eval": "__trk(7, 150, 3.5, 1.2)"
+ },
+ {
+  "wait": 900
+ },
+ {
+  "shot": "a05-hike-behind-high"
+ },
+ {
+  "eval": "__stop()"
+ },
+ {
+  "until": "window.__done",
+  "timeout": 60000
+ },
+ {
+  "eval": "__P.placeAt(-2577, -906); __follow([[-2561, -898], [-2553, -894], [-2541, -902], [-2533, -902], [-2525, -902], [-2521, -902]], false)"
+ },
+ {
+  "until": "window.__done",
+  "timeout": 40000
+ },
+ {
+  "wait": 600
+ },
+ {
+  "eval": "__orbit(__toBoat(), 25)"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "shot": "a06-summit-follow"
+ },
+ {
+  "state": "summit"
+ },
+ {
+  "eval": "__hero(4.5, 2.2, 1.5, 60, 28)"
+ },
+ {
+  "wait": 700
+ },
+ {
+  "shot": "a07-summit-hero"
+ },
+ {
+  "eval": "__hero(9, 3.5, -3, 60, 30)"
+ },
+ {
+  "wait": 700
+ },
+ {
+  "shot": "a08-summit-hero-wide"
+ },
+ {
+  "time": 21.9
+ },
+ {
+  "eval": "__hero(4.5, 2.2, 1.5, 60, 28)"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "shot": "a09-summit-hero-21.9"
+ },
+ {
+  "time": 22.4
+ },
+ {
+  "eval": "__hero(4.5, 2.2, 1.5, 60, 28)"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "shot": "a09-summit-hero-22.4"
+ },
+ {
+  "eval": "__K.camera(null); true"
+ },
+ {
+  "wait": 1200
+ },
+ {
+  "shot": "a10-summit-follow-end"
+ },
+ {
+  "perf": "summit",
+  "ms": 2000
+ }
+]

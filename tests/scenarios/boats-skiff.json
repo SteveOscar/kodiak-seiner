@@ -1,0 +1,221 @@
+[
+  {
+    "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+    "timeout": 60000
+  },
+  {
+    "start": {}
+  },
+  {
+    "time": 20.4
+  },
+  {
+    "teleport": [
+      5520,
+      -560,
+      200
+    ]
+  },
+  {
+    "wait": 1500
+  },
+  {
+    "eval": "window.__K = __KODIAK__; window.__S = __K.systems.seiner; window.__F = __K.systems.skiff; window.__shot = (dist, angDeg, h, lookH, obj) => { const s = obj ?? __S; const hd = (s.heading ?? 0) + angDeg * Math.PI / 180; const p = s.position; __K.camera([p.x + Math.sin(hd) * dist, h, p.z - Math.cos(hd) * dist], [p.x, lookH, p.z]); }; window.__mid = (h) => { const a = __S.position, b = __F.position; const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2; const d = Math.hypot(a.x - b.x, a.z - b.z); __K.camera([mx + 20, h ?? Math.max(40, d * 1.1), mz + d * 0.5 + 20], [mx, 0, mz]); }; true"
+  },
+  {
+    "eval": "__shot(24, 150, 7, 3); __F.release()"
+  },
+  {
+    "wait": 700
+  },
+  {
+    "shot": "skiff-release-slide"
+  },
+  {
+    "wait": 900
+  },
+  {
+    "shot": "skiff-release-splash"
+  },
+  {
+    "state": "released"
+  },
+  {
+    "key": "KeyW",
+    "down": true
+  },
+  {
+    "wait": 1200
+  },
+  {
+    "key": "KeyW",
+    "up": true
+  },
+  {
+    "wait": 6000
+  },
+  {
+    "eval": "__mid()"
+  },
+  {
+    "wait": 300
+  },
+  {
+    "shot": "skiff-holding-wide"
+  },
+  {
+    "eval": "__shot(16, 60, 3, 1, __F)"
+  },
+  {
+    "wait": 300
+  },
+  {
+    "shot": "skiff-holding-close"
+  },
+  {
+    "eval": "const p = __F.position; const c = __K.ctx.tide.currentAt(p.x, p.z); __F.towToward(p.x - c.x * 400 + 30, p.z - c.z * 400 + 30, 1); true"
+  },
+  {
+    "wait": 3000
+  },
+  {
+    "eval": "__shot(14, 200, 3.5, 1, __F)"
+  },
+  {
+    "wait": 300
+  },
+  {
+    "shot": "skiff-towing-strain"
+  },
+  {
+    "state": "towing"
+  },
+  {
+    "hold": "KeyS",
+    "ms": 2500
+  },
+  {
+    "wait": 1500
+  },
+  {
+    "eval": "__F.closeTo(__S.object3d, () => { window.__arrived = true; }); true"
+  },
+  {
+    "until": "window.__arrived === true",
+    "timeout": 40000
+  },
+  {
+    "eval": "__shot(20, 120, 6, 2)"
+  },
+  {
+    "wait": 500
+  },
+  {
+    "shot": "skiff-closed-alongside"
+  },
+  {
+    "state": "closed"
+  },
+  {
+    "eval": "__S.lockControls('fishing', true); __F.towOff(__S, 'port'); true"
+  },
+  {
+    "wait": 9000
+  },
+  {
+    "eval": "__F.setTowHeading(__S.heading - Math.PI / 2 - 0.4); true"
+  },
+  {
+    "wait": 3000
+  },
+  {
+    "eval": "__mid(28)"
+  },
+  {
+    "wait": 300
+  },
+  {
+    "shot": "towoff-line-above"
+  },
+  {
+    "eval": "__shot(30, -60, 4, 2)"
+  },
+  {
+    "wait": 300
+  },
+  {
+    "shot": "towoff-line-low"
+  },
+  {
+    "state": "towoff"
+  },
+  {
+    "eval": "__S.lockControls('fishing', false); __F.returnTo(() => { window.__home = true; }); true"
+  },
+  {
+    "wait": 6000
+  },
+  {
+    "eval": "__shot(22, 150, 6, 2.5)"
+  },
+  {
+    "wait": 1500
+  },
+  {
+    "shot": "skiff-winch"
+  },
+  {
+    "until": "window.__home === true",
+    "timeout": 40000
+  },
+  {
+    "state": "stowed"
+  },
+  {
+    "teleport": [
+      6335,
+      420,
+      0
+    ]
+  },
+  {
+    "wait": 1200
+  },
+  {
+    "eval": "const s = __S.position; const g = __K.ctx.heightmap; let best = null; for (let a = 0; a < 6.28; a += 0.1) for (let r = 20; r < 400; r += 10) { const x = s.x + Math.cos(a) * r, z = s.z + Math.sin(a) * r; if (g.heightAt(x, z) > 0.3 && (!best || r < best.r)) best = { x, z, r }; } window.__beach = best; __F.release(); setTimeout(() => __F.tieOff({ x: best.x, z: best.z }), 1800); best"
+  },
+  {
+    "wait": 22000
+  },
+  {
+    "eval": "const p = __F.position; const g = __K.ctx.heightmap.shoreGradient(p.x, p.z); const sx = p.x + g.x * 26 - g.z * 14, sz = p.z + g.z * 26 + g.x * 14; __K.camera([sx, 5, sz], [p.x - g.x * 10, 1.0, p.z - g.z * 10]); true"
+  },
+  {
+    "wait": 400
+  },
+  {
+    "shot": "skiff-tied-ashore"
+  },
+  {
+    "state": "tied"
+  },
+  {
+    "eval": "__F.stow(); __F.ferry(__S.position, __beach, () => { window.__landed = true; }); true"
+  },
+  {
+    "until": "window.__landed === true",
+    "timeout": 70000
+  },
+  {
+    "eval": "const p = __F.position; const g = __K.ctx.heightmap.shoreGradient(p.x, p.z); const sx = p.x + g.x * 20 + g.z * 12, sz = p.z + g.z * 20 - g.x * 12; __K.camera([sx, 4, sz], [p.x - g.x * 6, 1.0, p.z - g.z * 6]); true"
+  },
+  {
+    "wait": 400
+  },
+  {
+    "shot": "skiff-ferry-landed"
+  },
+  {
+    "state": "ferry"
+  }
+]
