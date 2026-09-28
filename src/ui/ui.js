@@ -18,6 +18,7 @@ import { createReportPanel, createTicketPanel } from './report.js';
 import { createHarborPanel } from './harbor.js';
 import { createOverlays } from './overlays.js';
 import { createSaves } from './saves.js';
+import { createTeleportPanel } from './teleport.js';
 
 const WAYPOINT_REACHED = 60; // m
 const MAX_SETS = 40;
@@ -218,13 +219,14 @@ export async function create(ctx) {
     modalRoot.append(p.el);
   };
   register(createPausePanel(ctx, { open, close, saves, toTitle, resume }));
+  register(createTeleportPanel(ctx, { close: () => close('teleport'), resume }));
   register(createSettingsPanel(ctx, { saves, confirm, close: () => close('settings') }));
   register(createHelpPanel(ctx, { close: () => close('help') }));
   register(createCreditsPanel(ctx, { close: () => close('credits') }));
   const confirmPanel = createConfirmPanel(ctx, { close: () => close('confirm') });
   register(confirmPanel);
   register(createLogbook(ctx, { close: () => close('logbook'), openTicket: (r) => open('ticket', r), history }));
-  map = createMap(ctx, { close: () => close('map'), getWaypoint: () => waypoint, setWaypoint: (p) => sys.setWaypoint(p) });
+  map = createMap(ctx, { close: () => close('map'), getWaypoint: () => waypoint, setWaypoint: (p) => sys.setWaypoint(p), openTeleport: () => open('teleport') });
   register(map);
   register(createReportPanel(ctx, { close: () => close('report') }));
   register(createTicketPanel(ctx, { close: () => close('ticket') }));
@@ -363,6 +365,7 @@ export async function create(ctx) {
     if (kp('KeyL') || kp('KeyJ')) keys.add('logbook');
     if (kp('F1') || kp('Slash')) keys.add('help');
     if (kp('KeyH')) keys.add('photo');
+    if (kp('KeyT') && ctx.state.freeExplore) keys.add('teleport');
     if (kp('Space') || kp('Enter')) keys.add('confirm');
     if (kp('ArrowUp') || kp('KeyW')) keys.add('up');
     if (kp('ArrowDown') || kp('KeyS')) keys.add('down');

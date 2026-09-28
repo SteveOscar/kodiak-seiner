@@ -48,6 +48,7 @@ export function createPausePanel(ctx, { open, close, saves, toTitle, resume }) {
       kbd = false;
       item('Resume', 'Esc', () => resume(), 'primary');
       item('Chart', 'M', () => open('map'));
+      if (ctx.state.freeExplore) item('Teleport…', 'T', () => open('teleport'));
       item('Logbook', 'L', () => open('logbook'));
       item('Settings', null, () => open('settings'));
       item('Controls', 'F1', () => open('help'));

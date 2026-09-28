@@ -22,26 +22,36 @@ const OUT_DIR = path.resolve(ROOT, args.out ?? 'public/terrain');
 // source terrain (they follow the real low ground), recorded here so the asset is reproducible.
 const CHANNELS = [
   {
+    // West narrows of Kupreanof Strait, where it opens to Shelikof Strait; the compressed source is too shoal here.
+    name: 'Kupreanof Strait (west narrows)',
+    width: 130,
+    bank: 50,
+    depth: 30,
+    points: [[58.0286, -153.337], [58.0232, -153.277], [58.0179, -153.217], [58.0107, -153.17]],
+  },
+  {
+    // East end of Kupreanof Strait (1.5-3 nm wide between Kodiak and Raspberry islands), which the source closes.
     name: 'Kupreanof Strait',
-    width: 110,
-    bank: 45,
+    width: 150,
+    bank: 50,
     depth: 30,
     points: [
-      [57.9711, -153.0687], [57.9678, -153.0533], [57.9629, -153.0378], [57.9546, -153.0224], [57.953, -153.007],
-      [57.953, -152.9916], [57.953, -152.9762], [57.9546, -152.9608], [57.9579, -152.9454], [57.9596, -152.93],
-      [57.9645, -152.9146], [57.9612, -152.8991], [57.9678, -152.8837], [57.9761, -152.8714], [57.9777, -152.856],
-      [57.981, -152.8406], [57.9827, -152.8252], [57.9827, -152.8098], [57.9827, -152.7944], [57.9827, -152.7789],
-      [57.9893, -152.7635], [57.9975, -152.7481], [57.9992, -152.745],
+      [57.9705, -153.0967], [57.9676, -153.0567], [57.9638, -152.9944], [57.961, -152.9322], [57.9581, -152.8922],
     ],
   },
   {
-    name: 'Akhiok harbor entrance',
-    width: 70,
-    bank: 30,
-    depth: 20,
-    points: [[56.9290, -154.1400], [56.9310, -154.1443], [56.9343, -154.1567], [56.9360, -154.1610]],
+    // Whale Passage, south of Whale Island: the main route from Kodiak into Kupreanof Strait (NOAA Coast Pilot 9).
+    name: 'Whale Passage',
+    width: 100,
+    bank: 40,
+    depth: 25,
+    points: [
+      [57.9581, -152.8922], [57.9429, -152.8656], [57.9267, -152.8362], [57.92, -152.7989], [57.919, -152.7589],
+      [57.921, -152.7233], [57.9238, -152.7029],
+    ],
   },
 ];
+
 
 // Geographic frame: a square ~188 km on a side, centred on the island.
 const LAT0 = 57.65;

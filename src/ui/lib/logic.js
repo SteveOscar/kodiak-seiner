@@ -26,6 +26,7 @@ export function routeKeys(mode, top, keys) {
   }
   if (mode === 'map') {
     if (has('map') || has('escape') || has('pause')) return { type: 'close' };
+    if (has('teleport')) return { type: 'open', panel: 'teleport' };
     if (has('logbook')) return { type: 'open', panel: 'logbook' };
     return null;
   }
@@ -38,6 +39,7 @@ export function routeKeys(mode, top, keys) {
     if (has('escape') || (has('pause') && top !== 'confirm')) return { type: 'back' };
     if (top === 'logbook' && has('logbook')) return { type: 'close' };
     if (top === 'help' && has('help')) return { type: 'close' };
+    if (top === 'teleport' && has('teleport')) return { type: 'close' };
     if (top === 'logbook' && has('map')) return { type: 'open', panel: 'map' };
     return null;
   }
@@ -47,6 +49,7 @@ export function routeKeys(mode, top, keys) {
     if (has('logbook')) return { type: 'open', panel: 'logbook' };
     if (has('help')) return { type: 'open', panel: 'help' };
     if (has('photo')) return { type: 'photo', on: true };
+    if (has('teleport')) return { type: 'open', panel: 'teleport' };
   }
   return null;
 }

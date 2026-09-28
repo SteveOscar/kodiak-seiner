@@ -843,3 +843,21 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1620; }
 .title-col, .title-caption, .title-foot { transition: opacity 0.35s; }
 #ui.panel-open .ui-title .title-col, #ui.panel-open .ui-title .title-foot { opacity: 0.1; }
 #ui.panel-open .ui-title .title-caption.in { opacity: 0.25; }
+
+/* Free Explore teleport ("Where to?") */
+.panel-teleport .panel-card { width: calc(560 * var(--u)); display: flex; flex-direction: column; max-height: 86vh; }
+.tp-bar { display: flex; gap: calc(8 * var(--u)); align-items: center; }
+.tp-search { flex: 1; padding: calc(9 * var(--u)) calc(12 * var(--u)); font: calc(14 * var(--u)) / 1.2 var(--sans); color: var(--ink); background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: calc(7 * var(--u)); outline: none; }
+.tp-search:focus { border-color: rgba(255, 122, 26, 0.6); background: rgba(255, 255, 255, 0.07); }
+.tp-note:not(:empty) { margin-top: calc(10 * var(--u)); font-size: calc(12.5 * var(--u)); color: #ffb6ab; }
+.tp-list { margin-top: calc(12 * var(--u)); overflow-y: auto; min-height: calc(160 * var(--u)); max-height: 56vh; padding-right: calc(4 * var(--u)); }
+.tp-group { margin: calc(14 * var(--u)) 0 calc(6 * var(--u)); font: 600 calc(10 * var(--u)) / 1 var(--sans); letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent); }
+.tp-group:first-child { margin-top: 0; }
+.tp-row { display: flex; width: 100%; align-items: baseline; gap: calc(10 * var(--u)); padding: calc(7 * var(--u)) calc(10 * var(--u)); background: transparent; border: 1px solid transparent; border-radius: calc(6 * var(--u)); color: var(--ink); text-align: left; cursor: pointer; font: inherit; }
+.tp-row.on { background: rgba(255, 122, 26, 0.1); border-color: rgba(255, 122, 26, 0.4); }
+.tp-name { flex: 1; font: calc(15 * var(--u)) / 1.2 var(--serif); }
+.tp-kind { font-size: calc(11.5 * var(--u)); color: var(--ink3); }
+.tp-seen { font-size: calc(9 * var(--u)); color: var(--accent); opacity: 0.8; }
+.tp-empty { padding: calc(20 * var(--u)) 0; text-align: center; color: var(--ink3); font-style: italic; }
+.ms-where { width: 100%; justify-content: center; margin-bottom: calc(8 * var(--u)); }
+.mp-sub { margin: calc(4 * var(--u)) 0 0; font-size: calc(12 * var(--u)); color: var(--ink3); }

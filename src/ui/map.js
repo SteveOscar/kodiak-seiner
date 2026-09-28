@@ -18,7 +18,7 @@ const SOUND_INK = '#557a90';
 const CLOSED = '#c0392b';
 const BOAT = '#ff7a1a';
 
-export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
+export function createMap(ctx, { close, getWaypoint, setWaypoint, openTeleport = null }) {
   const half = ctx.config.world.half;
   const base = h('canvas.map-base');
   const live = h('canvas.map-live');
@@ -49,6 +49,8 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
   const tideCanvas = h('canvas.ms-tide-canvas', { width: 520, height: 110 });
   const wpBox = h('div.ms-wp');
   const travelList = h('div.ms-travel-list');
+  const travelHead = h('div.ms-h', { text: 'Fast travel' });
+  const explore = () => !!ctx.state.freeExplore && !!ctx.systems.season?.travel?.teleport;
   const preview = h('div.ms-preview.hidden');
   const travelNote = h('div.ms-note');
   const side = h('div.map-side.ui-interactive', null, [
@@ -56,7 +58,7 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
     h('div.ms-sec', null, [posEl, posSub, openEl]),
     h('div.ms-sec', null, [h('div.ms-h', { text: 'Tide' }), tideEl, tideCanvas]),
     h('div.ms-sec', null, [h('div.ms-h', { text: 'Waypoint' }), wpBox]),
-    h('div.ms-sec.ms-travel', null, [h('div.ms-h', { text: 'Fast travel' }), travelNote, preview, travelList]),
+    h('div.ms-sec.ms-travel', null, [travelHead, travelNote, preview, travelList]),
   ]);
   const hint = h('div.map-hint', null, [
     hintItem('Drag', 'pan'),
@@ -252,6 +254,7 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
     const w = view.toWorld(mx, my);
     if (Math.abs(w.x) > half || Math.abs(w.z) > half) return;
     setWaypoint({ x: w.x, z: w.z });
+    if (explore()) select({ id: 'point', point: true, name: ctx.systems.places?.districtAt?.(w.x, w.z) ?? 'Open water', x: w.x, z: w.z });
     dirtyLive = true;
     renderSide();
   });
@@ -293,7 +296,7 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
     clear(tip);
     tip.append(h('div.map-tip-t', { text: hit.title }));
     if (hit.text) tip.append(h('div.map-tip-b', { text: hit.text }));
-    if (hit.travel) tip.append(h('div.map-tip-a', { text: 'Click for fast travel' }));
+    if (hit.travel) tip.append(h('div.map-tip-a', { text: explore() ? 'Click to teleport' : 'Click for fast travel' }));
     moveTip(mx, my);
   }
   function moveTip(mx, my) {
@@ -919,6 +922,17 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
     for (const tg of travelTargets()) {
       if (tg.kind !== 'place') continue;
       const q = view.toScreen(tg.x, tg.z);
+      if (explore() && !(tg.services?.length)) {
+        // Free Explore: every place is a teleport target; non-harbours get a small ring instead of an anchor.
+        if (q.x < -10 || q.y < -10 || q.x > view.width + 10 || q.y > view.height + 10) continue;
+        g.strokeStyle = 'rgba(44, 51, 54, 0.7)';
+        g.lineWidth = 1.2;
+        g.beginPath();
+        g.arc(q.x, q.y, 2.6, 0, Math.PI * 2);
+        g.stroke();
+        hitList.push({ key: `p:${tg.placeId}`, sx: q.x, sy: q.y, title: tg.name, text: [tg.placeKind, tg.districtName].filter(Boolean).join(' · '), travel: tg });
+        continue;
+      }
       g.save();
       g.translate(q.x, q.y);
       g.strokeStyle = 'rgba(44, 51, 54, 0.85)';
@@ -1090,7 +1104,8 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
     if (!targetsCache || now - targetsAt > 1000) {
       targetsAt = now;
       try {
-        targetsCache = ctx.systems.season?.travel?.targets?.() ?? fallbackTargets();
+        const tr = ctx.systems.season?.travel;
+        targetsCache = (explore() ? tr?.teleportTargets?.() : tr?.targets?.()) ?? fallbackTargets();
       } catch {
         targetsCache = fallbackTargets();
       }
@@ -1106,6 +1121,12 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
   function select(t) {
     selected = t;
     selectedPreview = null;
+    if (explore()) {
+      selectedPreview = ctx.systems.season.travel.canTeleport?.() ?? { ok: true };
+      dirtyLive = true;
+      renderSide();
+      return;
+    }
     try {
       selectedPreview = ctx.systems.season?.travel?.preview?.(t) ?? null;
     } catch (err) {
@@ -1121,6 +1142,10 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
     toggle(preview, 'hidden', !selected);
     if (!selected) return;
     const p = selectedPreview;
+    if (explore()) {
+      renderTeleportPreview(p);
+      return;
+    }
     const hasTravel = !!ctx.systems.season?.travel?.go;
     preview.append(h('div.mp-name', { text: `Run to ${selected.name}` }));
     if (!p) {
@@ -1151,6 +1176,26 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
         close();
       } else if (r?.reason) ctx.systems.ui?.toast?.(r.reason, { kind: 'warn' });
     }, { cls: 'primary', disabled: !p?.ok });
+    preview.append(h('div.mp-actions', null, [button('Cancel', () => {
+      selected = null;
+      selectedPreview = null;
+      dirtyLive = true;
+      renderSide();
+    }), go]));
+  }
+
+  function renderTeleportPreview(p) {
+    preview.append(h('div.mp-name', { text: selected.point ? 'Teleport here' : `Teleport to ${selected.name}` }));
+    preview.append(h('p.mp-sub', { text: selected.point ? `${selected.name} — nearest open water to the click` : [selected.districtName, selected.placeKind && selected.placeKind[0].toUpperCase() + selected.placeKind.slice(1)].filter(Boolean).join(' · ') }));
+    if (p && !p.ok && p.reason) preview.append(h('p.mp-reason', { text: p.reason }));
+    const go = button('Teleport', () => {
+      const r = ctx.systems.season?.travel?.teleport?.(selected.point ? { x: selected.x, z: selected.z, name: selected.name } : selected);
+      if (r?.ok) {
+        selected = null;
+        selectedPreview = null;
+        close();
+      } else if (r?.reason) ctx.systems.ui?.toast?.(r.reason, { kind: 'warn' });
+    }, { cls: 'primary', disabled: p ? !p.ok : false });
     preview.append(h('div.mp-actions', null, [button('Cancel', () => {
       selected = null;
       selectedPreview = null;
@@ -1203,13 +1248,18 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
     } else wpBox.append(h('p.ms-muted', { text: 'Click the chart to drop a waypoint. It shows on the compass.' }));
 
     clear(travelList);
-    const can = ctx.systems.season?.travel?.canTravel?.() ?? { ok: false, reason: 'Fast travel is not available' };
-    setText(travelNote, can.ok ? 'Pay in time and fuel to run to a harbor or tender.' : can.reason ?? '');
+    setText(travelHead, explore() ? 'Teleport' : 'Fast travel');
+    const can = explore()
+      ? ctx.systems.season.travel.canTeleport?.() ?? { ok: true }
+      : ctx.systems.season?.travel?.canTravel?.() ?? { ok: false, reason: 'Fast travel is not available' };
+    setText(travelNote, can.ok ? (explore() ? 'Free Explore: click any place or open water to jump there instantly.' : 'Pay in time and fuel to run to a harbor or tender.') : can.reason ?? '');
+    if (explore() && openTeleport) travelList.append(button('Where to? — all places', () => openTeleport(), { cls: 'small ms-where' }));
     toggle(travelNote, 'warn', !can.ok);
     const bp = s?.position ?? { x: 0, z: 0 };
     const list = travelTargets()
       .map((tg) => ({ tg, d: Math.hypot(tg.x - bp.x, tg.z - bp.z) }))
-      .sort((a, b) => a.d - b.d);
+      .sort((a, b) => a.d - b.d)
+      .slice(0, explore() ? 10 : Infinity);
     for (const { tg, d } of list) {
       const b = h(`button.ms-dest${selected?.id === tg.id ? '.on' : ''}`, { type: 'button' }, [
         svgFrom(tg.kind === 'tender' ? GLYPHS.tender : GLYPHS.anchor),

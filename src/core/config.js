@@ -8,8 +8,10 @@ export const config = {
     depthScale: 0.4, // game metres per real metre below sea level
     shelfBase: 0.4, // seabed depth at the waterline (m); see heightmap.js
     shelfSlope: 0.1, // extra seabed depth per metre offshore, capping the source bathymetry near the coast
+    minOpenDepth: 8, // open water away from the shelf is at least this deep (the source under-reads enclosed bays)
     outsideDepth: -60, // seabed height beyond the heightmap
-    boundary: 7600, // soft boundary for boats and players (|x| or |z| beyond this is pushed back)
+    boundary: 7850, // soft boundary for boats and players (|x| or |z| beyond this is pushed back); 7850 keeps
+    // the passage round Cape Alitak into Alitak Bay
   },
 
   time: {
