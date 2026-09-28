@@ -110,7 +110,8 @@ if (args.dist) {
     root: ROOT,
     logLevel: 'error',
     cacheDir: path.join(os.tmpdir(), `kodiak-vite-${process.pid}`),
-    server: { port: 0, host: '127.0.0.1', strictPort: false },
+    // No HMR: other agents editing files must not reload this page mid-scenario.
+    server: { port: 0, host: '127.0.0.1', strictPort: false, hmr: false, watch: null },
   });
   await server.listen();
   baseUrl = server.resolvedUrls.local[0];

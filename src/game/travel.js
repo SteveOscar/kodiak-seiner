@@ -14,6 +14,12 @@
 //                                   warnings: [..], route: [{x, z}], reachable }
 //   t.go(target)                  same shape; performs the trip (the map UI closes itself afterwards)
 // target: a target from targets(), a place id, a place object, a tender object or { kind, id }.
+//
+// Free Explore teleport (instant, free, any place whether discovered or not, or any open-water point):
+//   t.canTeleport()               { ok, reason }
+//   t.teleportTargets()           [{ id, kind: 'place'|'tender', placeId?, tenderId?, name, placeKind, district,
+//                                    districtName, x, z, heading }] — arrival poses in open water, facing the place
+//   t.teleport(target)            { ok, reason?, name, x, z } — target: an entry above, a place id, or { x, z, name? }
 
 import { createRoutePlanner } from './data/route.js';
 import { fuelBurnPerHour, fuelPriceAt, round2 } from './data/market.js';
@@ -262,6 +268,141 @@ export function createTravel(ctx) {
       planner.invalidate();
       lastFrom = null;
     },
+
+    // ---- Free Explore teleport ----
+
+    canTeleport() {
+      if (!ctx.state.freeExplore) return { ok: false, reason: 'Teleport is available in Free Explore' };
+      const mode = ctx.state.mode;
+      if (mode !== 'play' && mode !== 'map' && mode !== 'paused') return { ok: false, reason: 'Not now' };
+      if (!seiner()) return { ok: false, reason: 'No boat' };
+      return { ok: true };
+    },
+
+    teleportTargets() {
+      const out = [];
+      const districtName = (id) => ctx.systems.places?.districts?.find?.((d) => d.id === id)?.name ?? null;
+      for (const p of places()) {
+        if (p.memorial) continue;
+        const pose = arrivalFor(p);
+        if (!pose) continue;
+        const district = p.district ?? null;
+        out.push({
+          id: `place:${p.id}`,
+          kind: 'place',
+          placeId: p.id,
+          name: p.name,
+          placeKind: p.kind,
+          district,
+          districtName: districtName(district) ?? ctx.systems.places?.districtAt?.(p.x, p.z) ?? 'Kodiak Archipelago',
+          ...pose,
+        });
+      }
+      for (const t of tenders()) {
+        const s = tenderStandoff(t);
+        if (!s) continue;
+        out.push({ id: `tender:${t.id}`, kind: 'tender', tenderId: t.id, name: t.name, placeKind: 'tender', district: null, districtName: ctx.systems.places?.districtAt?.(s.x, s.z) ?? 'Kodiak Archipelago', ...s });
+      }
+      return out;
+    },
+
+    teleport(target) {
+      const can = api.canTeleport();
+      if (!can.ok) return can;
+      let dest = null;
+      if (typeof target === 'string') {
+        const id = target.replace(/^place:/, '');
+        dest = api.teleportTargets().find((t) => t.id === target || t.placeId === id || t.id === `tender:${id}`) ?? null;
+      } else if (target && (target.placeId || target.tenderId)) {
+        dest = api.teleportTargets().find((t) => t.id === target.id || (target.placeId && t.placeId === target.placeId) || (target.tenderId && t.tenderId === target.tenderId)) ?? null;
+      } else if (target && Number.isFinite(target.x) && Number.isFinite(target.z)) {
+        const w = openWaterNear(target.x, target.z);
+        if (!w) return { ok: false, reason: 'No open water near there' };
+        const sd = heightmap.shoreDistance(target.x, target.z);
+        // A water point keeps the boat's heading unless the click was on land (then face the land).
+        const heading = sd > 0 && Math.hypot(w.x - target.x, w.z - target.z) < 5 ? seiner()?.heading ?? 0 : headingTo(w, target);
+        dest = { name: target.name ?? ctx.systems.places?.districtAt?.(w.x, w.z) ?? 'Open water', x: w.x, z: w.z, heading };
+      }
+      if (!dest) return { ok: false, reason: 'Unknown destination' };
+      const s = seiner();
+      showFade(ctx, { title: dest.name, subtitle: dest.districtName ?? 'Kodiak Archipelago', holdMs: 500, fadeMs: 900 });
+      if (s?.mooring) s.setMooring?.(null);
+      ctx.game.teleport(dest.x, dest.z, dest.heading, { reason: 'explore' });
+      planner.invalidate();
+      lastFrom = null;
+      ctx.events.emit('travel:teleported', { id: dest.id ?? null, name: dest.name, x: dest.x, z: dest.z });
+      return { ok: true, name: dest.name, x: dest.x, z: dest.z, heading: dest.heading };
+    },
   };
+
+  // Open water with room to manoeuvre, outside no-approach zones (e.g. the Marmot Island rookery buffer).
+  function openWaterNear(x, z) {
+    let px = x;
+    let pz = z;
+    for (const a of ctx.systems.places?.closedAreas ?? []) {
+      const r = (a.radius ?? 0) + 80;
+      const d = Math.hypot(px - a.x, pz - a.z);
+      if (d < r) {
+        const k = d > 1 ? r / d : 1;
+        px = a.x + (d > 1 ? (px - a.x) * k : r);
+        pz = a.z + (d > 1 ? (pz - a.z) * k : 0);
+      }
+    }
+    return deepWaterNear(px, pz, 70) ?? deepWaterNear(px, pz, 35);
+  }
+
+  // Nearest point with at least minShore metres of sea room and enough water under the keel, searching in rings.
+  function deepWaterNear(x, z, minShore) {
+    const minDepth = config.boat.groundingDepth + 1.5;
+    const ok = (px, pz) => heightmap.shoreDistance(px, pz) >= minShore && heightmap.heightAt(px, pz) < -minDepth;
+    if (ok(x, z)) return { x, z };
+    for (let r = 30; r <= 5000; r += 30) {
+      const n = Math.max(12, Math.ceil((2 * Math.PI * r) / 30));
+      let best = null;
+      let bestD = -Infinity;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const px = x + Math.cos(a) * r;
+        const pz = z + Math.sin(a) * r;
+        if (!ok(px, pz)) continue;
+        const d = heightmap.shoreDistance(px, pz);
+        if (d > bestD) {
+          bestD = d;
+          best = { x: px, z: pz };
+        }
+      }
+      if (best) return best;
+    }
+    return null;
+  }
+
+  function headingTo(from, to) {
+    const dx = to.x - from.x;
+    const dz = to.z - from.z;
+    return Math.hypot(dx, dz) < 1 ? seiner()?.heading ?? 0 : Math.atan2(dx, -dz);
+  }
+
+  // Arrival pose for sightseeing: in open water, facing the place. Inland places use their landing beach.
+  const arrivalCache = new Map();
+  function arrivalFor(p) {
+    const key = `${p.id}:${Math.round(p.x)}:${Math.round(p.z)}`;
+    if (arrivalCache.has(key)) return arrivalCache.get(key);
+    const anchor = p.landing && Number.isFinite(p.landing.x) ? p.landing : p.dock && Number.isFinite(p.dock.x) ? p.dock : p;
+    const w = openWaterNear(anchor.x, anchor.z);
+    let pose = null;
+    if (w) {
+      const onWater = heightmap.shoreDistance(p.x, p.z) > 0 && Math.hypot(w.x - p.x, w.z - p.z) < 5;
+      let heading;
+      if (onWater) {
+        // Already at the place (a bay or strait): face the nearest coast.
+        const g = heightmap.shoreGradient(w.x, w.z);
+        heading = Math.atan2(-g.x, g.z);
+      } else heading = headingTo(w, p);
+      pose = { x: w.x, z: w.z, heading };
+    }
+    arrivalCache.set(key, pose);
+    return pose;
+  }
+
   return api;
 }

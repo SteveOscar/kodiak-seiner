@@ -589,7 +589,10 @@ the seiner in the St. Paul Harbor approaches with $2,500, 3,000 gal of fuel, an 
 points to a milling pink school nearby (the tutorial set). The season is a schedule of ADF&G fishing periods
 (`config.season.fishingDays`: days 0, 2, 5, 9, 13, 17, 21, 25, 29, 34, 40, 47 — Jul 6 → Aug 22), open 06:00–22:00 on
 those days; waters are closed between periods — explore, deliver, upgrade, or wait at anchor for the opener. A full
-season is ~12 fishing days (~3.5 real hours). Free Explore: fishing always open, no fuel use, discoveries only.
+season is ~12 fishing days (~3.5 real hours). Free Explore: fishing always open, no fuel use, discoveries only, and
+instant teleport anywhere: T (or the pause menu) opens a searchable "Where to?" list of every place, and on the chart a
+click on any place or any open water offers "Teleport" (`season.travel.teleportTargets()/teleport()`, no time or fuel
+cost; arrivals are in open water outside no-approach zones, facing the place).
 
 ### 8.2 Species and runs (numbers in `config.fish`)
 | species | lbs | $/lb | runs (day 0 = Jul 6) | spotting |

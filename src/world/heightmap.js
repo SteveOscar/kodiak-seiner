@@ -44,6 +44,7 @@ export function createHeightmap({ size, pixels, meta, config }) {
   const game = new Float32Array(size * size);
   const shore = new Float32Array(size * size);
   const { shelfBase, shelfSlope } = config.world;
+  const minOpenDepth = config.world.minOpenDepth ?? 0;
   for (let k = 0; k < size * size; k++) {
     const h = (pixels[k * 4] * 256 + pixels[k * 4 + 1]) / scale - offset;
     const sd = (pixels[k * 4 + 2] - 128) * texel;
@@ -51,7 +52,8 @@ export function createHeightmap({ size, pixels, meta, config }) {
     shore[k] = sd;
     // Underwater, the source bathymetry is coarse near the coast, so depth is also capped by a designed shelf that
     // deepens with distance offshore. This guarantees a shallow band along every beach and deep water mid-bay.
-    game[k] = h > 0 ? h * vert : -Math.min(-h * depthScale, shelfBase + Math.max(0, sd) * shelfSlope);
+    // minOpenDepth: open water away from the shelf is at least this deep (the source under-reads enclosed bays).
+    game[k] = h > 0 ? h * vert : -Math.min(Math.max(-h * depthScale, minOpenDepth), shelfBase + Math.max(0, sd) * shelfSlope);
   }
 
   const texData = new Float32Array(size * size * 2);

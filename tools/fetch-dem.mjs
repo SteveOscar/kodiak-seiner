@@ -1,7 +1,7 @@
 // Downloads AWS Terrain Tiles (Terrarium encoding) covering the Kodiak archipelago, reprojects them to the game's
 // local equirectangular grid and writes public/terrain/kodiak_height.png plus kodiak_meta.json.
 //
-// Usage: node tools/fetch-dem.mjs [--size=2048] [--zoom=10]
+// Usage: node tools/fetch-dem.mjs [--size=2048] [--zoom=10] [--out=public/terrain]
 // Tiles are cached under .cache/tiles/ so re-runs are offline.
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -14,6 +14,34 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = Object.fromEntries(process.argv.slice(2).map((a) => a.replace(/^--/, '').split('=')));
 const SIZE = Number(args.size ?? 2048);
 const ZOOM = Number(args.zoom ?? 10);
+const OUT_DIR = path.resolve(ROOT, args.out ?? 'public/terrain');
+
+// Channels the ~1:11.75 compression closes up, re-opened so every seining district is reachable by boat. Each is a
+// polyline (lat, lon) following the real waterway, carved `width` game metres wide to `depth` real metres, with
+// banks blending back to the source terrain over `bank` game metres. Paths come from a least-cost search over the
+// source terrain (they follow the real low ground), recorded here so the asset is reproducible.
+const CHANNELS = [
+  {
+    name: 'Kupreanof Strait',
+    width: 110,
+    bank: 45,
+    depth: 30,
+    points: [
+      [57.9711, -153.0687], [57.9678, -153.0533], [57.9629, -153.0378], [57.9546, -153.0224], [57.953, -153.007],
+      [57.953, -152.9916], [57.953, -152.9762], [57.9546, -152.9608], [57.9579, -152.9454], [57.9596, -152.93],
+      [57.9645, -152.9146], [57.9612, -152.8991], [57.9678, -152.8837], [57.9761, -152.8714], [57.9777, -152.856],
+      [57.981, -152.8406], [57.9827, -152.8252], [57.9827, -152.8098], [57.9827, -152.7944], [57.9827, -152.7789],
+      [57.9893, -152.7635], [57.9975, -152.7481], [57.9992, -152.745],
+    ],
+  },
+  {
+    name: 'Akhiok harbor entrance',
+    width: 70,
+    bank: 30,
+    depth: 20,
+    points: [[56.9290, -154.1400], [56.9310, -154.1443], [56.9343, -154.1567], [56.9360, -154.1610]],
+  },
+];
 
 // Geographic frame: a square ~188 km on a side, centred on the island.
 const LAT0 = 57.65;
@@ -105,6 +133,56 @@ for (let j = 0; j < SIZE; j++) {
   }
 }
 
+// Carve channels (after resampling, before the shore-distance transform so the coast follows them).
+{
+  const gameMetresPerDegLat = (WORLD_HALF / HALF_KM) * KM_PER_DEG_LAT;
+  const gameMetresPerDegLon = (WORLD_HALF / HALF_KM) * KM_PER_DEG_LON;
+  const texelWorld = (2 * WORLD_HALF) / SIZE;
+  let carved = 0;
+  for (const ch of CHANNELS) {
+    const pts = ch.points.map(([lat, lon]) => ({
+      x: (lon - LON0) * gameMetresPerDegLon,
+      z: -(lat - LAT0) * gameMetresPerDegLat,
+    }));
+    const reach = ch.width / 2 + ch.bank;
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const p of pts) {
+      minX = Math.min(minX, p.x - reach); maxX = Math.max(maxX, p.x + reach);
+      minZ = Math.min(minZ, p.z - reach); maxZ = Math.max(maxZ, p.z + reach);
+    }
+    const i0 = Math.max(0, Math.floor((minX + WORLD_HALF) / texelWorld));
+    const i1 = Math.min(SIZE - 1, Math.ceil((maxX + WORLD_HALF) / texelWorld));
+    const j0 = Math.max(0, Math.floor((minZ + WORLD_HALF) / texelWorld));
+    const j1 = Math.min(SIZE - 1, Math.ceil((maxZ + WORLD_HALF) / texelWorld));
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const x = -WORLD_HALF + (i + 0.5) * texelWorld;
+        const z = -WORLD_HALF + (j + 0.5) * texelWorld;
+        let d = Infinity;
+        for (let k = 0; k < pts.length - 1; k++) {
+          const a = pts[k], b = pts[k + 1];
+          const vx = b.x - a.x, vz = b.z - a.z;
+          const t = Math.max(0, Math.min(1, ((x - a.x) * vx + (z - a.z) * vz) / (vx * vx + vz * vz)));
+          d = Math.min(d, Math.hypot(x - a.x - vx * t, z - a.z - vz * t));
+        }
+        if (d >= reach) continue;
+        const k = j * SIZE + i;
+        const inner = ch.width / 2;
+        const target = d <= inner ? -ch.depth : -ch.depth + (heights[k] + ch.depth) * smooth((d - inner) / ch.bank);
+        if (target < heights[k]) {
+          heights[k] = target;
+          carved++;
+        }
+      }
+    }
+  }
+  console.log(`carved ${carved} texels across ${CHANNELS.length} channel(s)`);
+}
+function smooth(t) {
+  const u = Math.max(0, Math.min(1, t));
+  return u * u * (3 - 2 * u);
+}
+
 // Remove single-feature spikes (source artefacts, e.g. a 3.2 km needle on Afognak): a texel far above every texel on
 // the surrounding radius-3 ring is replaced by that ring's maximum. Real peaks stay well inside the margin.
 {
@@ -168,9 +246,9 @@ for (let k = 0; k < SIZE * SIZE; k++) {
   out.data[k * 3 + 1] = e & 255;
   out.data[k * 3 + 2] = Math.max(0, Math.min(255, Math.round(128 + signed)));
 }
-await mkdir(path.join(ROOT, 'public/terrain'), { recursive: true });
+await mkdir(OUT_DIR, { recursive: true });
 const pngBuf = PNG.sync.write(out, { colorType: 2, inputColorType: 2, inputHasAlpha: false });
-await writeFile(path.join(ROOT, 'public/terrain/kodiak_height.png'), pngBuf);
+await writeFile(path.join(OUT_DIR, 'kodiak_height.png'), pngBuf);
 
 const meta = {
   source: 'AWS Terrain Tiles (Terrarium), Mapzen/Linux Foundation; see THIRD_PARTY_NOTICES.md',
@@ -186,7 +264,7 @@ const meta = {
   realMinMetres: Math.round(hMin),
   realMaxMetres: Math.round(hMax),
 };
-await writeFile(path.join(ROOT, 'public/terrain/kodiak_meta.json'), JSON.stringify(meta, null, 2) + '\n');
+await writeFile(path.join(OUT_DIR, 'kodiak_meta.json'), JSON.stringify(meta, null, 2) + '\n');
 
 // Preview: hillshaded land, depth-tinted sea. Written to .cache (not shipped).
 const PREV = 1024;
@@ -214,4 +292,4 @@ for (let j = 0; j < PREV; j++) {
   }
 }
 await writeFile(path.join(ROOT, '.cache/preview.png'), PNG.sync.write(prev));
-console.log(`wrote public/terrain/kodiak_height.png (${(pngBuf.length / 1024).toFixed(0)} KB), range ${Math.round(hMin)}..${Math.round(hMax)} m`);
+console.log(`wrote ${path.relative(ROOT, OUT_DIR)}/kodiak_height.png (${(pngBuf.length / 1024).toFixed(0)} KB), range ${Math.round(hMin)}..${Math.round(hMax)} m`);
