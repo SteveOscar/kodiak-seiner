@@ -60,6 +60,12 @@ export function createRenderer({ canvas, config, quality }) {
     onResize(fn) {
       resizeHandlers.push(fn);
     },
+    // Changes the render resolution (dynamic resolution); resize handlers re-read the drawing-buffer size.
+    setPixelRatio(r) {
+      if (Math.abs(renderer.getPixelRatio() - r) < 1e-3) return;
+      renderer.setPixelRatio(r);
+      resize();
+    },
     // Replaced by postfx. Must draw scene with camera to the default framebuffer.
     render(dt) {
       renderer.render(scene, camera);

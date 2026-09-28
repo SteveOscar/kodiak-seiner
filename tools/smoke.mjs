@@ -4,7 +4,7 @@
 //
 // Usage:
 //   node tools/smoke.mjs [--scenario=basic|<file.json>] [--out=qa/run] [--params="autostart&time=19"]
-//                        [--width=1280 --height=720] [--dist] [--timeout=180000] [--bench] [--strict]
+//                        [--width=1280 --height=720] [--dpr=1] [--dist] [--timeout=180000] [--bench] [--strict]
 //   --bench   disables vsync / frame-rate limiting so frameMsAvg and gpuMs show real cost (use for budgets)
 //   --strict  also fail on console warnings
 //
@@ -130,7 +130,7 @@ const browser = await chromium.launch({
     ...(args.bench ? ['--disable-gpu-vsync', '--disable-frame-rate-limit'] : []),
   ],
 });
-const page = await browser.newPage({ viewport: { width, height } });
+const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: Number(args.dpr ?? 1) });
 page.on('pageerror', (e) => report.errors.push(`pageerror: ${e.message}`));
 page.on('console', (m) => {
   if (m.type() === 'error') report.errors.push(`console.error: ${m.text()}`);

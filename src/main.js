@@ -31,6 +31,7 @@ const flags = {
   at: params.get('at'), // "x,z[,headingDegrees]"
   quality: params.get('quality'),
   explore: params.has('explore'),
+  fixedRes: params.has('fixedres'),
 };
 
 const errors = [];
@@ -296,6 +297,31 @@ async function boot() {
   let last = performance.now();
   let prevMode = state.mode;
 
+  // Dynamic resolution: drop the pixel ratio in steps when frames run long, restore it after a steady stretch at the
+  // display rate. Only gameplay/title frames count (menus and the chart are cheap and would mislead it).
+  const baseRatio = renderer.getPixelRatio();
+  const minRatio = Math.max(0.75, baseRatio * 0.6);
+  const dyn = { ratio: baseRatio, ema: 16.7, slow: 0, steady: 0, cooldown: 3 };
+  function dynamicResolution(realDt) {
+    if (flags.fixedRes || (state.mode !== 'play' && state.mode !== 'title')) return;
+    const ms = realDt * 1000;
+    if (ms <= 0 || ms > 100) return;
+    dyn.ema += (ms - dyn.ema) * 0.05;
+    dyn.cooldown -= realDt;
+    dyn.slow = dyn.ema > 21 ? dyn.slow + realDt : 0;
+    dyn.steady = dyn.ema < 17.8 ? dyn.steady + realDt : 0;
+    if (dyn.cooldown > 0) return;
+    let next = dyn.ratio;
+    if (dyn.slow > 1.5 && dyn.ratio > minRatio) next = Math.max(minRatio, dyn.ratio - 0.125);
+    else if (dyn.steady > 8 && dyn.ratio < baseRatio) next = Math.min(baseRatio, dyn.ratio + 0.125);
+    if (next !== dyn.ratio) {
+      dyn.ratio = next;
+      dyn.slow = dyn.steady = 0;
+      dyn.cooldown = 3;
+      pipeline.setPixelRatio(next);
+    }
+  }
+
   function frame(now) {
     requestAnimationFrame(frame);
     const realDt = Math.min(0.1, Math.max(0, (now - last) / 1000));
@@ -330,6 +356,13 @@ async function boot() {
     uniforms.uCameraPos.value.copy(camera.position);
     camera.updateMatrixWorld();
 
+    // The chart is opaque and full-screen: redraw the world behind it only occasionally.
+    const skipWorld = state.mode === 'map' && ctx.time.frame % 20 !== 0;
+    if (skipWorld) {
+      input.endFrame();
+      return;
+    }
+
     let q = null;
     if (timerExt && gpuQueries.length < 4) {
       q = gl.createQuery();
@@ -349,6 +382,7 @@ async function boot() {
       gl.deleteQuery(done);
     }
     input.endFrame();
+    dynamicResolution(realDt);
   }
 
   // Debug / test API (used by tools/smoke.mjs). Keep stable; see SPEC.md §10.
@@ -396,6 +430,7 @@ async function boot() {
         programs: info.programs?.length ?? 0,
         geometries: info.memory.geometries,
         textures: info.memory.textures,
+        pixelRatio: +renderer.getPixelRatio().toFixed(3),
         systemsMs,
       };
     },

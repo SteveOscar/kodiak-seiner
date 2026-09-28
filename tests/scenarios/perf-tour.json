@@ -1,0 +1,17 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 60000 },
+  { "perf": "title", "ms": 4000 },
+  { "start": { "newGame": true } },
+  { "time": 20.5 },
+  { "key": "KeyW", "down": true },
+  { "perf": "underway-kodiak", "ms": 5000 },
+  { "key": "KeyW", "up": true },
+  { "teleportTo": [57.62, -153.95, 200] },
+  { "time": 13 },
+  { "perf": "uyak-noon", "ms": 4000 },
+  { "shot": "uyak-noon" },
+  { "teleportTo": [57.93, -152.52, 90] },
+  { "time": 21.3 },
+  { "perf": "spruce-golden", "ms": 4000 },
+  { "shot": "spruce-golden" }
+]
