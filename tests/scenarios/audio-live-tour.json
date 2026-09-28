@@ -1,0 +1,143 @@
+[
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+  "timeout": 90000
+ },
+ {
+  "eval": "window.__A = __KODIAK__.systems.audio; __A.qa.startLive(); __A.qa.mark('title'); 1"
+ },
+ {
+  "eval": "__A.qa.busLevels(); 1"
+ },
+ {
+  "wait": 6000
+ },
+ {
+  "eval": "JSON.stringify(__A.qa.busLevels())"
+ },
+ {
+  "start": {
+   "freeExplore": true
+  }
+ },
+ {
+  "time": 5.2
+ },
+ {
+  "weather": "clear"
+ },
+ {
+  "eval": "__A.qa.mark('dawn at sea'); 1"
+ },
+ {
+  "wait": 7000
+ },
+ {
+  "eval": "JSON.stringify(__A.qa.busLevels())"
+ },
+ {
+  "state": "dawn"
+ },
+ {
+  "eval": "__A.qa.mark('anchor'); __KODIAK__.systems.seiner.setMooring({ kind: 'anchor' }); 1"
+ },
+ {
+  "wait": 7000
+ },
+ {
+  "eval": "JSON.stringify(__A.qa.busLevels())"
+ },
+ {
+  "state": "anchored"
+ },
+ {
+  "eval": "__A.qa.mark('rain'); __KODIAK__.setWeather('rain', 0); 1"
+ },
+ {
+  "wait": 5000
+ },
+ {
+  "eval": "__A.qa.mark('wheelhouse'); __KODIAK__.systems.cameraRig.setMode('bridge'); 1"
+ },
+ {
+  "wait": 5000
+ },
+ {
+  "state": "rain-bridge"
+ },
+ {
+  "eval": "__KODIAK__.systems.cameraRig.setMode('chase'); __A.qa.mark('storm'); __KODIAK__.setWeather('storm', 0); 1"
+ },
+ {
+  "wait": 10000
+ },
+ {
+  "eval": "JSON.stringify(__A.qa.busLevels())"
+ },
+ {
+  "state": "storm"
+ },
+ {
+  "eval": "__KODIAK__.setWeather('partly', 0); __KODIAK__.systems.seiner.setMooring(null); const W = __KODIAK__.systems.wildlife; const s = __KODIAK__.systems.seiner.position; const hs = (W.sites && W.sites.haulouts) || []; let best = null; for (const h of hs) { const d = Math.hypot(h.x - s.x, h.z - s.z); if (!best || d < best.d) best = { h, d }; } if (best) { const w = __KODIAK__.ctx.heightmap.nearestWater(best.h.x + 350, best.h.z, { minShore: 80 }); __KODIAK__.teleport(w.x, w.z, 270); } __A.qa.mark('haulout'); JSON.stringify(best && { id: best.h.id, x: best.h.x, z: best.h.z })"
+ },
+ {
+  "wait": 9000
+ },
+ {
+  "state": "haulout"
+ },
+ {
+  "eval": "__A.qa.mark('to beach'); 1"
+ },
+ {
+  "teleport": [
+   1400,
+   -5650,
+   200
+  ]
+ },
+ {
+  "until": "__KODIAK__.ctx.interact.current.interact && __KODIAK__.ctx.interact.current.interact.id === 'go-ashore'",
+  "timeout": 15000
+ },
+ {
+  "press": "KeyE"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.control === 'foot' && __KODIAK__.ctx.state.mode === 'play'",
+  "timeout": 30000
+ },
+ {
+  "eval": "__A.qa.mark('on foot'); const P = __KODIAK__.systems.player; P.debugDrive && P.debugDrive({ mx: 0.3, mz: -1, run: false }); 1"
+ },
+ {
+  "wait": 5000
+ },
+ {
+  "eval": "const P = __KODIAK__.systems.player; P.debugDrive && P.debugDrive({ mx: -0.4, mz: -1, run: true }); __A.qa.mark('run'); 1"
+ },
+ {
+  "wait": 4000
+ },
+ {
+  "eval": "const P = __KODIAK__.systems.player; P.debugDrive && P.debugDrive(null); 1"
+ },
+ {
+  "state": "foot"
+ },
+ {
+  "eval": "JSON.stringify(__A.qa.busLevels())"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "eval": "__A.qa.stopLive(); JSON.stringify(__A.qa.showLive({ title: 'Live mix: title, dawn, anchor, rain, wheelhouse, storm, haulout, ashore' }))"
+ },
+ {
+  "shot": "live-tour"
+ },
+ {
+  "eval": "__A.qa.clear(); 1"
+ }
+]

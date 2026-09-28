@@ -99,7 +99,7 @@ export function createTitle(ctx, root, { saves, openPanel, confirm, onStart }) {
     };
     if (info) {
       const d = Number.isFinite(info.day) ? calendar(info.day, ctx.config.time.seasonStart).label : info.date ?? '';
-      const sub = [info.boatName ? `F/V ${info.boatName}` : null, d ? `${d}${Number.isFinite(info.hours) ? `, ${clockTime(info.hours)}` : ''}` : null, Number.isFinite(info.seasonGross) ? `${money(info.seasonGross)} gross` : null].filter(Boolean).join(' · ');
+      const sub = [info.boatName ? `F/V ${info.boatName}` : null, d ? `${d}${Number.isFinite(info.hours) ? `, ${clockTime(info.hours)}` : ''}` : null, Number(info.seasonGross) > 0 ? `${money(info.seasonGross)} gross` : null].filter(Boolean).join(' · ');
       add('Continue', () => {
         const ok = saves.loadSave();
         if (!ok) ctx.systems.ui?.toast?.('That save could not be loaded.', { kind: 'warn' });

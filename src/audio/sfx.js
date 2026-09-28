@@ -21,22 +21,25 @@ export function waterHit(kit, out, t, h, k = 1) {
   bp.frequency.setValueAtTime(h.bodyHz * k * 1.3, t);
   bp.frequency.exponentialRampToValueAtTime(Math.max(80, h.bodyHz * k * 0.55), t + dec);
   const g = kit.gain(0);
-  kit.perc(g.gain, t, 0.003, s * 0.9, dec);
+  kit.perc(g.gain, t, 0.003, s * 0.62, dec);
   kit.chain(n, bp, g, out);
   const hp = kit.filter('highpass', 3800, 0.7);
   const g2 = kit.gain(0);
-  kit.perc(g2.gain, t, 0.002, s * 0.22, dec * 0.7);
+  kit.perc(g2.gain, t, 0.002, s * 0.18, dec * 0.7);
   n.connect(hp);
   kit.chain(hp, g2, out);
   if (h.slap > 0) {
-    const th = kit.osc('sine', 150 * k, t, t + 0.3);
-    th.frequency.exponentialRampToValueAtTime(62 * k, t + 0.12);
-    const tg = kit.gain(0);
-    kit.perc(tg.gain, t, 0.002, s * h.slap * 0.8, 0.18);
-    kit.chain(th, tg, out);
+    // A body landing flat: a hollow thump (not for the skittering tail-walk) and a wet crack.
+    if (h.kind !== 'walk') {
+      const th = kit.osc('sine', 150 * k, t, t + 0.3);
+      th.frequency.exponentialRampToValueAtTime(62 * k, t + 0.12);
+      const tg = kit.gain(0);
+      kit.perc(tg.gain, t, 0.002, s * h.slap * 0.45, 0.16);
+      kit.chain(th, tg, out);
+    }
     const lp = kit.filter('lowpass', 1500, 0.7);
     const cg = kit.gain(0);
-    kit.perc(cg.gain, t, 0.0008, s * h.slap * 1.1, 0.06);
+    kit.perc(cg.gain, t, 0.0008, s * h.slap * 0.7, 0.06);
     n.connect(lp);
     kit.chain(lp, cg, out);
   }
@@ -158,61 +161,72 @@ export function hullSlap(kit, out, t, p) {
 
 // ------------------------------------------------------------------------------------------------------- birds
 
-// Glaucous-winged gull: a raspy FM saw through beak/throat formants. p = { call: gullCall(), excited }
+// Glaucous-winged gull: raspy "kyow" notes — a saw with a yelping rise-and-fall contour, a little FM rasp and
+// beak/throat formants; each note swells fast and fades as the pitch drops. p = { call: gullCall(), excited }
 export function gull(kit, out, t, p) {
   const c = p.call ?? gullCall(Math.random, !!p.excited);
   const P = c.pitch * rate(p);
-  const hp = kit.filter('highpass', 650, 0.7);
-  const f1 = kit.filter('peaking', 2300, 3, 9);
-  const f2 = kit.filter('peaking', 3500, 4, 6);
-  const lp = kit.filter('lowpass', 6000, 0.7);
+  const hp = kit.filter('highpass', 700, 0.7);
+  const f1 = kit.filter('peaking', 2400, 2.5, 8);
+  const f2 = kit.filter('peaking', 3700, 3, 5);
+  const lp = kit.filter('lowpass', 7500, 0.7);
   kit.chain(hp, f1, f2, lp, out);
   let tt = t;
+  let end = t;
   const note = (dur, c0, c1, c2, pk, vel, rasp) => {
-    const e = tt + dur + 0.04;
+    const e = tt + dur + 0.07;
     const car = kit.osc('sawtooth', P * c0, tt, e);
     car.frequency.setValueAtTime(P * c0, tt);
-    car.frequency.linearRampToValueAtTime(P * c1, tt + dur * pk);
-    car.frequency.linearRampToValueAtTime(P * c2, tt + dur);
-    const mod = kit.osc('sine', rr(78, 120), tt, e);
-    const dev = kit.gain(P * rasp);
+    car.frequency.exponentialRampToValueAtTime(P * c1, tt + dur * pk);
+    car.frequency.exponentialRampToValueAtTime(P * c2, tt + dur);
+    const mod = kit.osc('sine', rr(55, 85), tt, e);
+    const dev = kit.gain(P * rasp * 0.45);
     kit.chain(mod, dev, car.frequency);
+    // A soft second voice a fifth down: the syrinx's two sides beating against each other.
+    const sub = kit.osc('triangle', P * c0 * 0.667, tt, e);
+    sub.frequency.setValueAtTime(P * c0 * 0.667, tt);
+    sub.frequency.exponentialRampToValueAtTime(P * c1 * 0.667, tt + dur * pk);
+    sub.frequency.exponentialRampToValueAtTime(P * c2 * 0.667, tt + dur);
+    const sg = kit.gain(0.18);
     const env = kit.gain(0);
     env.gain.setValueAtTime(0, tt);
-    env.gain.linearRampToValueAtTime(vel, tt + 0.018);
-    env.gain.setValueAtTime(vel * 0.85, tt + dur * 0.7);
-    env.gain.linearRampToValueAtTime(0, tt + dur);
+    env.gain.linearRampToValueAtTime(vel, tt + Math.min(0.012, dur * 0.2));
+    env.gain.setTargetAtTime(vel * 0.7, tt + 0.015, dur * 0.35);
+    env.gain.setTargetAtTime(0, tt + dur * 0.72, dur * 0.07);
     kit.chain(car, env, hp);
+    kit.chain(sub, sg, env);
+    end = Math.max(end, e);
   };
   if (c.type === 'long') {
-    note(0.36, 1.0, 1.3, 0.78, 0.22, 0.26, c.rasp);
-    tt += 0.36 + 0.1;
+    note(0.34, 0.88, 1.28, 0.74, 0.3, 0.26, c.rasp);
+    tt += 0.34 + rr(0.08, 0.13);
     for (let i = 1; i < c.notes; i++) {
-      const d = Math.max(0.12, 0.21 - i * 0.015);
-      const k = 1 - i * 0.03;
-      note(d, 1.05 * k, 1.22 * k, 0.82 * k, 0.3, 0.22 * (1 - i * 0.05), c.rasp);
-      tt += d + rr(0.07, 0.12);
+      const d = Math.max(0.12, 0.2 - i * 0.012);
+      const k = 1 - i * 0.025;
+      note(d, 0.95 * k, 1.2 * k, 0.8 * k, 0.28, 0.23 * (1 - i * 0.06), c.rasp);
+      tt += d + rr(0.06, 0.11);
     }
   } else if (c.type === 'kek') {
     for (let i = 0; i < c.notes; i++) {
-      note(0.065, 1.02, 1.08, 0.94, 0.4, 0.2, c.rasp * 1.4);
-      tt += 0.065 + rr(0.05, 0.08);
+      note(0.07, 0.96, 1.1, 0.9, 0.35, 0.2 * (1 - i * 0.05), c.rasp * 1.3);
+      tt += 0.07 + rr(0.045, 0.075);
     }
   } else {
-    note(0.6, 1.25, 1.36, 0.8, 0.12, 0.2, c.rasp * 0.7);
-    tt += 0.6;
+    // Mew: one plaintive, drawn-out descending note.
+    note(0.58, 1.1, 1.32, 0.72, 0.16, 0.2, c.rasp * 0.6);
   }
-  return tt + 0.08;
+  return end;
 }
 
-// Bald eagle: thin, high "kleee" then a chittering run of "kik" notes.
+// Bald eagle: thin, high "kleee" then a chittering run of "kik-ik-ik" notes (surprisingly feeble for the bird).
 export function eagle(kit, out, t, p) {
   const P = rr(2850, 3300) * rate(p);
   const hp = kit.filter('highpass', 1500, 0.7);
   hp.connect(out);
   let tt = t;
+  let end = t;
   const note = (dur, c0, c1, vel) => {
-    const e = tt + dur + 0.03;
+    const e = tt + dur * 2.6 + 0.02;
     const a = kit.osc('sine', P * c0, tt, e);
     const b = kit.osc('triangle', P * c0, tt, e);
     for (const o of [a, b]) {
@@ -232,6 +246,7 @@ export function eagle(kit, out, t, p) {
     a.connect(env);
     kit.chain(b, bg, env);
     env.connect(hp);
+    end = Math.max(end, e);
   };
   note(0.2, 0.86, 1.04, 0.12);
   tt += 0.28;
@@ -240,7 +255,7 @@ export function eagle(kit, out, t, p) {
     note(0.05, 1.03 - i * 0.02, 0.96 - i * 0.02, 0.1 * (1 - i * 0.06));
     tt += rr(0.085, 0.11);
   }
-  return tt + 0.1;
+  return end;
 }
 
 // ------------------------------------------------------------------------------------------------ big animals
@@ -281,7 +296,7 @@ export function whaleBlow(kit, out, t, p) {
   ig.gain.linearRampToValueAtTime(s * 0.26, ti + 0.24);
   ig.gain.setTargetAtTime(0, ti + 0.3, 0.1);
   kit.chain(n2, ib, ig, out);
-  return ti + 1;
+  return Math.max(ti + 1, t + 3.2);
 }
 
 // A breach: the crash of 30 tonnes landing, a long roar of white water.
@@ -357,6 +372,88 @@ export function bearCharge(kit, out, t, p) {
   return bearHuff(kit, out, tt, { huffs: 2, intensity: 1.1, pops: 3 });
 }
 
+// Steller sea lion: a deep, rough, lion-like roar (bulls) or a higher belching bark (cows, juveniles). A glottal saw
+// with a rise-and-fall contour, pulsed by a fast square (the growl), through two throat formants. p = { bull }
+export function sealion(kit, out, t, p) {
+  const bull = !!p.bull;
+  const f0 = (bull ? rr(78, 104) : rr(125, 185)) * rate(p);
+  const dur = bull ? rr(0.9, 1.7) : rr(0.35, 0.9);
+  const end = t + dur + 0.35;
+  const src = kit.osc('sawtooth', f0, t, end);
+  src.frequency.setValueAtTime(f0 * 0.82, t);
+  src.frequency.linearRampToValueAtTime(f0 * 1.1, t + dur * 0.3);
+  src.frequency.linearRampToValueAtTime(f0 * 0.78, t + dur);
+  const am = kit.gain(0.5);
+  const lfo = kit.osc('square', rr(24, 36), t, end);
+  const ld = kit.gain(bull ? 0.5 : 0.35);
+  kit.chain(lfo, ld, am.gain);
+  const f1 = kit.filter('bandpass', bull ? 420 : 620, 2.5);
+  const f2 = kit.filter('bandpass', bull ? 1050 : 1450, 3.5);
+  const g2 = kit.gain(0.5);
+  const lp = kit.filter('lowpass', 2400, 0.7);
+  const env = kit.gain(0);
+  kit.ahr(env.gain, t, bull ? 0.09 : 0.04, bull ? 0.9 : 0.7, Math.max(0.05, dur - 0.2), 0.25);
+  kit.chain(src, am);
+  am.connect(f1);
+  kit.chain(am, f2, g2);
+  f1.connect(lp);
+  g2.connect(lp);
+  kit.chain(lp, env, out);
+  const br = kit.noise('pink', t, end);
+  const bb = kit.filter('bandpass', 700, 1.2);
+  const bg = kit.gain(0);
+  kit.ahr(bg.gain, t, 0.05, 0.12, Math.max(0.05, dur - 0.15), 0.2);
+  kit.chain(br, bb, bg, out);
+  return end;
+}
+
+// A school spooked at the surface: a rushing boil of small splashes as it dives. p = { size }
+export function boil(kit, out, t, p) {
+  const s = clamp(p.size ?? 1, 0.3, 2);
+  const dur = 1.1 + 0.5 * s;
+  const end = t + dur + 0.3;
+  const n = kit.noise('rain', t, end, { rate: 0.7 });
+  const bp = kit.filter('bandpass', 1500, 0.7);
+  const g = kit.gain(0);
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(0.5 * s, t + 0.12);
+  g.gain.setTargetAtTime(0, t + 0.3, dur / 3);
+  kit.chain(n, bp, g, out);
+  const k = 2 + Math.round(3 * s);
+  let e = end;
+  for (let i = 0; i < k; i++) {
+    const tt = t + Math.random() * dur * 0.6;
+    e = Math.max(e, waterHit(kit, out, tt, { kind: 'entry', strength: 0.18 + 0.12 * Math.random(), bodyHz: 1500 + 500 * Math.random(), decay: 0.07, slap: 0.1, bubbles: 1 }));
+  }
+  return e;
+}
+
+// A heavy steel clunk: a winch clutch dropping in, the skiff end made fast, a shackle on the rail.
+export function clunk(kit, out, t, p) {
+  const k = rate(p);
+  const s = clamp(p.strength ?? 0.6, 0.1, 1.2);
+  for (const [f, a, d] of [[210, 0.45, 0.25], [575, 0.2, 0.18], [1340, 0.08, 0.1]]) {
+    const o = kit.osc('sine', f * k, t, t + d + 0.05);
+    const g = kit.gain(0);
+    kit.perc(g.gain, t, 0.001, a * s, d);
+    kit.chain(o, g, out);
+  }
+  const n = kit.noise('white', t, t + 0.12);
+  const bp = kit.filter('bandpass', 1800, 1.4);
+  const ng = kit.gain(0);
+  kit.perc(ng.gain, t, 0.0005, 0.25 * s, 0.03);
+  kit.chain(n, bp, ng, out);
+  if (p.hiss) {
+    const h = kit.noise('white', t + 0.05, t + 0.9);
+    const hb = kit.filter('bandpass', 3000, 0.9);
+    const hg = kit.gain(0);
+    kit.ahr(hg.gain, t + 0.05, 0.05, 0.06 * s, 0.3, 0.3);
+    kit.chain(h, hb, hg, out);
+    return t + 0.95;
+  }
+  return t + 0.35;
+}
+
 // ------------------------------------------------------------------------------------------------- footsteps
 
 export function footstep(kit, out, t, p) {
@@ -407,7 +504,8 @@ export function footstep(kit, out, t, p) {
     const g = kit.gain(0);
     kit.perc(g.gain, t, 0.03, r.slosh * G, 0.3);
     kit.chain(n, bp, g, out);
-    waterHit(kit, out, t + 0.05, { kind: 'walk', strength: 0.12, bodyHz: 1400, decay: 0.05, slap: 0, bubbles: 2 }, k);
+    const e2 = waterHit(kit, out, t + 0.05, { kind: 'walk', strength: 0.12, bodyHz: 1400, decay: 0.05, slap: 0, bubbles: 2 }, k);
+    return Math.max(end + 0.1, e2);
   }
   return end + 0.1;
 }
@@ -612,8 +710,9 @@ export function cork(kit, out, t, p) {
   const ng = kit.gain(0);
   kit.perc(ng.gain, t, 0.0005, 0.12, 0.008);
   kit.chain(n, bp, ng, out);
-  if (p.drip !== false && Math.random() < 0.5) waterHit(kit, out, t + rr(0.05, 0.25), { kind: 'walk', strength: 0.05, bodyHz: 2200, decay: 0.03, slap: 0, bubbles: 1 });
-  return t + 0.4;
+  let end = t + 0.4;
+  if (p.drip !== false && Math.random() < 0.5) end = Math.max(end, waterHit(kit, out, t + rr(0.05, 0.25), { kind: 'walk', strength: 0.05, bodyHz: 2200, decay: 0.03, slap: 0, bubbles: 1 }));
+  return end;
 }
 
 // Purse rings coming aboard: heavy steel clanks and the purse line rumble.
@@ -712,12 +811,13 @@ export function thunder(kit, out, t, p) {
   const roll = kit.gain(0);
   const pts = 48;
   const c = new Float32Array(pts);
-  let v = 0;
+  let v = 0.8;
   for (let i = 0; i < pts; i++) {
     const u = i / (pts - 1);
-    if (Math.random() < 0.18) v = Math.max(v, 0.5 + 0.5 * Math.random());
-    v *= 0.86;
-    c[i] = (0.25 + v) * Math.exp(-u * 2.2) * (u < 0.03 ? u / 0.03 : 1) * I;
+    if (Math.random() < 0.2) v = Math.max(v, 0.45 + 0.55 * Math.random());
+    v *= 0.84;
+    // Rolls of rumble riding a long decay, then a gentle fade to nothing (no cut-off tail).
+    c[i] = (0.1 + v) * Math.exp(-u * 2.6) * (u < 0.03 ? u / 0.03 : 1) * Math.min(1, (1 - u) * 6) * I;
   }
   c[pts - 1] = 0;
   roll.gain.setValueCurveAtTime(c, t, dur);
@@ -970,26 +1070,29 @@ export function stinger(kit, out, t, p) {
 
 // Named one-shots: recipe, priority, bus ('world' | 'ui'), distance model (ref, rolloff), level, audibility range.
 export const SOUNDS = {
-  'fish-jump': { fn: fishJump, priority: 4, bus: 'world', ref: 6, rolloff: 0.9, level: 1, range: 450 },
-  splash: { fn: splash, priority: 4, bus: 'world', ref: 6, rolloff: 0.9, level: 1, range: 500 },
+  'fish-jump': { fn: fishJump, priority: 4, bus: 'world', ref: 10, rolloff: 0.9, level: 1.1, range: 520 },
+  splash: { fn: splash, priority: 4, bus: 'world', ref: 6, rolloff: 0.9, level: 0.7, range: 500 },
   'surf-break': { fn: surfBreak, priority: 3, bus: 'ambience', level: 1 },
   'hull-slap': { fn: hullSlap, priority: 2, bus: 'world', ref: 8, rolloff: 1, level: 0.9, range: 250 },
   gull: { fn: gull, priority: 3, bus: 'world', ref: 10, rolloff: 1, level: 0.75, range: 400 },
   eagle: { fn: eagle, priority: 3, bus: 'world', ref: 14, rolloff: 1, level: 0.8, range: 500 },
-  'whale-blow': { fn: whaleBlow, priority: 5, bus: 'world', ref: 40, rolloff: 0.8, level: 1, range: 3500 },
-  breach: { fn: breach, priority: 5, bus: 'world', ref: 50, rolloff: 0.8, level: 1, range: 3500 },
+  'whale-blow': { fn: whaleBlow, priority: 5, bus: 'world', ref: 40, rolloff: 0.8, level: 1, range: 2600 },
+  breach: { fn: breach, priority: 5, bus: 'world', ref: 50, rolloff: 0.8, level: 0.7, range: 3500 },
   'bear-huff': { fn: bearHuff, priority: 7, bus: 'world', ref: 10, rolloff: 1, level: 1, range: 500 },
   'bear-charge': { fn: bearCharge, priority: 7, bus: 'world', ref: 10, rolloff: 1, level: 1, range: 500 },
+  sealion: { fn: sealion, priority: 3, bus: 'world', ref: 25, rolloff: 0.9, level: 0.8, range: 1600 },
+  boil: { fn: boil, priority: 4, bus: 'world', ref: 10, rolloff: 1, level: 0.8, range: 300 },
+  clunk: { fn: clunk, priority: 7, bus: 'world', ref: 10, rolloff: 1, level: 1, range: 300 },
   footstep: { fn: footstep, priority: 6, bus: 'world', ref: 4, rolloff: 1, level: 1, range: 60 },
-  horn: { fn: horn, priority: 9, bus: 'world', ref: 30, rolloff: 0.8, level: 1, range: 6000 },
+  horn: { fn: horn, priority: 9, bus: 'world', ref: 30, rolloff: 0.8, level: 0.75, range: 6000 },
   'anchor-chain': { fn: anchorChain, priority: 8, bus: 'world', ref: 14, rolloff: 1, level: 1, range: 500 },
-  collision: { fn: collision, priority: 9, bus: 'world', ref: 18, rolloff: 1, level: 1, range: 800 },
+  collision: { fn: collision, priority: 9, bus: 'world', ref: 18, rolloff: 1, level: 0.7, range: 800 },
   'skiff-release': { fn: skiffRelease, priority: 7, bus: 'world', ref: 14, rolloff: 1, level: 1, range: 500 },
   starter: { fn: starter, priority: 7, bus: 'world', ref: 16, rolloff: 1, level: 1, range: 300 },
   cork: { fn: cork, priority: 2, bus: 'world', ref: 8, rolloff: 1, level: 0.8, range: 200 },
   'rings-up': { fn: ringsUp, priority: 7, bus: 'world', ref: 14, rolloff: 1, level: 1, range: 500 },
   snag: { fn: snag, priority: 8, bus: 'world', ref: 16, rolloff: 1, level: 1, range: 500 },
-  'brail-dip': { fn: brailDip, priority: 6, bus: 'world', ref: 12, rolloff: 1, level: 1, range: 500 },
+  'brail-dip': { fn: brailDip, priority: 6, bus: 'world', ref: 12, rolloff: 1, level: 0.65, range: 500 },
   'brail-dump': { fn: brailDump, priority: 6, bus: 'world', ref: 12, rolloff: 1, level: 1, range: 400 },
   thunder: { fn: thunder, priority: 8, bus: 'ambience', level: 1 },
   foghorn: { fn: foghorn, priority: 5, bus: 'world', ref: 60, rolloff: 0.7, level: 1, range: 5000 },

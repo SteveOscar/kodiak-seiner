@@ -16,6 +16,10 @@ import {
   lupineGeometry,
   boulderGeometry,
   driftwoodGeometry,
+  DRIFT_R0,
+  crownProxyGeometry,
+  fernTexture,
+  fernGeometry,
 } from './models.js';
 import { bakeImpostors, createImpostorMaterial, createImpostorTile } from './impostor.js';
 import { createKelpLayer } from './kelp.js';
@@ -52,7 +56,7 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
   const layers = [];
 
   // ---- Sitka spruce: one placement function shared by the 3D and impostor layers so they swap in place.
-  const spruceRange = { near: 72 * Math.min(1.15, 0.75 + 0.25 * q), far: q < 0.5 ? 1500 : 2300 };
+  const spruceRange = { near: 48 * Math.min(1.15, 0.75 + 0.25 * q), far: q < 0.5 ? 1500 : 2300 };
   function spruceAt(ix, iz, push, exact) {
     const x = (ix + 0.12 + 0.76 * rand(ix, iz, 1)) * TREE_CELL;
     const z = (iz + 0.12 + 0.76 * rand(ix, iz, 2)) * TREE_CELL;
@@ -71,7 +75,7 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
   branchMap.colorSpace = THREE.SRGBColorSpace;
   branchMap.wrapS = branchMap.wrapT = THREE.ClampToEdgeWrapping;
   branchMap.anisotropy = 4;
-  const spruceVariants = [1, 2, 3, 4].map((s, i) => spruceGeometry(seed + s * 101, { tiers: 13 + (i % 3), perTier: 7, width: 0.15 + 0.02 * (i % 3) }));
+  const spruceVariants = [1, 2, 3, 4].map((s, i) => spruceGeometry(seed + s * 101, { tiers: 12 + (i % 3), perTier: 6, width: 0.15 + 0.02 * (i % 3) }));
   // 3D near trees: one instanced mesh per variant (the variant follows from the per-tree rank).
   const spruceNearMat = createInstancedMaterial({
     uniforms,
@@ -84,13 +88,26 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
     name: 'spruce',
     cardMap: true,
     foliage: true,
-    standard: { roughness: 0.92, side: THREE.DoubleSide, map: branchMap, alphaTest: 0.5 },
+    lambert: true,
+    translucency: 0.2,
+    standard: { side: THREE.DoubleSide, map: branchMap, alphaTest: 0.5 },
   });
   const spruceLayers = spruceVariants.map((g, i) => {
-    const L = createInstancedLayer({ geometry: g, material: spruceNearMat.material, depthMaterial: spruceNearMat.depthMaterial, capacity: 1200, name: `spruce-${i}`, castShadow: true });
+    const L = createInstancedLayer({ geometry: g, material: spruceNearMat.material, capacity: 1200, name: `spruce-${i}`, castShadow: false });
     group.add(L.mesh);
     return L;
   });
+  // Sun shadows come from a cone per tree, drawn only in the shadow pass (instanceCount is zeroed for camera passes).
+  const proxyMat = createInstancedMaterial({ uniforms, sunScale, fade: [0, 0, spruceRange.near - 22, spruceRange.near], fadeMode: 'dither', name: 'spruce-shadow', lambert: true });
+  const spruceShadow = createInstancedLayer({ geometry: crownProxyGeometry(), material: proxyMat.material, depthMaterial: proxyMat.depthMaterial, capacity: 4800, name: 'spruce-shadow', castShadow: true });
+  spruceShadow.mesh.receiveShadow = false;
+  spruceShadow.mesh.onBeforeRender = (r, sc, cam, geom) => {
+    geom.instanceCount = 0;
+  };
+  spruceShadow.mesh.onBeforeShadow = (r, obj, cam, shadowCam, geom) => {
+    geom.instanceCount = spruceShadow.mesh.userData.count ?? 0;
+  };
+  group.add(spruceShadow.mesh);
   const spruceScatter = createTileScatter({
     name: 'spruce',
     tileSize: 40,
@@ -119,6 +136,8 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
         s.n++;
       }
       spruceSplit.forEach((s, i) => spruceLayers[i].upload(s.data, s.n, 8));
+      spruceShadow.upload(d, spruceScatter.count, 8);
+      spruceShadow.mesh.userData.count = spruceShadow.count;
     },
   });
 
@@ -204,61 +223,96 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
     }
   }
 
-  // ---- Alder and salmonberry thickets (salmonberry lighter, at forest edges and in gullies).
-  // Thickets near the camera only: beyond ~170 m the terrain's alder canopy shading carries them.
-  const shrubR = 125 * Math.sqrt(Math.min(1.2, Math.max(0.4, q)));
-  const leafMap = new THREE.CanvasTexture(leafTexture(256));
-  leafMap.colorSpace = THREE.SRGBColorSpace;
-  leafMap.wrapS = leafMap.wrapT = THREE.RepeatWrapping;
-  leafMap.anisotropy = 4;
-  const shrubMat = createInstancedMaterial({ uniforms, sunScale, fade: [0, 0, shrubR - 45, shrubR], fadeMode: 'shrink', wind: 0.03, windStiff: 1.5, tintAmount: 0.22, name: 'shrub', cardMap: true, foliage: true, standard: { roughness: 0.9, map: leafMap, alphaTest: 0.4, side: THREE.DoubleSide } });
-  const shrubGeo = shrubGeometry(seed + 7, { blobs: 6 });
-  const shrubLayer = createInstancedLayer({ geometry: shrubGeo, material: shrubMat.material, depthMaterial: shrubMat.depthMaterial, capacity: 3000, name: 'shrubs', castShadow: false });
-  group.add(shrubLayer.mesh);
-  const SHRUB_CELL = 3.5;
-  layers.push({
-    layer: shrubLayer,
-    scatter: createTileScatter({
-      name: 'shrubs',
-      tileSize: 48,
-      radius: shrubR,
-      stride: 8,
-      capacity: 3000,
-      generate(tx, tz, x0, z0, size, push) {
-        for (let iz = Math.floor(z0 / SHRUB_CELL); iz < Math.floor((z0 + size) / SHRUB_CELL); iz++) {
-          for (let ix = Math.floor(x0 / SHRUB_CELL); ix < Math.floor((x0 + size) / SHRUB_CELL); ix++) {
-            const r0 = rand(ix, iz, 11);
-            if (r0 > 0.8 * q) continue;
-            const x = (ix + rand(ix, iz, 12)) * SHRUB_CELL;
-            const z = (iz + rand(ix, iz, 13)) * SHRUB_CELL;
-            const s = landcover.sample(x, z);
-            if (s.h < 1.8 || s.dev > 0.5) continue;
-            const fd = landcover.forestFrom(x, z, s.h, s.s, s.sd, s.spruce, s.dev);
-            const ad = landcover.alderFrom(x, z, s.h, s.s, fd, s.dev, s.wet);
-            const edge = fd > 0.08 && fd < 0.6 ? 0.3 : 0;
-            const scattered = 0.02 * (1 - smoothstep(90, 140, s.h));
-            const p = Math.max(smoothstep(0.2, 0.7, ad) * 0.95, edge, scattered);
-            if (r0 > p * 0.8 * q) continue;
-            if (landcover.rockScore(x, z, s.h, s.s, s.sd, 0) > 1.45) continue;
-            if (dev(x, z)) continue;
-            const salmon = edge > 0 || rand(ix, iz, 14) < 0.25;
-            const size = salmon ? 1.1 + rand(ix, iz, 15) * 0.9 : 2.0 + rand(ix, iz, 15) * 1.8 * (0.6 + 0.4 * ad);
-            const yaw = rand(ix, iz, 16) * Math.PI * 2;
-            const tint = salmon ? 0.9 + rand(ix, iz, 17) * 0.4 : (rand(ix, iz, 17) - 0.6) * 1.2;
-            push(x, surface.heightAt(x, z) - 0.15, z, size, Math.cos(yaw), Math.sin(yaw), tint, rand(ix, iz, 18));
-          }
+  // ---- Alder and salmonberry thickets (salmonberry lighter, at forest edges and scattered through the alder).
+  // Thickets near the camera only: beyond ~100 m the terrain's alder canopy shading carries them. Bushes beyond
+  // SHRUB_NEAR use a coarser card set (re-split whenever the camera moves a few metres).
+  const shrubR = 78 * Math.sqrt(Math.min(1.2, Math.max(0.4, q)));
+  const SHRUB_NEAR = 30;
+  const shrubMaps = ['alder', 'salmonberry'].map((kind) => {
+    const map = new THREE.CanvasTexture(leafTexture(256, { kind }));
+    map.colorSpace = THREE.SRGBColorSpace;
+    map.anisotropy = 4;
+    return map;
+  });
+  const shrubKinds = [
+    { name: 'shrubs-alder', kind: 0, geo: shrubGeometry(seed + 7, { cards: 44, stems: 4, cardSize: 0.62 }) },
+    { name: 'shrubs-alder-far', kind: 0, geo: shrubGeometry(seed + 7, { cards: 24, stems: 0, cardSize: 1.0 }) },
+    { name: 'shrubs-salmonberry', kind: 1, geo: shrubGeometry(seed + 8, { cards: 30, stems: 3, cardSize: 0.56, shape: [0.66, 0.46, 0.62], centerY: 0.55 }) },
+    { name: 'shrubs-salmonberry-far', kind: 1, geo: shrubGeometry(seed + 8, { cards: 18, stems: 0, cardSize: 0.9, shape: [0.66, 0.46, 0.62], centerY: 0.55 }) },
+  ].map((k) => {
+    const m = createInstancedMaterial({ uniforms, sunScale, fade: [0, 0, shrubR - 35, shrubR], fadeMode: 'shrink', wind: 0.025, windStiff: 1.5, tintAmount: 0.2, name: k.name, cardMap: true, foliage: true, lambert: true, translucency: 0.3, standard: { map: shrubMaps[k.kind], alphaTest: 0.45, side: THREE.DoubleSide } });
+    const L = createInstancedLayer({ geometry: k.geo, material: m.material, capacity: 3000, name: k.name, castShadow: false });
+    group.add(L.mesh);
+    return L;
+  });
+  const SHRUB_CELL = 3.2;
+  const shrubScatter = createTileScatter({
+    name: 'shrubs',
+    tileSize: 48,
+    radius: shrubR,
+    stride: 8,
+    capacity: 6000,
+    generate(tx, tz, x0, z0, size, push) {
+      for (let iz = Math.floor(z0 / SHRUB_CELL); iz < Math.floor((z0 + size) / SHRUB_CELL); iz++) {
+        for (let ix = Math.floor(x0 / SHRUB_CELL); ix < Math.floor((x0 + size) / SHRUB_CELL); ix++) {
+          const r0 = rand(ix, iz, 11);
+          if (r0 > 0.85 * q) continue;
+          const x = (ix + rand(ix, iz, 12)) * SHRUB_CELL;
+          const z = (iz + rand(ix, iz, 13)) * SHRUB_CELL;
+          const s = landcover.sample(x, z);
+          if (s.h < 1.8 || s.dev > 0.5) continue;
+          const fd = landcover.forestFrom(x, z, s.h, s.s, s.sd, s.spruce, s.dev);
+          const ad = Math.max(landcover.alderFrom(x, z, s.h, s.s, fd, s.dev, s.wet), landcover.rillAlderFrom(s.h, landcover.rillAt(x, z, s.gx, s.gz), fd, s.dev));
+          const edge = fd > 0.08 && fd < 0.6 ? 0.3 : 0;
+          const scattered = 0.025 * (1 - smoothstep(90, 140, s.h));
+          const p = Math.max(smoothstep(0.2, 0.7, ad) * 0.95, edge, scattered);
+          if (r0 > p * 0.85 * q) continue;
+          if (landcover.rockScore(x, z, s.h, s.s, s.sd, 0) > 1.45) continue;
+          if (dev(x, z)) continue;
+          const salmon = edge > 0 || rand(ix, iz, 14) < 0.22;
+          const size = salmon ? 1.2 + rand(ix, iz, 15) * 0.9 : 2.1 + rand(ix, iz, 15) * 1.7 * (0.6 + 0.4 * ad);
+          const yaw = rand(ix, iz, 16) * Math.PI * 2;
+          const tint = (rand(ix, iz, 17) - 0.5) * 1.2;
+          push(x, surface.heightAt(x, z) - 0.2, z, size, Math.cos(yaw), Math.sin(yaw), tint, salmon ? 1 : 0);
         }
-      },
-    }),
+      }
+    },
+  });
+  const shrubSplit = shrubKinds.map(() => new Float32Array(3000 * 8));
+  const shrubAt = { x: NaN, z: NaN };
+  function splitShrubs(cx, cz) {
+    shrubAt.x = cx;
+    shrubAt.z = cz;
+    const d = shrubScatter.data;
+    const n = [0, 0, 0, 0];
+    const near2 = SHRUB_NEAR * SHRUB_NEAR;
+    for (let i = 0; i < shrubScatter.count; i++) {
+      const o = i * 8;
+      const dx = d[o] - cx;
+      const dz = d[o + 2] - cz;
+      const k = (d[o + 7] > 0.5 ? 2 : 0) + (dx * dx + dz * dz > near2 ? 1 : 0);
+      if (n[k] >= 3000) continue;
+      shrubSplit[k].set(d.subarray(o, o + 8), n[k] * 8);
+      n[k]++;
+    }
+    shrubKinds.forEach((L, k) => L.upload(shrubSplit[k], n[k], 8));
+  }
+  layers.push({
+    scatter: shrubScatter,
+    upload: () => splitShrubs(camera.position.x, camera.position.z),
+    tick(cx, cz) {
+      if (Math.hypot(cx - shrubAt.x, cz - shrubAt.z) > 6) splitShrubs(cx, cz);
+    },
   });
 
-  // ---- Grass tufts and beach rye near the camera.
-  const grassR = 30 * Math.sqrt(Math.min(1.2, Math.max(0.4, q)));
-  const grassMat = createInstancedMaterial({ uniforms, sunScale, fade: [0, 0, grassR - 14, grassR], fadeMode: 'shrink', wind: 0.1, windStiff: 1.8, tintAmount: 0.25, name: 'grass', foliage: true, standard: { roughness: 0.85, side: THREE.DoubleSide } });
-  const grassGeo = grassGeometry(seed + 21, { blades: 14 });
-  const grassLayer = createInstancedLayer({ geometry: grassGeo, material: grassMat.material, capacity: 20000, name: 'grass' });
+  // ---- Grass clumps and beach rye near the camera: dense within a few metres, thinning and shrinking into the
+  // terrain's meadow texture by grassR.
+  const grassR = 18 * Math.sqrt(Math.min(1.2, Math.max(0.4, q)));
+  const grassMat = createInstancedMaterial({ uniforms, sunScale, fade: [0, 0, grassR * 0.55, grassR], fadeMode: 'shrink', wind: 0.12, windStiff: 1.8, tintAmount: 0.22, name: 'grass', foliage: true, dryTint: true, lambert: true, translucency: 0.6, standard: { side: THREE.DoubleSide } });
+  const grassGeo = grassGeometry(seed + 21, { blades: 10 });
+  const grassLayer = createInstancedLayer({ geometry: grassGeo, material: grassMat.material, capacity: 16000, name: 'grass' });
   group.add(grassLayer.mesh);
-  const GRASS_CELL = 0.64 / Math.sqrt(Math.min(1.3, Math.max(0.3, q)));
+  const GRASS_CELL = 0.6 / Math.sqrt(Math.min(1.3, Math.max(0.3, q)));
   layers.push({
     layer: grassLayer,
     scatter: createTileScatter({
@@ -266,9 +320,9 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
       tileSize: 16,
       radius: grassR,
       stride: 8,
-      capacity: 20000,
+      capacity: 16000,
       generate(tx, tz, x0, z0, size, push) {
-        // One site sample per 4x4 m block keeps generation cheap; heights stay exact per tuft.
+        // One site sample per 4x4 m block keeps generation cheap; heights stay exact per clump.
         for (let bz = 0; bz < size; bz += 4) {
           for (let bx = 0; bx < size; bx += 4) {
             const cx = x0 + bx + 2;
@@ -281,7 +335,8 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
             if (rock > 1.42 || landcover.snowFrom(cx, cz, s.h, s.gx, s.gz, s.s, s.pen) > 0.3) continue;
             const beach = s.h < 3.2 && s.sd > -60;
             const alpine = smoothstep(95, 150, s.h);
-            const density = (beach ? 0.55 : 0.85) * (1 - 0.55 * alpine) * (1 - smoothstep(1.2, 1.42, rock));
+            const density = (beach ? 0.5 : 0.9) * (1 - 0.55 * alpine) * (1 - smoothstep(1.2, 1.42, rock));
+            const lush = 1 - smoothstep(20, 70, s.h);
             const i0 = Math.floor((x0 + bx) / GRASS_CELL);
             const j0 = Math.floor((z0 + bz) / GRASS_CELL);
             const i1 = Math.floor((x0 + bx + 4) / GRASS_CELL);
@@ -294,11 +349,58 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
                 const y = surface.heightAt(x, z);
                 if (y < (beach ? 1.5 : 0.9)) continue;
                 if (dev(x, z)) continue;
-                const lush = 1 - smoothstep(20, 70, s.h);
-                const tall = beach ? 0.8 + rand(ix, iz, 34) * 0.45 : (0.35 + rand(ix, iz, 34) * 0.35 + lush * 0.3 + s.wet * 0.3) * (1 - 0.5 * alpine);
+                // Meadow patches: tall swards and short turf, a few metres across.
+                const sward = landcover.noise(x / 5.3 + 0.7, z / 5.3 - 3.1);
+                const tall = beach ? 0.75 + rand(ix, iz, 34) * 0.45 : (0.4 + rand(ix, iz, 34) * 0.3 + lush * 0.35 + s.wet * 0.3) * (0.55 + 0.7 * sward) * (1 - 0.55 * alpine);
                 const yaw = rand(ix, iz, 35) * Math.PI * 2;
-                const tint = beach ? 0.6 + rand(ix, iz, 36) * 0.4 : (rand(ix, iz, 36) - 0.5) * 1.4 - alpine * 0.5;
-                push(x, y - 0.05, z, tall, Math.cos(yaw), Math.sin(yaw), tint, rand(ix, iz, 37));
+                const tint = beach ? 0.25 + rand(ix, iz, 36) * 0.3 : (rand(ix, iz, 36) - 0.5) * 1.1 - alpine * 0.4;
+                const dry = beach ? 0.55 + rand(ix, iz, 37) * 0.35 : Math.min(1, alpine * 0.7 + (1 - lush) * 0.15 + (rand(ix, iz, 37) < 0.12 ? 0.4 : 0));
+                push(x, y - 0.05, z, tall, Math.cos(yaw), Math.sin(yaw), tint, dry);
+              }
+            }
+          }
+        }
+      },
+    }),
+  });
+
+  // ---- Ferns: lady and shield fern carpeting the spruce forest floor, and in the damp gullies and forest edges.
+  const fernR = 28 * Math.sqrt(Math.min(1.2, Math.max(0.4, q)));
+  const fernMap = new THREE.CanvasTexture(fernTexture(256));
+  fernMap.colorSpace = THREE.SRGBColorSpace;
+  fernMap.anisotropy = 4;
+  const fernMat = createInstancedMaterial({ uniforms, sunScale, fade: [0, 0, fernR - 12, fernR], fadeMode: 'shrink', wind: 0.04, windStiff: 1.6, tintAmount: 0.2, name: 'ferns', cardMap: true, foliage: true, lambert: true, translucency: 0.4, standard: { map: fernMap, alphaTest: 0.4, side: THREE.DoubleSide } });
+  const fernLayer = createInstancedLayer({ geometry: fernGeometry(seed + 29), material: fernMat.material, capacity: 4000, name: 'ferns' });
+  group.add(fernLayer.mesh);
+  const FERN_CELL = 1.7;
+  layers.push({
+    layer: fernLayer,
+    scatter: createTileScatter({
+      name: 'ferns',
+      tileSize: 24,
+      radius: fernR,
+      stride: 8,
+      capacity: 4000,
+      generate(tx, tz, x0, z0, size, push) {
+        for (let bz = 0; bz < size; bz += 6) {
+          for (let bx = 0; bx < size; bx += 6) {
+            const cx = x0 + bx + 3;
+            const cz = z0 + bz + 3;
+            const s = landcover.sample(cx, cz);
+            if (s.h < 2.5 || s.h > 110 || s.dev > 0.5) continue;
+            const fd = landcover.forestFrom(cx, cz, s.h, s.s, s.sd, s.spruce, s.dev);
+            const p = Math.max(fd * 0.55, smoothstep(0.2, 0.5, s.wet) * 0.18 * (1 - smoothstep(60, 100, s.h)));
+            if (p < 0.02 || landcover.rockScore(cx, cz, s.h, s.s, s.sd, 0) > 1.4) continue;
+            for (let iz = Math.floor((z0 + bz) / FERN_CELL); iz < Math.floor((z0 + bz + 6) / FERN_CELL); iz++) {
+              for (let ix = Math.floor((x0 + bx) / FERN_CELL); ix < Math.floor((x0 + bx + 6) / FERN_CELL); ix++) {
+                const x = (ix + rand(ix, iz, 121)) * FERN_CELL;
+                const z = (iz + rand(ix, iz, 122)) * FERN_CELL;
+                const patchy = smoothstep(0.3, 0.6, landcover.noise(x / 6.3 + 4.1, z / 6.3 - 2.2));
+                if (rand(ix, iz, 123) > p * patchy * 1.6 * q) continue;
+                if (dev(x, z)) continue;
+                const yaw = rand(ix, iz, 124) * Math.PI * 2;
+                const size = 0.55 + rand(ix, iz, 125) * 0.55 + fd * 0.25;
+                push(x, surface.heightAt(x, z) - 0.03, z, size, Math.cos(yaw), Math.sin(yaw), (rand(ix, iz, 126) - 0.5) * 1.2, 0);
               }
             }
           }
@@ -308,17 +410,17 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
   });
 
   // ---- Fireweed and lupine patches.
-  const flowerR = 95 * Math.sqrt(Math.min(1.2, Math.max(0.4, q)));
+  const flowerR = 48 * Math.sqrt(Math.min(1.2, Math.max(0.4, q)));
   const flowerLayers = [
     { geo: mergeVariants([fireweedGeometry(seed + 41), fireweedGeometry(seed + 42)]), name: 'fireweed', ch: 0, size: [1.0, 1.7] },
     { geo: mergeVariants([lupineGeometry(seed + 43), lupineGeometry(seed + 44)]), name: 'lupine', ch: 1, size: [0.55, 0.85] },
   ].map((f) => {
-    const m = createInstancedMaterial({ uniforms, sunScale, fade: [0, 0, flowerR - 20, flowerR], fadeMode: 'shrink', wind: 0.07, windStiff: 1.6, tintAmount: 0.15, name: f.name, foliage: true, standard: { roughness: 0.8, side: THREE.DoubleSide } });
+    const m = createInstancedMaterial({ uniforms, sunScale, fade: [0, 0, flowerR - 20, flowerR], fadeMode: 'shrink', wind: 0.07, windStiff: 1.6, tintAmount: 0.15, name: f.name, foliage: true, lambert: true, translucency: 0.35, standard: { side: THREE.DoubleSide } });
     const L = createInstancedLayer({ geometry: f.geo, material: m.material, capacity: 6000, name: f.name });
     group.add(L.mesh);
     return { ...f, layer: L };
   });
-  const FLOWER_CELL = 1.6;
+  const FLOWER_CELL = 1.3;
   const fl = [0, 0];
   for (const f of flowerLayers) {
     layers.push({
@@ -343,9 +445,11 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
               for (let iz = Math.floor((z0 + bz) / FLOWER_CELL); iz < Math.floor((z0 + bz + 6) / FLOWER_CELL); iz++) {
                 for (let ix = Math.floor((x0 + bx) / FLOWER_CELL); ix < Math.floor((x0 + bx + 6) / FLOWER_CELL); ix++) {
                   const salt = 50 + f.ch * 10;
-                  if (rand(ix, iz, salt) > m * 0.9 * q) continue;
                   const x = (ix + rand(ix, iz, salt + 1)) * FLOWER_CELL;
                   const z = (iz + rand(ix, iz, salt + 2)) * FLOWER_CELL;
+                  // Stands a few metres across inside the patch, dense at their hearts.
+                  const stand = smoothstep(0.34, 0.66, landcover.noise(x / 7.5 + 3.1 * f.ch, z / 7.5 - 1.7));
+                  if (rand(ix, iz, salt) > m * stand * 1.25 * q) continue;
                   if (dev(x, z)) continue;
                   const yaw = rand(ix, iz, salt + 3) * Math.PI * 2;
                   const sz = f.size[0] + (f.size[1] - f.size[0]) * rand(ix, iz, salt + 4);
@@ -360,15 +464,31 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
   }
 
   // ---- Boulders: beaches and rocky shores (some awash), erratics in the meadows, talus below crags.
-  const boulderMat = createInstancedMaterial({ uniforms, sunScale, fade: [0, 0, 220, 270], fadeMode: 'shrink', nonUniform: true, underwater: true, tintAmount: 0.2, name: 'boulder', standard: { roughness: 0.85 } });
-  const boulderGeo = boulderGeometry(seed + 61);
-  const boulderLayer = createInstancedLayer({ geometry: boulderGeo, material: boulderMat.material, depthMaterial: boulderMat.depthMaterial, capacity: 5000, name: 'boulders', nonUniform: true, castShadow: true });
-  group.add(boulderLayer.mesh);
+  const boulderMat = createInstancedMaterial({ uniforms, sunScale, fade: [0, 0, 220, 270], fadeMode: 'shrink', nonUniform: true, underwater: true, tintAmount: 0.2, name: 'boulder', lambert: true, grain: [3.2, 0.3] });
+  // Near boulders (within BOULDER_NEAR) use a finer mesh; the split is refreshed as the camera moves.
+  const BOULDER_NEAR = 45;
+  const boulderLayers = [boulderGeometry(seed + 61, { detail: 3 }), boulderGeometry(seed + 61, { detail: 1 })].map((g, i) => {
+    const L = createInstancedLayer({ geometry: g, material: boulderMat.material, depthMaterial: boulderMat.depthMaterial, capacity: 5000, name: i ? 'boulders-far' : 'boulders-near', nonUniform: true, castShadow: true });
+    group.add(L.mesh);
+    return L;
+  });
   const BOULDER_CELL = 5.5;
-  layers.push({
-    layer: boulderLayer,
-    stride: 11,
-    scatter: createTileScatter({
+  const boulderSplit = [new Float32Array(5000 * 11), new Float32Array(5000 * 11)];
+  const boulderAt = { x: NaN, z: NaN };
+  function splitBoulders(cx, cz) {
+    boulderAt.x = cx;
+    boulderAt.z = cz;
+    const d = boulderScatter.data;
+    const n = [0, 0];
+    for (let i = 0; i < boulderScatter.count; i++) {
+      const o = i * 11;
+      const k = Math.hypot(d[o] - cx, d[o + 2] - cz) > BOULDER_NEAR ? 1 : 0;
+      boulderSplit[k].set(d.subarray(o, o + 11), n[k] * 11);
+      n[k]++;
+    }
+    boulderLayers.forEach((L, k) => L.upload(boulderSplit[k], n[k], 11));
+  }
+  const boulderScatter = createTileScatter({
       name: 'boulders',
       tileSize: 64,
       radius: 270,
@@ -402,11 +522,17 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
           }
         }
       },
-    }),
+  });
+  layers.push({
+    scatter: boulderScatter,
+    upload: () => splitBoulders(camera.position.x, camera.position.z),
+    tick(cx, cz) {
+      if (Math.hypot(cx - boulderAt.x, cz - boulderAt.z) > 8) splitBoulders(cx, cz);
+    },
   });
 
   // ---- Driftwood along the upper beach, lying with the shore.
-  const driftMat = createInstancedMaterial({ uniforms, sunScale, fade: [0, 0, 220, 270], fadeMode: 'shrink', nonUniform: true, tintAmount: 0.2, name: 'driftwood', standard: { roughness: 0.95 } });
+  const driftMat = createInstancedMaterial({ uniforms, sunScale, fade: [0, 0, 220, 270], fadeMode: 'shrink', nonUniform: true, tintAmount: 0.25, name: 'driftwood', lambert: true, grain: [2.5, 0.18, 0.08, 1, 1] });
   const driftLayers = [driftwoodGeometry(seed + 81), driftwoodGeometry(seed + 82, { rootWad: true })].map((g, i) => {
     const L = createInstancedLayer({ geometry: g, material: driftMat.material, depthMaterial: driftMat.depthMaterial, capacity: 2500, name: `driftwood-${i}`, nonUniform: true, castShadow: true });
     group.add(L.mesh);
@@ -424,7 +550,7 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
       for (let iz = Math.floor(z0 / DRIFT_CELL); iz < Math.floor((z0 + size) / DRIFT_CELL); iz++) {
         for (let ix = Math.floor(x0 / DRIFT_CELL); ix < Math.floor((x0 + size) / DRIFT_CELL); ix++) {
           const r0 = rand(ix, iz, 91);
-          if (r0 > 0.3) continue;
+          if (r0 > 0.6) continue;
           const x = (ix + rand(ix, iz, 92)) * DRIFT_CELL;
           const z = (iz + rand(ix, iz, 93)) * DRIFT_CELL;
           const sd = heightmap.shoreDistance(x, z);
@@ -433,15 +559,18 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
           if (h < 0.75 || h > 2.4) continue;
           const s = landcover.sample(x, z);
           if (s.s > 0.4 || dev(x, z)) continue;
-          const p = 0.12 + 0.18 * s.spruce;
+          // Logs pile up on the storm line, most thickly below the spruce forests they came from.
+          const p = 0.16 + 0.34 * s.spruce;
           if (r0 > p) continue;
           heightmap.shoreGradient(x, z, grad);
           const along = Math.atan2(-grad.x, grad.z);
           const yaw = along + (rand(ix, iz, 94) - 0.5) * 0.9;
-          const len = 3 + rand(ix, iz, 95) * 8;
-          const rad = 0.14 + rand(ix, iz, 96) * 0.28;
-          const wad = rand(ix, iz, 97) < 0.22 ? 1 : 0;
-          push(x, h + rad * 0.55, z, 1, Math.cos(yaw), Math.sin(yaw), (rand(ix, iz, 98) - 0.5) * 1.2, wad, len, rad, rad);
+          const len = 3.5 + rand(ix, iz, 95) ** 1.5 * 10;
+          const k = 0.6 + rand(ix, iz, 96) * 0.8;
+          const rad = len * DRIFT_R0 * k;
+          const wad = rand(ix, iz, 97) < 0.25 ? 1 : 0;
+          // Half-settled into the gravel.
+          push(x, h + rad * 0.45, z, len, Math.cos(yaw), Math.sin(yaw), (rand(ix, iz, 98) - 0.5) * 1.2, wad, 1, k, k);
         }
       }
     },
@@ -464,15 +593,15 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
   });
 
   // ---- Bull kelp beds in rocky nearshore shallows.
-  const kelp = createKelpLayer({ ctx, sunScale, capacity: 2400 });
+  const kelp = createKelpLayer({ ctx, sunScale, capacity: 3000 });
   group.add(kelp.mesh);
-  const KELP_CELL = 2.7;
+  const KELP_CELL = 1.7;
   const kelpScatter = createTileScatter({
     name: 'kelp',
     tileSize: 64,
     radius: 420,
     stride: 8,
-    capacity: 2400,
+    capacity: 3000,
     generate(tx, tz, x0, z0, size, push) {
       for (let iz = Math.floor(z0 / KELP_CELL); iz < Math.floor((z0 + size) / KELP_CELL); iz++) {
         for (let ix = Math.floor(x0 / KELP_CELL); ix < Math.floor((x0 + size) / KELP_CELL); ix++) {
@@ -483,10 +612,11 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
           const sd = heightmap.shoreDistance(x, z);
           if (sd < 14 || sd > 190) continue;
           // Beds: dense rafts (the 17 m noise) inside larger patches along the reef (75 m).
-          const bed = smoothstep(0.46, 0.62, landcover.noise(x / 75 + 3.3, z / 75 - 8.1)) * smoothstep(0.3, 0.52, landcover.noise(x / 17, z / 17));
-          if (bed <= 0 || r0 > bed * 0.8) continue;
+          // Beds are dense floating mats (the 14 m noise) inside larger patches along the reef (70 m).
+          const bed = smoothstep(0.5, 0.64, landcover.noise(x / 70 + 3.3, z / 70 - 8.1)) * smoothstep(0.42, 0.6, landcover.noise(x / 14, z / 14));
+          if (bed <= 0 || r0 > bed * 1.3) continue;
           const h = surface.heightAt(x, z);
-          if (h > -2.2 || h < -15) continue;
+          if (h > -2.2 || h < -15 || dev(x, z)) continue;
           const s = landcover.sample(x, z);
           // Rocky reefs: a steep seabed, or a steep coast just shoreward.
           heightmap.shoreGradient(x, z, grad);
@@ -496,7 +626,7 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
           const rocky = Math.max(smoothstep(0.06, 0.2, s.s), smoothstep(0.55, 1.2, coast.s));
           if (rocky < 0.3) continue;
           const yaw = rand(ix, iz, 104) * Math.PI * 2;
-          push(x, 0, z, (3 + rand(ix, iz, 105) * 3) * (0.7 + 0.3 * bed), Math.cos(yaw), Math.sin(yaw), 0, rand(ix, iz, 106));
+          push(x, 0, z, (2.8 + rand(ix, iz, 105) * 3.2) * (0.7 + 0.3 * bed), Math.cos(yaw), Math.sin(yaw), 0, rand(ix, iz, 106));
         }
       }
     },
@@ -528,6 +658,8 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
         if (L.scatter.update(cam.x, cam.z, deadline)) {
           if (L.upload) L.upload();
           else L.layer.upload(L.scatter.data, L.scatter.count, L.stride ?? 8);
+        } else if (L.tick) {
+          L.tick(cam.x, cam.z);
         }
       }
       if (kelpScatter.update(cam.x, cam.z, deadline)) kelp.setPlants(kelpScatter.data, kelpScatter.count, 8, cam.x, cam.z);

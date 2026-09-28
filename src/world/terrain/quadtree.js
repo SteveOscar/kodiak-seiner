@@ -27,12 +27,16 @@ export const SHALLOW_Y = -5;
 export const SHALLOW_LEVEL = 2;
 
 // Default LOD ranges (3D distance, metres) for levels 0..ROOT_LEVEL-1. Terrain GPU cost scales with triangle density
-// (Apple GPUs pay per vertex in the tiler and per tiny triangle in quad overshading), so the bands are as coarse as
-// SPEC §3's error budget allows, measured on the real DEM over ground under 20° (where things get placed):
-// within 600 m the p99 deviation from heightAt is 0.22 m (level 1, just starting to morph), within 3 km 2.4-2.7 m
-// (level 3 on its own 15.6 m lattice: 0.6 px at 720p; SPEC's 2 m would need level 2 to ~4 km at 2.25x its cost). tests/terrain.test.mjs checks both; notes/WP-TERRAIN.md has
-// the full table.
+// (Apple GPUs pay per vertex in the tiler and heavily for quad overshading of small triangles, which with this
+// fragment shader dominates), so the bands are as coarse as the error budget allows, measured on the real DEM over
+// ground under 20° (where things get placed): within 600 m the p99 deviation from heightAt is 0.19 m (level 1, just
+// starting to morph); within 3 km it is 2.7 m (level 3, 15.6 m lattice, 0.6 px at that distance). SPEC §3 asks for
+// 2 m, which needs level 2 out to ~3.3 km: measured at +1.4 ms GPU in the boat view on an M4, far outside the 3.5 ms
+// terrain budget (documented deviation, notes/WP-TERRAIN.md). Procedural detail is displaced on levels 0-1 only
+// (fading across level 1's morph band); further out the fragment shader carries it as normal detail.
 export const DEFAULT_RANGES = [240, 720, 2200, 4000, 7000, 13000, 26000, 52000];
+// Highest level that carries the procedural detail displacement (it fades out across this level's morph band).
+export const DETAIL_LEVEL = 1;
 
 // Coarsest geometry that can render a vertex at distance d: { level, morph } (morph 0 = that level's own lattice,
 // 1 = fully collapsed onto the next level's). A level-L node is only emitted beyond ranges[L - 1], so a vertex at d
@@ -174,9 +178,9 @@ function boxDist2(c, x0, y0, z0, x1, y1, z1) {
 }
 
 // Returns a selector: select(camera {x,y,z}, planes, out Float32Array (4 per instance)) -> instance count.
-// Each instance = [x0, z0, size, level]. `reflect` also keeps land boxes visible in the camera mirrored in y = 0,
-// so planar water reflections of hills above the view still find geometry.
-export function createSelector({ bounds, ranges = DEFAULT_RANGES, maxInstances = 4096, reflect = true }) {
+// Each instance = [x0, z0, size, level]. `reflect` also keeps land boxes visible in the camera mirrored in y = 0;
+// `reflectOnly` keeps only those (the dedicated reflection mesh: land above the sea, seen in the mirror).
+export function createSelector({ bounds, ranges = DEFAULT_RANGES, maxInstances = 4096, reflect = true, reflectOnly = false }) {
   const r2 = ranges.map((r) => r * r);
   const b = [0, 0];
   let out = null;
@@ -186,9 +190,10 @@ export function createSelector({ bounds, ranges = DEFAULT_RANGES, maxInstances =
   let visits = 0;
 
   function visible(x0, z0, s, y0, y1) {
+    if (reflectOnly && y1 <= 0) return false;
     if (!planes) return true;
-    if (boxInFrustum(planes, x0, y0, z0, x0 + s, y1, z0 + s)) return true;
-    return reflect && y1 > 0 && boxInFrustum(planes, x0, -y1, z0, x0 + s, -Math.max(0, y0), z0 + s);
+    if (!reflectOnly && boxInFrustum(planes, x0, y0, z0, x0 + s, y1, z0 + s)) return true;
+    return (reflect || reflectOnly) && y1 > 0 && boxInFrustum(planes, x0, -y1, z0, x0 + s, -Math.max(0, y0), z0 + s);
   }
 
   function emit(x0, z0, s, L) {

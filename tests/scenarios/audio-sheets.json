@@ -1,0 +1,42 @@
+[
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+  "timeout": 90000
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "eval": "__KODIAK__.systems.audio.qa.sheet([{\"label\": \"Ocean offshore (bed)\", \"kind\": \"bed\", \"name\": \"ocean-offshore\", \"seconds\": 4}, {\"label\": \"Ocean near the beach (bed)\", \"kind\": \"bed\", \"name\": \"ocean-nearshore\", \"seconds\": 4}, {\"label\": \"Storm sea + gale (bed)\", \"kind\": \"bed\", \"name\": \"ocean-storm\", \"seconds\": 4}, {\"label\": \"Breeze (bed)\", \"kind\": \"bed\", \"name\": \"wind-breeze\", \"seconds\": 4}, {\"label\": \"Rain on deck (bed)\", \"kind\": \"bed\", \"name\": \"rain-deck\", \"seconds\": 3}, {\"label\": \"Rain on the wheelhouse roof\", \"kind\": \"bed\", \"name\": \"rain-roof\", \"seconds\": 3}, {\"label\": \"Surf break, gravel beach\", \"kind\": \"sfx\", \"name\": \"surf-break\", \"params\": {\"level\": 0.8, \"gravel\": 1}, \"seconds\": 7}, {\"label\": \"Hull slap\", \"kind\": \"sfx\", \"name\": \"hull-slap\", \"params\": {\"strength\": 0.9}, \"seconds\": 1.2}, {\"label\": \"Pink jump (popcorn)\", \"kind\": \"sfx\", \"name\": \"fish-jump\", \"params\": {\"species\": \"pink\", \"size\": 0.5}, \"seconds\": 1.5}, {\"label\": \"Chum jump (flop)\", \"kind\": \"sfx\", \"name\": \"fish-jump\", \"params\": {\"species\": \"chum\", \"size\": 0.72}, \"seconds\": 1.8}, {\"label\": \"Coho jump (tail-walk)\", \"kind\": \"sfx\", \"name\": \"fish-jump\", \"params\": {\"species\": \"coho\", \"size\": 0.65}, \"seconds\": 3}, {\"label\": \"Sockeye jump (clean leap)\", \"kind\": \"sfx\", \"name\": \"fish-jump\", \"params\": {\"species\": \"sockeye\", \"size\": 0.6}, \"seconds\": 1.8}], {title: \"Sea, weather and salmon\"}).then(r => JSON.stringify(r))"
+ },
+ {
+  "shot": "sheet1"
+ },
+ {
+  "eval": "__KODIAK__.systems.audio.qa.sheet([{\"label\": \"Gull long call\", \"kind\": \"sfx\", \"name\": \"gull\", \"params\": {\"call\": {\"type\": \"long\", \"pitch\": 1000, \"notes\": 5, \"rasp\": 0.28}}, \"seconds\": 2.2}, {\"label\": \"Gull kek-kek (working)\", \"kind\": \"sfx\", \"name\": \"gull\", \"params\": {\"call\": {\"type\": \"kek\", \"pitch\": 1050, \"notes\": 5, \"rasp\": 0.25}}, \"seconds\": 1.2}, {\"label\": \"Bald eagle\", \"kind\": \"sfx\", \"name\": \"eagle\", \"seconds\": 1.4}, {\"label\": \"Humpback blow\", \"kind\": \"sfx\", \"name\": \"whale-blow\", \"seconds\": 4}, {\"label\": \"Breach\", \"kind\": \"sfx\", \"name\": \"breach\", \"seconds\": 4}, {\"label\": \"Sea lion bull roar\", \"kind\": \"sfx\", \"name\": \"sealion\", \"params\": {\"bull\": true}, \"seconds\": 2.2}, {\"label\": \"Sea lion cow bark\", \"kind\": \"sfx\", \"name\": \"sealion\", \"params\": {\"bull\": false}, \"seconds\": 1.4}, {\"label\": \"Bear huffs + jaw pops\", \"kind\": \"sfx\", \"name\": \"bear-huff\", \"params\": {\"huffs\": 2, \"intensity\": 0.9}, \"seconds\": 2}, {\"label\": \"Bear bluff charge\", \"kind\": \"sfx\", \"name\": \"bear-charge\", \"seconds\": 4}, {\"label\": \"Footstep gravel (walk)\", \"kind\": \"sfx\", \"name\": \"footstep\", \"params\": {\"surface\": \"gravel\"}, \"seconds\": 0.6}, {\"label\": \"Footstep rock (run)\", \"kind\": \"sfx\", \"name\": \"footstep\", \"params\": {\"surface\": \"rock\", \"run\": true}, \"seconds\": 0.6}, {\"label\": \"Footstep wading\", \"kind\": \"sfx\", \"name\": \"footstep\", \"params\": {\"surface\": \"water\"}, \"seconds\": 0.8}], {title: \"Wildlife and footsteps\"}).then(r => JSON.stringify(r))"
+ },
+ {
+  "shot": "sheet2"
+ },
+ {
+  "eval": "__KODIAK__.systems.audio.qa.sheet([{\"label\": \"Main diesel idle @25 m\", \"kind\": \"bed\", \"name\": \"engine-idle\", \"seconds\": 3}, {\"label\": \"Main diesel half ahead\", \"kind\": \"bed\", \"name\": \"engine-half\", \"seconds\": 3}, {\"label\": \"Main diesel full ahead\", \"kind\": \"bed\", \"name\": \"engine-full\", \"seconds\": 3}, {\"label\": \"Diesel from the wheelhouse\", \"kind\": \"bed\", \"name\": \"engine-wheelhouse\", \"seconds\": 3}, {\"label\": \"Skiff towing hard\", \"kind\": \"bed\", \"name\": \"skiff-towing\", \"seconds\": 3}, {\"label\": \"Purse winch\", \"kind\": \"bed\", \"name\": \"purse-winch\", \"seconds\": 3}, {\"label\": \"Power block hauling\", \"kind\": \"bed\", \"name\": \"power-block\", \"seconds\": 3}, {\"label\": \"Hull wash @9 m/s\", \"kind\": \"bed\", \"name\": \"hull-wash\", \"seconds\": 3}, {\"label\": \"Air horn\", \"kind\": \"sfx\", \"name\": \"horn\", \"seconds\": 2.6}, {\"label\": \"Anchor chain running out\", \"kind\": \"sfx\", \"name\": \"anchor-chain\", \"params\": {\"mode\": \"drop\"}, \"seconds\": 3.8}, {\"label\": \"Grounding\", \"kind\": \"sfx\", \"name\": \"collision\", \"params\": {\"kind\": \"ground\", \"strength\": 0.9}, \"seconds\": 2.5}, {\"label\": \"Starter + catch\", \"kind\": \"sfx\", \"name\": \"starter\", \"seconds\": 1.2}], {title: \"The boat\"}).then(r => JSON.stringify(r))"
+ },
+ {
+  "shot": "sheet3"
+ },
+ {
+  "eval": "__KODIAK__.systems.audio.qa.sheet([{\"label\": \"Skiff released\", \"kind\": \"sfx\", \"name\": \"skiff-release\", \"seconds\": 1.8}, {\"label\": \"Purse rings up\", \"kind\": \"sfx\", \"name\": \"rings-up\", \"seconds\": 2.5}, {\"label\": \"Leads hung up (snag)\", \"kind\": \"sfx\", \"name\": \"snag\", \"seconds\": 2}, {\"label\": \"Brailer dips\", \"kind\": \"sfx\", \"name\": \"brail-dip\", \"seconds\": 2}, {\"label\": \"Brailer dumps salmon\", \"kind\": \"sfx\", \"name\": \"brail-dump\", \"seconds\": 1.6}, {\"label\": \"Cork through the block\", \"kind\": \"sfx\", \"name\": \"cork\", \"params\": {\"drip\": false}, \"seconds\": 0.5}, {\"label\": \"VHF call (squelch, voice, tail)\", \"kind\": \"sfx\", \"name\": \"radio\", \"params\": {\"text\": \"Northern Dawn, this is the tender, we're buying humpies.\"}, \"seconds\": 3}, {\"label\": \"Cash register (fish ticket)\", \"kind\": \"sfx\", \"name\": \"cash-register\", \"seconds\": 2.4}, {\"label\": \"Discovery chord (peak)\", \"kind\": \"sfx\", \"name\": \"discovery\", \"params\": {\"kind\": \"peak\"}, \"seconds\": 6}, {\"label\": \"Set stinger: plugged\", \"kind\": \"sfx\", \"name\": \"stinger\", \"params\": {\"rating\": \"plugged\"}, \"seconds\": 6}, {\"label\": \"Set stinger: water haul\", \"kind\": \"sfx\", \"name\": \"stinger\", \"params\": {\"rating\": \"water haul\"}, \"seconds\": 5}, {\"label\": \"UI click\", \"kind\": \"sfx\", \"name\": \"ui-click\", \"seconds\": 0.3}], {title: \"Gear and feedback\"}).then(r => JSON.stringify(r))"
+ },
+ {
+  "shot": "sheet4"
+ },
+ {
+  "eval": "__KODIAK__.systems.audio.qa.sheet([{\"label\": \"Title music (D dorian)\", \"kind\": \"music\", \"name\": \"title\", \"seconds\": 40}, {\"label\": \"Dawn music (G mixolydian)\", \"kind\": \"music\", \"name\": \"dawn\", \"seconds\": 40}, {\"label\": \"After a plugged set (D major)\", \"kind\": \"music\", \"name\": \"triumph\", \"seconds\": 30}, {\"label\": \"Thunder, close\", \"kind\": \"sfx\", \"name\": \"thunder\", \"params\": {\"distance\": 900, \"intensity\": 1}, \"seconds\": 8}, {\"label\": \"Thunder, far\", \"kind\": \"sfx\", \"name\": \"thunder\", \"params\": {\"distance\": 5000, \"intensity\": 0.6}, \"seconds\": 8}, {\"label\": \"Foghorn\", \"kind\": \"sfx\", \"name\": \"foghorn\", \"seconds\": 3.5}, {\"label\": \"Halyard clinks\", \"kind\": \"sfx\", \"name\": \"clink\", \"seconds\": 1}, {\"label\": \"Spooked school boil\", \"kind\": \"sfx\", \"name\": \"boil\", \"seconds\": 2}, {\"label\": \"Winch clutch\", \"kind\": \"sfx\", \"name\": \"clunk\", \"params\": {\"hiss\": true}, \"seconds\": 1.2}, {\"label\": \"Big splash (skiff)\", \"kind\": \"sfx\", \"name\": \"splash\", \"params\": {\"size\": 3}, \"seconds\": 2}, {\"label\": \"Toast tick\", \"kind\": \"sfx\", \"name\": \"ui-toast\", \"seconds\": 0.6}, {\"label\": \"Panel open\", \"kind\": \"sfx\", \"name\": \"ui-open\", \"seconds\": 0.5}], {title: \"Music and atmosphere\"}).then(r => JSON.stringify(r))"
+ },
+ {
+  "shot": "sheet5"
+ },
+ {
+  "eval": "__KODIAK__.systems.audio.qa.clear(); 1"
+ }
+]

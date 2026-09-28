@@ -1,0 +1,147 @@
+[
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+  "timeout": 90000
+ },
+ {
+  "start": {
+   "freeExplore": true
+  }
+ },
+ {
+  "time": 13
+ },
+ {
+  "weather": "clear"
+ },
+ {
+  "teleport": [
+   5850,
+   -520,
+   90
+  ]
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "eval": "window.__A = __KODIAK__.systems.audio; window.__S = __KODIAK__.systems.seiner.position; __A.qa.startLive(); 1"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "eval": "__A.qa.mark(\"horn\"); __KODIAK__.systems.seiner.horn(); 1"
+ },
+ {
+  "wait": 3500
+ },
+ {
+  "eval": "__A.qa.mark(\"radio\"); __KODIAK__.systems.ui.radio('ADF&G', 'Attention all purse seiners, the Northeast district opens at six a.m.', '16'); 1"
+ },
+ {
+  "wait": 5000
+ },
+ {
+  "eval": "__A.qa.mark(\"discovery\"); __KODIAK__.ctx.events.emit('place:discovered', { id: 'cape-chiniak', name: 'Cape Chiniak', kind: 'cape' }); 1"
+ },
+ {
+  "wait": 5000
+ },
+ {
+  "eval": "__A.qa.mark(\"memorial (silent)\"); __KODIAK__.ctx.events.emit('place:discovered', { id: 'awauq', name: 'Awauq', kind: 'history', memorial: true }); 1"
+ },
+ {
+  "wait": 2000
+ },
+ {
+  "eval": "__A.qa.mark(\"stinger plugged\"); __KODIAK__.ctx.events.emit('fishing:setComplete', { rating: 'plugged', totalLbs: 42000 }); 1"
+ },
+ {
+  "wait": 6000
+ },
+ {
+  "eval": "__A.qa.mark(\"cash register\"); __KODIAK__.ctx.events.emit('economy:delivered', { gross: 5400 }); 1"
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "eval": "__A.qa.mark(\"anchor\"); __KODIAK__.systems.seiner.setMooring({ kind: 'anchor' }); 1"
+ },
+ {
+  "wait": 5000
+ },
+ {
+  "eval": "__A.qa.mark(\"weigh anchor\"); __KODIAK__.systems.seiner.setMooring(null); 1"
+ },
+ {
+  "wait": 5000
+ },
+ {
+  "eval": "__A.qa.mark(\"grounding\"); __KODIAK__.ctx.events.emit('boat:collision', { speed: 5, x: __S.x + 8, z: __S.z, kind: 'ground' }); 1"
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "eval": "__A.qa.mark(\"whale blow 300m\"); __KODIAK__.ctx.events.emit('wildlife:blow', { kind: 'humpback', x: __S.x + 300, z: __S.z - 100 }); 1"
+ },
+ {
+  "wait": 4000
+ },
+ {
+  "eval": "__A.qa.mark(\"breach 400m\"); __KODIAK__.ctx.events.emit('wildlife:breach', { stage: 'splash', x: __S.x - 400, z: __S.z }); 1"
+ },
+ {
+  "wait": 4500
+ },
+ {
+  "eval": "__A.qa.mark(\"chum jump 40m\"); __KODIAK__.ctx.events.emit('fish:jump', { x: __S.x + 40, y: 0, z: __S.z, species: 'chum', size: 0.75, style: 'flop' }); 1"
+ },
+ {
+  "wait": 2000
+ },
+ {
+  "eval": "__A.qa.mark(\"coho jump 40m\"); __KODIAK__.ctx.events.emit('fish:jump', { x: __S.x - 40, y: 0, z: __S.z, species: 'coho', size: 0.65, style: 'tailwalk' }); 1"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "eval": "__A.qa.mark(\"thunder 1.2km\"); __KODIAK__.ctx.events.emit('sky:lightning', { distance: 1200, x: __S.x + 1200, z: __S.z, intensity: 1 }); 1"
+ },
+ {
+  "wait": 9000
+ },
+ {
+  "eval": "__A.qa.mark(\"bear charge\"); __KODIAK__.ctx.events.emit('bear:encounter', { stage: 'charge', bearId: 'x', x: __S.x + 25, z: __S.z }); 1"
+ },
+ {
+  "wait": 4000
+ },
+ {
+  "eval": "__A.qa.mark(\"pause\"); __KODIAK__.ctx.game.pause(); 1"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "eval": "__A.qa.mark(\"resume\"); __KODIAK__.ctx.game.resume(); 1"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "eval": "__A.qa.stopLive(); JSON.stringify(__A.qa.showLive({ title: 'Live mix: event sounds (horn, radio, chords, register, anchor, grounding, whales, jumps, thunder, bear, pause)' }))"
+ },
+ {
+  "shot": "live-events"
+ },
+ {
+  "eval": "__A.qa.clear(); 1"
+ },
+ {
+  "state": "end"
+ }
+]

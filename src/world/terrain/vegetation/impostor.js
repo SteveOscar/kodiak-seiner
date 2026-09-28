@@ -106,7 +106,7 @@ export function bakeImpostors(renderer, geometries, branchMap) {
 
 // Impostor material: MeshStandardMaterial with a billboard vertex stage and atlas-driven albedo/normal/alpha.
 export function createImpostorMaterial({ uniforms, sunScale, atlas, fade }) {
-  const mat = new THREE.MeshStandardMaterial({ roughness: 0.92, metalness: 0, side: THREE.DoubleSide });
+  const mat = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide });
   mat.name = 'spruce-impostor';
   const own = {
     imAlbedo: { value: atlas.albedo },
@@ -219,7 +219,7 @@ vec3 nonPerturbedNormal = normal;`,
       )
       .replace('#include <lights_fragment_begin>', SUN_LIGHT_PATCH('imShadow'));
   };
-  mat.customProgramCacheKey = () => 'spruce-impostor-v1';
+  mat.customProgramCacheKey = () => 'spruce-impostor-v2';
   return mat;
 }
 

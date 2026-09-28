@@ -3,7 +3,7 @@
 // fleet board, fishing periods, the marine forecast).
 
 import { h, clear, button, setText, svgFrom } from './dom.js';
-import { money, int, compactMoney, calendar, clockTime, SPECIES, SPECIES_INFO, speciesName, capitalize } from './lib/format.js';
+import { money, int, compactMoney, calendar, clockTime, cardinal, SPECIES, SPECIES_INFO, speciesName, capitalize } from './lib/format.js';
 import { GLYPHS } from './lib/art.js';
 
 const TABS = [
@@ -142,6 +142,23 @@ export function createLogbook(ctx, { close, openTicket, history }) {
         );
       }
     }
+    if (marks.length) {
+      left.append(h('h3.lb-h', { text: 'Schools logged' }));
+      for (const m of marks.slice(0, 8)) {
+        const near = Number.isFinite(m.x) ? S().places?.nearest?.(m.x, m.z, (p) => !p.memorial) : null;
+        const src = m.source === 'spotter' ? 'spotter plane' : m.source === 'perch' ? 'from a summit' : 'binoculars';
+        const hd = Number.isFinite(m.heading) ? ` · heading ${cardinal((m.heading * 180) / Math.PI, 8)}` : '';
+        left.append(
+          h('div.lb-sight.lb-school', null, [
+            h('span.lb-chip', { style: { background: SPECIES_INFO[m.species]?.color ?? '#7f8e93' } }),
+            h('div', null, [
+              h('div.lb-sight-name', { text: `${SPECIES_INFO[m.species] ? speciesName(m.species, { nick: true }) : 'Jumpers'}${hd}` }),
+              h('div.lb-sight-meta', { text: `${dateOf(m.day, m.hours)}${near?.place ? ` · off ${near.place.name}` : ''} · ${src}` }),
+            ]),
+          ]),
+        );
+      }
+    }
     const right = h('div.lb-col');
     right.append(h('h3.lb-h', { text: 'Reading jumpers' }));
     for (const [k, text] of JUMPERS) {
@@ -177,11 +194,11 @@ export function createLogbook(ctx, { close, openTicket, history }) {
     if (!sets.length) left.append(empty('No sets yet', 'Find a school of jumpers during an opener and let ’er go (Space).'));
     else {
       const t = h('div.lb-table');
-      t.append(h('div.lb-tr.lb-th', null, ['#', 'When', 'Result', 'Pounds', 'Value'].map((x) => h('span', { text: x }))));
+      t.append(h('div.lb-tr.lb-th', null, [['#', ''], ['When', ''], ['Result', ''], ['Pounds', '.num'], ['Value', '.num']].map(([x, c]) => h(`span${c}`, { text: x }))));
       for (const s of [...sets].reverse().slice(0, 40)) {
         t.append(
           h(`div.lb-tr.r-${String(s.rating).replace(/\s/g, '-')}`, null, [
-            h('span.num', { text: String(s.setNumber ?? '') }),
+            h('span.lb-idx', { text: String(s.setNumber ?? '') }),
             h('span', { text: dateOf(s.day, s.hours) }),
             h('span', null, [h(`span.lb-rating`, { text: s.cited ? 'Cited' : RATING[s.rating] ?? capitalize(s.rating) })]),
             h('span.num', { text: int(s.totalLbs ?? 0) }),
@@ -254,7 +271,6 @@ export function createLogbook(ctx, { close, openTicket, history }) {
     }
     left.append(chips, h('p.lb-foot', { text: 'Open 6:00 AM – 10:00 PM on period days. * some districts closed — see the radio.' }));
     const fc = safe(() => season?.forecast?.(), null);
-    if (fc?.text) left.append(h('h3.lb-h', { text: 'Marine forecast' }), h('p.lb-forecast', { text: fc.text }));
 
     const right = h('div.lb-col');
     right.append(h('h3.lb-h', { text: 'Kodiak fleet board' }));
@@ -262,11 +278,11 @@ export function createLogbook(ctx, { close, openTicket, history }) {
     if (!board.length) right.append(h('p.lb-foot', { text: 'The tenders radio the fleet’s deliveries each evening.' }));
     else {
       const t = h('div.lb-table.lb-board');
-      t.append(h('div.lb-tr.lb-th', null, ['', 'Boat', 'Skipper', 'Today', 'Season'].map((x) => h('span', { text: x }))));
+      t.append(h('div.lb-tr.lb-th', null, [['', ''], ['Boat', ''], ['Skipper', ''], ['Today', '.num'], ['Season', '.num']].map(([x, c]) => h(`span${c}`, { text: x }))));
       for (const r of board) {
         t.append(
           h(`div.lb-tr${r.player ? '.me' : ''}`, null, [
-            h('span.num.lb-rank', { text: String(r.rank ?? '') }),
+            h('span.lb-idx.lb-rank', { text: String(r.rank ?? '') }),
             h('span.lb-boat-name', { text: r.player ? `F/V ${r.name}` : r.name }),
             h('span', { text: r.skipper ?? '' }),
             h('span.num', { text: r.today ? compactMoney(r.today) : '—' }),
@@ -276,6 +292,7 @@ export function createLogbook(ctx, { close, openTicket, history }) {
       }
       right.append(t, h('p.lb-foot', { text: 'Top the board after the sixth period to be the season’s Highliner.' }));
     }
+    if (fc?.text) right.append(h('h3.lb-h', { text: 'Marine forecast' }), h('p.lb-forecast', { text: fc.text }));
     cols.append(left, right);
     body.append(cols);
   }

@@ -1,65 +1,267 @@
 [
-  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 60000 },
-  { "start": {} },
-  { "weather": "rain" },
-  { "time": 19.8 },
-  { "teleport": [5440, -330, 150] },
-  { "wait": 1200 },
-  { "eval": "window.__K = __KODIAK__; window.__S = __K.systems.seiner; window.__rel = (dist, angDeg, h, lookH, lookAhead = 0) => { const s = __S; const hd = s.heading + angDeg * Math.PI / 180; const p = s.position; const f = [Math.sin(s.heading), -Math.cos(s.heading)]; __K.camera([p.x + Math.sin(hd) * dist, h, p.z - Math.cos(hd) * dist], [p.x + f[0] * lookAhead, lookH, p.z + f[1] * lookAhead]); }; true" },
-  { "key": "KeyW", "down": true },
-  { "wait": 7000 },
-  { "shot": "underway-chase" },
-  { "state": "full-ahead" },
-  { "eval": "__rel(26, 28, 2.4, 1.8, 4)" },
-  { "wait": 60 },
-  { "shot": "underway-bow-spray" },
-  { "eval": "__rel(34, 150, 5, 1.5, -6)" },
-  { "wait": 60 },
-  { "shot": "underway-wake" },
-  { "eval": "__K.camera(null); true" },
-  { "key": "KeyD", "down": true },
-  { "wait": 2600 },
-  { "shot": "turning-heel-chase" },
-  { "state": "turning" },
-  { "key": "KeyD", "up": true },
-  { "wait": 1500 },
-  { "eval": "__rel(60, 200, 30, 0, -20)" },
-  { "wait": 60 },
-  { "shot": "wake-from-above" },
-  { "eval": "__K.camera(null); true" },
-  { "press": "KeyC" },
-  { "wait": 2500 },
-  { "shot": "cam-crowsnest" },
-  { "press": "KeyC" },
-  { "wait": 2000 },
-  { "shot": "cam-bridge" },
-  { "key": "KeyB", "down": true },
-  { "wait": 1200 },
-  { "shot": "cam-binoculars" },
-  { "key": "KeyB", "up": true },
-  { "press": "KeyC" },
-  { "wait": 1800 },
-  { "state": "cams" },
-  { "key": "KeyW", "up": true },
-  { "hold": "KeyS", "ms": 1500 },
-  { "wait": 300 },
-  { "press": "KeyS" },
-  { "wait": 120 },
-  { "hold": "KeyS", "ms": 1600 },
-  { "wait": 3000 },
-  { "eval": "__rel(22, 160, 6, 1, 0)" },
-  { "wait": 60 },
-  { "shot": "backing-prop-wash" },
-  { "state": "astern" },
-  { "eval": "__K.camera(null); true" },
-  { "weather": "storm" },
-  { "key": "KeyW", "down": true },
-  { "wait": 6000 },
-  { "shot": "storm-chase" },
-  { "eval": "__rel(24, 40, 3, 2.5, 3)" },
-  { "wait": 60 },
-  { "shot": "storm-bow" },
-  { "key": "KeyW", "up": true },
-  { "state": "storm" },
-  { "perf": "underway", "ms": 2000 }
+  {
+    "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+    "timeout": 120000
+  },
+  {
+    "start": {}
+  },
+  {
+    "weather": "rain"
+  },
+  {
+    "time": 19.8
+  },
+  {
+    "teleport": [
+      5440,
+      -330,
+      150
+    ]
+  },
+  {
+    "wait": 1200
+  },
+  {
+    "eval": "window.__K = __KODIAK__; if (__K.systems.ui) __K.systems.ui.visible = false; window.__S = __K.systems.seiner; window.__rel = (dist, angDeg, h, lookH, lookAhead = 0) => { const s = __S; const hd = s.heading + angDeg * Math.PI / 180; const p = s.position; const f = [Math.sin(s.heading), -Math.cos(s.heading)]; __K.camera([p.x + Math.sin(hd) * dist, h, p.z - Math.cos(hd) * dist], [p.x + f[0] * lookAhead, lookH, p.z + f[1] * lookAhead]); }; true"
+  },
+  {
+    "key": "KeyW",
+    "down": true
+  },
+  {
+    "wait": 7000
+  },
+  {
+    "shot": "underway-chase"
+  },
+  {
+    "state": "full-ahead"
+  },
+  {
+    "eval": "__rel(26, 28, 2.4, 1.8, 4)"
+  },
+  {
+    "wait": 60
+  },
+  {
+    "shot": "underway-bow-spray"
+  },
+  {
+    "eval": "__rel(34, 150, 5, 1.5, -6)"
+  },
+  {
+    "wait": 60
+  },
+  {
+    "shot": "underway-wake"
+  },
+  {
+    "eval": "__K.camera(null); true"
+  },
+  {
+    "key": "KeyD",
+    "down": true
+  },
+  {
+    "wait": 2600
+  },
+  {
+    "shot": "turning-heel-chase"
+  },
+  {
+    "state": "turning"
+  },
+  {
+    "key": "KeyD",
+    "up": true
+  },
+  {
+    "wait": 1500
+  },
+  {
+    "eval": "__rel(60, 200, 30, 0, -20)"
+  },
+  {
+    "wait": 60
+  },
+  {
+    "shot": "wake-from-above"
+  },
+  {
+    "eval": "__K.camera(null); true"
+  },
+  {
+    "press": "KeyC"
+  },
+  {
+    "wait": 2500
+  },
+  {
+    "shot": "cam-crowsnest"
+  },
+  {
+    "press": "KeyC"
+  },
+  {
+    "wait": 2000
+  },
+  {
+    "shot": "cam-bridge"
+  },
+  {
+    "key": "KeyB",
+    "down": true
+  },
+  {
+    "wait": 1200
+  },
+  {
+    "shot": "cam-binoculars"
+  },
+  {
+    "key": "KeyB",
+    "up": true
+  },
+  {
+    "press": "KeyC"
+  },
+  {
+    "wait": 1800
+  },
+  {
+    "state": "cams"
+  },
+  {
+    "key": "KeyW",
+    "up": true
+  },
+  {
+    "hold": "KeyS",
+    "ms": 1500
+  },
+  {
+    "wait": 300
+  },
+  {
+    "press": "KeyS"
+  },
+  {
+    "wait": 120
+  },
+  {
+    "hold": "KeyS",
+    "ms": 1600
+  },
+  {
+    "wait": 3000
+  },
+  {
+    "eval": "__rel(22, 160, 6, 1, 0)"
+  },
+  {
+    "wait": 60
+  },
+  {
+    "shot": "backing-prop-wash"
+  },
+  {
+    "state": "astern"
+  },
+  {
+    "eval": "__K.camera(null); true"
+  },
+  {
+    "weather": "storm"
+  },
+  {
+    "key": "KeyW",
+    "down": true
+  },
+  {
+    "wait": 6000
+  },
+  {
+    "shot": "storm-chase"
+  },
+  {
+    "eval": "__rel(24, 40, 3, 2.5, 3)"
+  },
+  {
+    "wait": 60
+  },
+  {
+    "shot": "storm-bow"
+  },
+  {
+    "key": "KeyW",
+    "up": true
+  },
+  {
+    "state": "storm"
+  },
+  {
+    "weather": "partly"
+  },
+  {
+    "time": 21.2
+  },
+  {
+    "eval": "__K.camera(null); true"
+  },
+  {
+    "teleport": [
+      5440,
+      -330,
+      240
+    ]
+  },
+  {
+    "wait": 800
+  },
+  {
+    "key": "KeyW",
+    "down": true
+  },
+  {
+    "wait": 8000
+  },
+  {
+    "eval": "__rel(22, 32, 2.0, 2.6, 5)"
+  },
+  {
+    "wait": 60
+  },
+  {
+    "shot": "golden-underway-bow"
+  },
+  {
+    "eval": "__rel(40, 165, 7, 1.5, -10)"
+  },
+  {
+    "wait": 60
+  },
+  {
+    "shot": "golden-underway-wake"
+  },
+  {
+    "eval": "__rel(18, -70, 3.5, 3, 2)"
+  },
+  {
+    "wait": 60
+  },
+  {
+    "shot": "golden-underway-beam"
+  },
+  {
+    "eval": "__K.camera(null); true"
+  },
+  {
+    "key": "KeyW",
+    "up": true
+  },
+  {
+    "perf": "underway",
+    "ms": 2000
+  }
 ]

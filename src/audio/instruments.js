@@ -26,7 +26,7 @@ export function pad(kit, dest, t, midis, { dur = 4, vel = 0.5, attack = 1.4, rel
   env.gain.linearRampToValueAtTime(vel * 0.22, t + attack);
   env.gain.setValueAtTime(vel * 0.22, t + Math.max(attack, dur));
   env.gain.setTargetAtTime(0, t + Math.max(attack, dur), release / 5);
-  return end;
+  return end + 0.05;
 }
 
 // Plucked string (koto/harp-like): harmonic-rich wave with a closing filter and an exponential decay.

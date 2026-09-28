@@ -69,16 +69,18 @@ export const TITLE_SHOTS = [
     lookTo: { x: 1500, z: 950, y: 240 },
   },
   {
-    id: 'sitkalidak',
-    label: 'Sitkalidak Strait',
+    // From Sitkalidak Strait into the sun over Three Saints Bay, where Shelikhov's 1784 post stood; the Old Harbor
+    // fleet usually has a boat working the strait below.
+    id: 'three-saints',
+    label: 'Three Saints Bay',
     kind: 'path',
     hours: 21.5,
-    duration: 12,
+    duration: 13,
     fov: 50,
-    from: { x: 1650, z: 5200, h: 18 },
-    to: { x: 1520, z: 5330, h: 12 },
-    lookFrom: { x: 1380, z: 5520, y: 5 },
-    lookTo: { x: 1360, z: 5530, y: 4 },
+    from: { x: -60, z: 5930, h: 34 },
+    to: { x: -150, z: 5870, h: 26 },
+    lookFrom: { x: -690, z: 4700, y: 62 },
+    lookTo: { x: -730, z: 4730, y: 55 },
   },
   {
     id: 'chiniak-dusk',

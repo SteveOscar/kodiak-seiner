@@ -1,0 +1,20 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 120000 },
+  { "start": { "freeExplore": true } },
+  { "time": 20.2 },
+  { "weather": "clear" },
+  { "teleport": [5850, -520, 0] },
+  { "wait": 2000 },
+  { "eval": "document.getElementById('ui').style.visibility = 'hidden'; window.__W = __KODIAK__.systems.wildlife; __KODIAK__.systems.fishing.debug.stage({ x: 5850, z: -580, phase: 'hauling', hauled: 0.55 })" },
+  { "until": "__KODIAK__.systems.fishing.state === 'hauling' && __KODIAK__.systems.net.hauled > 0.5", "timeout": 30000 },
+  { "wait": 9000 },
+  { "eval": "(() => { const f = __W.qa.flocks.find(f => f.kind === 'swarm'); const s = __KODIAK__.systems.seiner; const p = s.position; const h = s.heading; if (!f) return ['no swarm', __W.debugState().flocks]; __KODIAK__.camera([f.x + Math.cos(h + 0.6) * 38, 6, f.z + Math.sin(h + 0.6) * 38], [f.x, 5, f.z]); return [f, __W.debugState().flocks]; })()" },
+  { "wait": 500 },
+  { "shot": "bag-swarm" },
+  { "wait": 1500 },
+  { "shot": "bag-swarm-b" },
+  { "eval": "(() => { const f = __W.qa.flocks.find(f => f.kind === 'swarm'); if (!f) return 0; __KODIAK__.camera([f.x + 12, 2.2, f.z + 9], [f.x, 4, f.z]); return 1; })()" },
+  { "wait": 600 },
+  { "shot": "bag-swarm-low" },
+  { "state": "end" }
+]

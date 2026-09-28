@@ -11,6 +11,7 @@ import { createHullAtlas, createDeckTexture, createGrimeTexture, createWebTextur
 import { createCrewman } from './crew.js';
 import { mulberry32 } from '../../core/rng.js';
 import { createSeaPlane, patchWaterline } from './waterline.js';
+import { ARCS } from './fx.js';
 
 export const C = {
   white: '#ecebe4',
@@ -141,28 +142,46 @@ function buildPile(form, mats, webTex, rnd) {
 
   // Corks and rings.
   const b = createBuilder();
-  const cork = new THREE.CapsuleGeometry(0.075, 0.06, 1, 6);
-  // The corkline lies in folds (fakes) along the starboard side of the pile, stacked two deep as it came off the
-  // block: uneven loops of cork strings, slumped and overlapping, with the odd white marker cork.
-  const folds = 26;
+  // Seine corks are threaded on the corkline through their long axis (~20 x 14 cm foam floats).
+  const cork = new THREE.CapsuleGeometry(0.068, 0.07, 2, 8);
+  cork.rotateX(Math.PI / 2);
+  // The corkline is stacked the way a deckhand flakes it off the block: long fore-and-aft folds laid side by side
+  // along the starboard side of the pile, each turning back at the ends, three tiers deep. From the crow's nest it
+  // reads as a tidy yellow ridge beside the skiff, with the odd faded or white marker cork.
+  const tones = [C.yellow, '#d9a526', '#ebbd3a', '#c99a2a'];
+  const spacing = 0.19;
+  const dx = 0.155;
   let n = 0;
-  for (let layer = 0; layer < 2; layer++) {
+  const addCork = (x, z, layer, yaw, lift = 0) => {
+    const halfW = form.halfWidthAt(form.tOfZ(z), form.P.deckAft + 0.3) - 0.12;
+    if (x > halfW - 0.1 || z < z0 + 0.25 || z > z1 - 0.15) return;
+    const y = heightAt(x, z, halfW) + 0.06 + layer * 0.115 + lift + (rnd() - 0.5) * 0.025;
+    const marker = n++ % 29 === 0;
+    const color = marker ? C.corkWhite : tones[Math.floor(rnd() * tones.length)];
+    b.add('cork', cork, { p: [x, y, z], r: [(rnd() - 0.5) * 0.25, yaw + (rnd() - 0.5) * 0.3, rnd() * 3], color, uvScale: 2 });
+  };
+  for (let layer = 0; layer < 3; layer++) {
+    const folds = 9 - layer;
+    const xStart = 1.02 + layer * dx * 0.5;
+    const za = z0 + 0.45 + layer * 0.12;
+    const zb = z1 - 0.3 - layer * 0.1;
     for (let f = 0; f < folds; f++) {
-      const zc = z0 + 0.5 + ((f + layer * 0.5) / (folds - 1)) * (z1 - z0 - 0.85);
-      const dir = (f + layer) % 2 ? -1 : 1;
-      const x0 = 0.35 + rnd() * 0.3;
-      const reach = 1.1 + rnd() * 0.75;
-      const count = 6 + Math.floor(rnd() * 4);
-      const bulge = 0.06 + rnd() * 0.12;
-      for (let k = 0; k < count; k++) {
-        const u = k / (count - 1);
-        const x = x0 + (dir > 0 ? u : 1 - u) * reach + (rnd() - 0.5) * 0.09;
-        const z = zc + Math.sin(u * Math.PI) * bulge * dir + (rnd() - 0.5) * 0.08;
-        const halfW = form.halfWidthAt(form.tOfZ(z), form.P.deckAft + 0.3) - 0.12;
-        if (x > halfW - 0.15) continue;
-        const y = heightAt(x, z, halfW) + 0.07 + layer * (0.09 + rnd() * 0.05);
-        const white = n++ % 13 === 0;
-        b.add('cork', cork, { p: [x, y, z], r: [(rnd() - 0.5) * 0.7, (rnd() - 0.5) * 0.9, Math.PI / 2 + (rnd() - 0.5) * 0.6], color: white ? C.corkWhite : C.yellow, uvScale: 2 });
+      const x = xStart + f * dx + (rnd() - 0.5) * 0.02;
+      // Folds are hand-laid: their ends wander, the middle of the stack crowns a little and each fold snakes.
+      const fa = za + rnd() * 0.3;
+      const fb = zb - rnd() * 0.3;
+      const crown = Math.sin((Math.PI * (f + 0.5)) / folds) * 0.05;
+      const wave = 0.02 + rnd() * 0.03;
+      const phase = rnd() * 6;
+      const count = Math.floor((fb - fa) / spacing);
+      for (let k = 0; k <= count; k++) {
+        const z = fa + k * spacing + (rnd() - 0.5) * 0.04;
+        addCork(x + Math.sin(z * 2.3 + phase) * wave + (rnd() - 0.5) * 0.025, z, layer, Math.cos(z * 2.3 + phase) * wave * 2, crown);
+      }
+      // The bight where the line doubles back to the next fold.
+      if (f < folds - 1) {
+        const zEnd = f % 2 ? fa - 0.1 : fb + 0.1;
+        addCork(x + dx * 0.5, zEnd, layer, Math.PI / 2, crown);
       }
     }
   }
@@ -187,22 +206,23 @@ function buildPile(form, mats, webTex, rnd) {
 // Galvanized plow (CQR-style) anchor stowed on a bow roller: the shank lies in the roller chute from `heel` (aft) to
 // `head` (forward), and the ploughshare hangs from the head, tip down, ahead of the stem.
 function plowAnchor(b, heel, head) {
-  const galv = '#b9bcba';
-  addTube(b, 'paint', heel, head, 0.045, { color: galv, seg: 6, open: false });
-  b.add('paint', shapes.cyl(0.075, 0.075, 0.07, 10), { p: heel, r: [0, 0, Math.PI / 2], color: galv });
+  // Weathered hot-dip galvanizing: a dull mid grey, darker than fresh zinc so it doesn't flare in low sun.
+  const galv = '#8f9391';
+  addTube(b, 'paint', heel, head, 0.04, { color: galv, seg: 6, open: false });
+  b.add('paint', shapes.cyl(0.065, 0.065, 0.07, 10), { p: heel, r: [0, 0, Math.PI / 2], color: galv });
   const share = new THREE.Shape();
   share.moveTo(0, 0);
-  share.lineTo(0.27, 0.46);
-  share.quadraticCurveTo(0.13, 0.62, 0, 0.72);
+  share.lineTo(0.17, 0.3);
+  share.quadraticCurveTo(0.09, 0.42, 0, 0.48);
   share.closePath();
-  const plate = new THREE.ExtrudeGeometry(share, { depth: 0.025, bevelEnabled: false, curveSegments: 4 });
-  // Two plates in a V, keel forward, wings swept aft. Mirroring would flip the winding, so the port plate is the
-  // starboard plate rotated half a turn about the vertical.
-  for (const yaw of [-0.6, Math.PI + 0.6]) {
+  const plate = new THREE.ExtrudeGeometry(share, { depth: 0.02, bevelEnabled: true, bevelThickness: 0.006, bevelSize: 0.006, bevelSegments: 1, curveSegments: 4 });
+  // Two plates in a V, keel forward, wings swept aft, tucked against the stem under the roller. Mirroring would flip
+  // the winding, so the port plate is the starboard plate rotated half a turn about the vertical.
+  for (const yaw of [-0.7, Math.PI + 0.7]) {
     const g = plate.clone();
     g.rotateY(yaw);
-    g.rotateX(0.12);
-    b.add('paint', g, { p: [head[0], head[1] - 0.74, head[2] + 0.02], color: '#aeb1af' });
+    g.rotateX(0.22);
+    b.add('paint', g, { p: [head[0], head[1] - 0.5, head[2] + 0.12], color: '#848886' });
   }
 }
 
@@ -451,7 +471,13 @@ export function buildSeinerModel(ctx, { name = 'Northern Dawn', style = {} } = {
     }
     // Console: pedestal, wheel, throttles, compass, plotter.
     b.add('paint', shapes.rbox(1.35, 1.0, 0.55, 0.05), { p: [0, roofY + 0.5, -4.35], color: C.white });
-    b.add('paint', shapes.box(1.3, 0.05, 0.5), { p: [0, roofY + 1.02, -4.35], r: [0.25, 0, 0], color: C.dark });
+    // Sloped white dash with an inset instrument panel.
+    b.add('paint', shapes.rbox(1.34, 0.06, 0.52, 0.02), { p: [0, roofY + 1.02, -4.35], r: [0.25, 0, 0], color: C.white2 });
+    b.add('paint', shapes.box(0.95, 0.02, 0.32), { p: [0.08, roofY + 1.05, -4.37], r: [0.25, 0, 0], color: C.dark });
+    for (const [x, c] of [[0.2, '#c9d6c2'], [0.36, '#c9d6c2'], [0.52, '#d9c9a0']]) {
+      b.add('metal', shapes.cyl(0.045, 0.045, 0.02, 14), { p: [x, roofY + 1.065, -4.33], r: [0.25, 0, 0], color: C.galv });
+      b.add('paint', shapes.cyl(0.036, 0.036, 0.022, 14), { p: [x, roofY + 1.07, -4.33], r: [0.25, 0, 0], color: c });
+    }
     b.add('glass', shapes.box(0.42, 0.28, 0.02), { p: [-0.35, roofY + 1.12, -4.36], r: [-0.3, 0, 0] });
     b.add('metal', shapes.torus(0.23, 0.018, 6, 22), { p: [0, roofY + 0.78, -4.03], r: [-0.35, 0, 0], color: C.galv });
     for (let i = 0; i < 3; i++) {
@@ -550,7 +576,7 @@ export function buildSeinerModel(ctx, { name = 'Northern Dawn', style = {} } = {
     b.add('paint', shapes.box(0.3, 0.22, 0.6), { p: [0, stemY, stemZ + 0.05], color: C.dark });
     b.add('metal', shapes.cyl(0.1, 0.1, 0.26, 10), { p: [0, stemY + 0.08, stemZ - 0.22], r: [0, 0, Math.PI / 2], color: C.galv });
     // Galvanized plow anchor stowed on the roller: shank over the roller, the ploughshare tucked against the stem.
-    plowAnchor(b, [0, stemY + 0.16, stemZ + 0.35], [0, stemY + 0.06, stemZ - 0.42]);
+    plowAnchor(b, [0, stemY + 0.15, stemZ + 0.4], [0, stemY + 0.05, stemZ - 0.3]);
   }
   // Bow rail on stanchions above the cap.
   {
@@ -683,22 +709,35 @@ export function buildSeinerModel(ctx, { name = 'Northern Dawn', style = {} } = {
   block.position.set(tip[0], tip[1] - 0.12, tip[2]);
   {
     const fb = createBuilder();
-    fb.add('frame', shapes.cyl(0.06, 0.06, 0.4, 8), { p: [0, -0.2, 0], color: C.galv });
-    fb.add('frame', shapes.box(0.62, 0.1, 0.18), { p: [0, -0.42, 0], color: C.red });
-    for (const x of [-0.26, 0.26]) {
-      fb.add('frame', shapes.box(0.06, 0.62, 0.16), { p: [x, -0.72, 0], color: C.red });
-      fb.add('frame', shapes.cyl(0.5, 0.5, 0.035, 20), { p: [x * 0.92, -0.98, 0.02], r: [0, 0, Math.PI / 2], color: C.red });
-    }
-    fb.add('frame', shapes.cyl(0.17, 0.17, 0.32, 14), { p: [0.44, -0.98, 0.02], r: [0, 0, Math.PI / 2], color: C.red });
-    fb.add('frame', shapes.cyl(0.07, 0.07, 0.95, 8), { p: [0, -0.98, 0.02], r: [0, 0, Math.PI / 2], color: C.galv });
+    // Fixed: swivel and shackle under the boom tip, the yoke down both cheeks, the hydraulic motor and the axle.
+    fb.add('frame', shapes.cyl(0.06, 0.06, 0.4, 10), { p: [0, -0.2, 0], color: C.galv });
+    fb.add('frame', shapes.torus(0.07, 0.022, 6, 14), { p: [0, -0.02, 0], r: [0, Math.PI / 2, 0], color: C.galv });
+    fb.add('frame', shapes.rbox(0.64, 0.11, 0.2, 0.035), { p: [0, -0.42, 0], color: C.red });
+    for (const x of [-0.27, 0.27]) fb.add('frame', shapes.rbox(0.07, 0.62, 0.17, 0.025), { p: [x, -0.72, 0], color: C.red });
+    fb.add('frame', shapes.cyl(0.16, 0.17, 0.3, 20), { p: [0.44, -0.98, 0.02], r: [0, 0, Math.PI / 2], color: C.red });
+    fb.add('frame', shapes.cyl(0.1, 0.1, 0.06, 16), { p: [0.61, -0.98, 0.02], r: [0, 0, Math.PI / 2], color: C.dark });
+    fb.add('frame', shapes.cyl(0.07, 0.07, 0.95, 12), { p: [0, -0.98, 0.02], r: [0, 0, Math.PI / 2], color: C.galv });
     const frame = new THREE.Mesh(fb.build('frame'), mats.paint);
     frame.castShadow = true;
+    // Turning: the rubber-lined V sheave between red side plates with lightening holes (they show it spinning).
+    const wb = createBuilder();
     const prof = [
       [0.1, -0.2], [0.52, -0.2], [0.55, -0.17], [0.34, -0.03], [0.34, 0.03], [0.55, 0.17], [0.52, 0.2], [0.1, 0.2],
     ].map(([r, y]) => new THREE.Vector2(r, y));
-    const sg = new THREE.LatheGeometry(prof, 28);
+    const sg = new THREE.LatheGeometry(prof, 40);
     sg.rotateZ(Math.PI / 2);
-    const sheave = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ color: 0x1a1b1c, roughness: 0.75 }));
+    wb.add('wheel', sg, { color: '#1a1b1c', uvScale: 2 });
+    for (const x of [-0.243, 0.243]) {
+      const side = Math.sign(x);
+      wb.add('wheel', shapes.cyl(0.5, 0.5, 0.035, 40), { p: [x, 0, 0], r: [0, 0, Math.PI / 2], color: C.red });
+      wb.add('wheel', shapes.torus(0.5, 0.02, 6, 40), { p: [x, 0, 0], r: [0, Math.PI / 2, 0], color: '#8f231c' });
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        wb.add('wheel', shapes.cyl(0.075, 0.075, 0.01, 14), { p: [x + side * 0.018, Math.sin(a) * 0.3, Math.cos(a) * 0.3], r: [0, 0, Math.PI / 2], color: '#2a1512' });
+      }
+      wb.add('wheel', shapes.cyl(0.12, 0.12, 0.05, 18), { p: [x + side * 0.03, 0, 0], r: [0, 0, Math.PI / 2], color: C.red });
+    }
+    const sheave = new THREE.Mesh(wb.build('wheel'), mats.paint);
     sheave.position.set(0, -0.98, 0.02);
     sheave.castShadow = true;
     sheave.name = 'sheave';
@@ -763,24 +802,26 @@ export function buildSeinerModel(ctx, { name = 'Northern Dawn', style = {} } = {
     block: new THREE.Vector3(0, tip[1] - 1.1, tip[2] + 0.02),
     bittPort: new THREE.Vector3(...bittPts[0]),
     bittStarboard: new THREE.Vector3(...bittPts[1]),
-    eye: new THREE.Vector3(0, roofY + 1.66, -3.7),
+    // Skipper standing beside the flying-bridge console on its starboard side: the wheel and throttles in the corner
+    // of the eye, the bow clear past the dash.
+    eye: new THREE.Vector3(0.85, roofY + 1.74, -3.75),
     stackTop: new THREE.Vector3(stackX, stackTop + 0.1, stackZ),
     mastTop: new THREE.Vector3(0, mastTop, mastZ),
     anchorRoller: new THREE.Vector3(0, form.sheer(0.004) + 0.08, -form.L / 2 - 0.15),
   };
 
   const lightDefs = [
-    { id: 'port', pos: [-2.27, sideLightY, -4.18], color: 0xff2a1a, size: 0.55, intensity: 1.6 },
-    { id: 'starboard', pos: [2.27, sideLightY, -4.18], color: 0x2aff7a, size: 0.55, intensity: 1.4 },
-    { id: 'masthead', pos: [0, 10.65, mastZ - 0.32], color: 0xfff2dc, size: 0.6, intensity: 1.5 },
-    { id: 'stern', pos: [2.3, P.sheerStern + 0.66, 8.85], color: 0xfff2dc, size: 0.45, intensity: 1.4 },
+    { id: 'port', pos: [-2.27, sideLightY, -4.18], color: 0xff2a1a, size: 0.55, intensity: 1.6, arc: ARCS.port },
+    { id: 'starboard', pos: [2.27, sideLightY, -4.18], color: 0x2aff7a, size: 0.55, intensity: 1.4, arc: ARCS.starboard },
+    { id: 'masthead', pos: [0, 10.65, mastZ - 0.32], color: 0xfff2dc, size: 0.6, intensity: 1.5, arc: ARCS.masthead },
+    { id: 'stern', pos: [2.3, P.sheerStern + 0.66, 8.85], color: 0xfff2dc, size: 0.45, intensity: 1.4, arc: ARCS.stern },
     { id: 'anchor', pos: [0, mastTop + 0.16, mastZ], color: 0xfff2dc, size: 0.6, intensity: 1.5 },
     { id: 'fishRed', pos: [0, 11.75, mastZ - 0.2], color: 0xff2a1a, size: 0.5, intensity: 1.5 },
     { id: 'fishWhite', pos: [0, 11.2, mastZ - 0.2], color: 0xfff2dc, size: 0.5, intensity: 1.3 },
-    { id: 'floodP', pos: [-1.12, yardY - 0.3, mastZ + 0.24], color: 0xffe2b0, size: 1.4, intensity: 2.0 },
-    { id: 'floodS', pos: [1.12, yardY - 0.3, mastZ + 0.24], color: 0xffe2b0, size: 1.4, intensity: 2.0 },
-    { id: 'floodHP', pos: [-1.65, houseTop + 0.18, houseZ1 + 0.02], color: 0xffe2b0, size: 1.0, intensity: 1.6 },
-    { id: 'floodHS', pos: [1.65, houseTop + 0.18, houseZ1 + 0.02], color: 0xffe2b0, size: 1.0, intensity: 1.6 },
+    { id: 'floodP', pos: [-1.12, yardY - 0.3, mastZ + 0.24], color: 0xffe2b0, size: 1.4, intensity: 2.0, arc: ARCS.floodAft },
+    { id: 'floodS', pos: [1.12, yardY - 0.3, mastZ + 0.24], color: 0xffe2b0, size: 1.4, intensity: 2.0, arc: ARCS.floodAft },
+    { id: 'floodHP', pos: [-1.65, houseTop + 0.18, houseZ1 + 0.02], color: 0xffe2b0, size: 1.0, intensity: 1.6, arc: ARCS.floodAft },
+    { id: 'floodHS', pos: [1.65, houseTop + 0.18, houseZ1 + 0.02], color: 0xffe2b0, size: 1.0, intensity: 1.6, arc: ARCS.floodAft },
   ];
 
   function setName(n) {

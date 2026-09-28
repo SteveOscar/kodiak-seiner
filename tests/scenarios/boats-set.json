@@ -1,0 +1,195 @@
+[
+  {
+    "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+    "timeout": 120000
+  },
+  {
+    "start": {
+      "freeExplore": true
+    }
+  },
+  {
+    "time": 20.4
+  },
+  {
+    "weather": "partly"
+  },
+  {
+    "teleport": [
+      5850,
+      -520,
+      200
+    ]
+  },
+  {
+    "wait": 2000
+  },
+  {
+    "eval": "window.__K = __KODIAK__; window.__S = __K.systems.seiner; window.__F = __K.systems.skiff; __K.systems.ui.visible = false; window.__skiffLog = []; __K.ctx.events.on('skiff:state', (e) => __skiffLog.push(e.state)); true"
+  },
+  {
+    "key": "KeyW",
+    "down": true
+  },
+  {
+    "wait": 2500
+  },
+  {
+    "press": "Space"
+  },
+  {
+    "wait": 300
+  },
+  {
+    "eval": "({ fishing: __K.systems.fishing.state, skiff: __F.state, cam: __K.systems.cameraRig.mode })"
+  },
+  {
+    "wait": 1400
+  },
+  {
+    "shot": "set-01-letgo-crowsnest"
+  },
+  {
+    "eval": "const p = __F.position; const s = __S.position; __K.camera([s.x + 26, 9, s.z + 30], [p.x, 0.5, p.z]); true"
+  },
+  {
+    "wait": 300
+  },
+  {
+    "shot": "set-02-skiff-off-the-stern"
+  },
+  {
+    "eval": "__K.camera(null); true"
+  },
+  {
+    "key": "KeyD",
+    "down": true
+  },
+  {
+    "wait": 9000
+  },
+  {
+    "shot": "set-03-laying-crowsnest"
+  },
+  {
+    "eval": "({ fishing: __K.systems.fishing.state, payout: __K.systems.net.payout.toFixed(0), skiff: __F.state, strain: __F.strain.toFixed(2) })"
+  },
+  {
+    "eval": "const p = __F.position; __K.camera([p.x + 14, 4, p.z + 10], [p.x, 0.6, p.z]); true"
+  },
+  {
+    "wait": 300
+  },
+  {
+    "shot": "set-04-skiff-holding-end"
+  },
+  {
+    "eval": "__K.camera(null); true"
+  },
+  {
+    "wait": 9000
+  },
+  {
+    "key": "KeyD",
+    "up": true
+  },
+  {
+    "key": "KeyW",
+    "up": true
+  },
+  {
+    "shot": "set-05-circle-crowsnest"
+  },
+  {
+    "eval": "({ fishing: __K.systems.fishing.state, payout: __K.systems.net.payout.toFixed(0), skiff: __F.state, d: Math.hypot(__F.position.x - __S.position.x, __F.position.z - __S.position.z).toFixed(0) })"
+  },
+  {
+    "eval": "__K.systems.fishing.debug.stage({ x: 5850, z: -580, phase: 'pursing', pursed: 0.3 })"
+  },
+  {
+    "until": "__KODIAK__.systems.fishing.state === 'pursing'",
+    "timeout": 20000
+  },
+  {
+    "wait": 6000
+  },
+  {
+    "eval": "({ skiff: __F.state, phase: __K.state().skiff.phase, strain: __F.strain.toFixed(2) })"
+  },
+  {
+    "eval": "const a = __S.position, b = __F.position; const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2; __K.camera([mx + 30, 16, mz + 34], [mx, 0.5, mz]); true"
+  },
+  {
+    "wait": 300
+  },
+  {
+    "shot": "set-06-towoff-wide"
+  },
+  {
+    "eval": "const b = __F.position; const a = __S.position; const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz); __K.camera([a.x - dx / d * 8 + dz / d * 7, 3.2, a.z - dz / d * 8 - dx / d * 7], [b.x, 1, b.z]); true"
+  },
+  {
+    "wait": 300
+  },
+  {
+    "shot": "set-07-towline-low"
+  },
+  {
+    "eval": "__K.camera(null); __K.systems.fishing.debug.stage({ x: 5850, z: -580, phase: 'hauling', hauled: 0.5 })"
+  },
+  {
+    "until": "__KODIAK__.systems.fishing.state === 'hauling'",
+    "timeout": 30000
+  },
+  {
+    "wait": 4000
+  },
+  {
+    "eval": "const s = __S; const p = s.position; const hd = s.heading + 2.4; __K.camera([p.x + Math.sin(hd) * 16, 7, p.z - Math.cos(hd) * 16], [p.x, 3.5, p.z]); true"
+  },
+  {
+    "wait": 300
+  },
+  {
+    "shot": "set-08-hauling-block"
+  },
+  {
+    "eval": "__K.camera(null); true"
+  },
+  {
+    "until": "__KODIAK__.systems.fishing.state === 'report'",
+    "timeout": 90000
+  },
+  {
+    "wait": 1200
+  },
+  {
+    "eval": "__K.ctx.game.resume(); __K.systems.ui.visible = false; __K.ctx.state.mode"
+  },
+  {
+    "until": "__KODIAK__.systems.skiff.state === 'returning' && __KODIAK__.state().skiff.phase === 'winch'",
+    "timeout": 60000
+  },
+  {
+    "wait": 700
+  },
+  {
+    "eval": "const s = __S; const p = s.position; const hd = s.heading + 2.7; __K.camera([p.x + Math.sin(hd) * 20, 6, p.z - Math.cos(hd) * 20], [p.x, 2.5, p.z]); true"
+  },
+  {
+    "wait": 100
+  },
+  {
+    "shot": "set-09-winched-up-ramp"
+  },
+  {
+    "until": "__KODIAK__.systems.skiff.state === 'stowed'",
+    "timeout": 20000
+  },
+  {
+    "eval": "({ log: __skiffLog.join(' > '), fishing: __K.systems.fishing.state })"
+  },
+  {
+    "state": "end"
+  }
+]

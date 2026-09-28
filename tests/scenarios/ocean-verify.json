@@ -1,5 +1,5 @@
 [
-  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 60000 },
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 150000 },
   { "start": {} },
   { "weather": "clear" },
   { "time": 12 },

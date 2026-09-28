@@ -1,40 +1,242 @@
 [
-  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 60000 },
-  { "start": {} },
-  { "time": 20.9 },
-  { "weather": "clear" },
-  { "teleport": [-340, 5540, 250] },
-  { "wait": 1500 },
-  { "eval": "window.__K = __KODIAK__; window.__P = __K.systems.player; window.__B = [-340, 5540]; __P.debugAshore()" },
-  { "eval": "window.__trk = (dist, angDeg, h, lookH) => { cancelAnimationFrame(window.__trkId); const f = () => { const p = __P.position; const a = __P.heading + angDeg * Math.PI / 180; __K.camera([p.x + Math.sin(a) * dist, p.y + h, p.z - Math.cos(a) * dist], [p.x, p.y + lookH, p.z]); window.__trkId = requestAnimationFrame(f); }; f(); }; window.__stop = () => { cancelAnimationFrame(window.__trkId); __K.camera(null); }; window.__follow = (pts, run) => { window.__done = false; let i = 0; cancelAnimationFrame(window.__folId); const f = () => { const p = __P.position; while (i < pts.length && Math.hypot(pts[i][0] - p.x, pts[i][1] - p.z) < 2.2) i++; if (i >= pts.length) { __P.debugDrive(null); window.__done = true; return; } const dx = pts[i][0] - p.x, dz = pts[i][1] - p.z, d = Math.hypot(dx, dz); __P.debugDrive({ mx: dx / d, mz: dz / d, run }); window.__folId = requestAnimationFrame(f); }; f(); }; window.__orbit = (yawRad, dPitchPx) => { const c = __K.ctx.camera; const v = new __K.ctx.THREE.Vector3(); c.getWorldDirection(v); const cur = Math.atan2(v.x, -v.z); let d = yawRad - cur; d = Math.atan2(Math.sin(d), Math.cos(d)); const dx = -d / 0.0048; const gl = document.getElementById('gl'); gl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, buttons: 1 })); window.dispatchEvent(new MouseEvent('mousemove', { movementX: dx, movementY: dPitchPx || 0 })); setTimeout(() => window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, buttons: 0 })), 150); return d; }; window.__toBoat = () => { const p = __P.position; return Math.atan2(__B[0] - p.x, -(__B[1] - p.z)); }; true" },
-  { "wait": 2500 },
-  { "shot": "h01-beach" },
-  { "eval": "__P.placeAt(-458, 5457, 330); __follow([[-464,5445],[-464,5427],[-476,5433],[-482,5427]], false)" },
-  { "wait": 3500 },
-  { "shot": "h02-climb-follow" },
-  { "state": "climb" },
-  { "eval": "__trk(9, 60, 1.5, 1.0)" },
-  { "wait": 1200 },
-  { "shot": "h03-climb-side" },
-  { "eval": "__trk(9, -70, 2.5, 1.0)" },
-  { "wait": 900 },
-  { "shot": "h04-climb-side2" },
-  { "eval": "__stop()" },
-  { "until": "window.__done", "timeout": 40000 },
-  { "eval": "__P.placeAt(-490, 5431, 280); __follow([[-506,5439],[-512,5433]], false)" },
-  { "until": "window.__done", "timeout": 30000 },
-  { "wait": 800 },
-  { "eval": "__orbit(__toBoat(), 20)" },
-  { "wait": 2500 },
-  { "shot": "h05-summit-follow" },
-  { "state": "summit" },
-  { "eval": "const p = __P.position; const h = __toBoat(); __K.camera([p.x - Math.sin(h) * 4.2 + Math.cos(h) * 1.4, p.y + 2.3, p.z + Math.cos(h) * 4.2 + Math.sin(h) * 1.4], [p.x + Math.sin(h) * 60, p.y - 25, p.z - Math.cos(h) * 60]); true" },
-  { "wait": 800 },
-  { "shot": "h06-summit-hero" },
-  { "time": 21.6 },
-  { "wait": 1200 },
-  { "shot": "h07-summit-hero-late" },
-  { "eval": "__K.camera(null); true" },
-  { "wait": 1500 },
-  { "shot": "h08-summit-follow-late" }
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+  "timeout": 60000
+ },
+ {
+  "start": {}
+ },
+ {
+  "time": 19.75
+ },
+ {
+  "weather": "clear"
+ },
+ {
+  "teleport": [
+   1400,
+   -5650,
+   200
+  ]
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "eval": "window.__K = __KODIAK__; window.__P = __K.systems.player; window.__trk = (dist, angDeg, h, lookH) => { cancelAnimationFrame(window.__trkId); const f = () => { const p = __P.position; const a = __P.heading + angDeg * Math.PI / 180; __K.camera([p.x + Math.sin(a) * dist, p.y + h, p.z - Math.cos(a) * dist], [p.x, p.y + lookH, p.z]); window.__trkId = requestAnimationFrame(f); }; f(); }; window.__stop = () => { cancelAnimationFrame(window.__trkId); __K.camera(null); }; window.__follow = (pts, run) => { window.__done = false; let i = 0; cancelAnimationFrame(window.__folId); const f = () => { const p = __P.position; while (i < pts.length && Math.hypot(pts[i][0] - p.x, pts[i][1] - p.z) < 1.8) i++; if (i >= pts.length) { __P.debugDrive(null); window.__done = true; return; } const dx = pts[i][0] - p.x, dz = pts[i][1] - p.z, d = Math.hypot(dx, dz); __P.debugDrive({ mx: dx / d, mz: dz / d, run }); window.__folId = requestAnimationFrame(f); }; f(); }; window.__orbit = (yawRad, dPitchPx) => { const c = __K.ctx.camera; const v = new __K.ctx.THREE.Vector3(); c.getWorldDirection(v); const cur = Math.atan2(v.x, -v.z); let d = yawRad - cur; d = Math.atan2(Math.sin(d), Math.cos(d)); const dx = -d / 0.0048; const gl = document.getElementById('gl'); gl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, buttons: 1 })); window.dispatchEvent(new MouseEvent('mousemove', { movementX: dx, movementY: dPitchPx || 0 })); setTimeout(() => window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, buttons: 0 })), 150); return d; }; window.__toBoat = () => { const p = __P.position, s = __K.systems.seiner.position; return Math.atan2(s.x - p.x, -(s.z - p.z)); }; window.__hero = (back, up, side, lookDist, lookDrop) => { const p = __P.position; const h = __toBoat(); __K.camera([p.x - Math.sin(h) * back + Math.cos(h) * side, p.y + up, p.z + Math.cos(h) * back + Math.sin(h) * side], [p.x + Math.sin(h) * lookDist, p.y - lookDrop, p.z - Math.cos(h) * lookDist]); return true; }; window.__beach = (back, up, side, lookH) => { const p = __P.position; const h = __toBoat(); const sk = __K.systems.skiff.position; const lx = (p.x + sk.x) / 2, lz = (p.z + sk.z) / 2; __K.camera([p.x - Math.sin(h) * back + Math.cos(h) * side, p.y + up, p.z + Math.cos(h) * back + Math.sin(h) * side], [lx + Math.sin(h) * 6, lookH, lz - Math.cos(h) * 6]); return true; }; window.__face = () => { const p = __P.position; __P.placeAt(p.x, p.z, __toBoat() * 180 / Math.PI); return true; }; window.__spotNear = (x, z, dist, px, pz) => { const hm = __K.ctx.heightmap; let best = null; for (let i = 0; i < 48; i++) { const a = i / 48 * Math.PI * 2; const sx = x + Math.sin(a) * dist, sz = z - Math.cos(a) * dist; const h = hm.heightAt(sx, sz); const n = hm.normalAt(sx, sz); if (h < 0.3 || n.y < 0.8) continue; const d = Math.hypot(sx - px, sz - pz); if (!best || d < best.d) best = { x: sx, z: sz, d }; } return best; }; window.__phase = () => __P.phase; true"
+ },
+ {
+  "until": "__KODIAK__.ctx.interact.current.interact && __KODIAK__.ctx.interact.current.interact.id === 'go-ashore'",
+  "timeout": 10000
+ },
+ {
+  "shot": "h00-offer"
+ },
+ {
+  "state": "offer"
+ },
+ {
+  "press": "KeyE"
+ },
+ {
+  "until": "__P.phase === 'ferry'",
+  "timeout": 10000
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "shot": "h01-ferry"
+ },
+ {
+  "until": "__P.phase === 'disembark'",
+  "timeout": 40000
+ },
+ {
+  "wait": 300
+ },
+ {
+  "shot": "h02-arrive"
+ },
+ {
+  "until": "__P.phase === 'foot'",
+  "timeout": 10000
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "shot": "h03-beach-rig"
+ },
+ {
+  "state": "ashore"
+ },
+ {
+  "eval": "document.getElementById('ui').style.visibility = 'hidden'; true"
+ },
+ {
+  "eval": "__beach(5.5, 2.2, 2.2, 0.6)"
+ },
+ {
+  "wait": 700
+ },
+ {
+  "shot": "h04-beach-hero"
+ },
+ {
+  "eval": "__K.camera(null); true"
+ },
+ {
+  "eval": "document.getElementById('ui').style.visibility = ''; true"
+ },
+ {
+  "eval": "__follow([[1500,-5661],[1516,-5661],[1532,-5661],[1548,-5661],[1568,-5665],[1584,-5665],[1596,-5657],[1612,-5649],[1628,-5641],[1644,-5625],[1660,-5617],[1684,-5617],[1696,-5613],[1700,-5605]], false)"
+ },
+ {
+  "wait": 9000
+ },
+ {
+  "shot": "h05-hike-rig"
+ },
+ {
+  "state": "hiking"
+ },
+ {
+  "eval": "document.getElementById('ui').style.visibility = 'hidden'; true"
+ },
+ {
+  "eval": "__trk(10, -95, 1.8, 1.1)"
+ },
+ {
+  "wait": 900
+ },
+ {
+  "shot": "h06-hike-side"
+ },
+ {
+  "eval": "__stop(); true"
+ },
+ {
+  "eval": "document.getElementById('ui').style.visibility = ''; true"
+ },
+ {
+  "eval": "__follow([[1500,-5661],[1516,-5661],[1532,-5661],[1548,-5661],[1568,-5665],[1584,-5665],[1596,-5657],[1612,-5649],[1628,-5641],[1644,-5625]], true)"
+ },
+ {
+  "wait": 6000
+ },
+ {
+  "shot": "h07-forest-run-rig"
+ },
+ {
+  "until": "window.__done",
+  "timeout": 60000
+ },
+ {
+  "eval": "__follow([[1644,-5625],[1660,-5617],[1684,-5617],[1696,-5613],[1700,-5605]], false)"
+ },
+ {
+  "wait": 4000
+ },
+ {
+  "shot": "h08-ridge-rig"
+ },
+ {
+  "state": "ridge"
+ },
+ {
+  "eval": "document.getElementById('ui').style.visibility = 'hidden'; true"
+ },
+ {
+  "eval": "__trk(9, 18, 6.5, 0.4)"
+ },
+ {
+  "wait": 900
+ },
+ {
+  "shot": "h09-ridge-looking-back"
+ },
+ {
+  "eval": "__trk(8, 95, 1.2, 1.1)"
+ },
+ {
+  "wait": 900
+ },
+ {
+  "shot": "h10-ridge-slope-side"
+ },
+ {
+  "eval": "__stop(); true"
+ },
+ {
+  "eval": "document.getElementById('ui').style.visibility = ''; true"
+ },
+ {
+  "until": "window.__done",
+  "timeout": 150000
+ },
+ {
+  "wait": 800
+ },
+ {
+  "eval": "__orbit(__toBoat(), 30)"
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "shot": "h11-summit-rig"
+ },
+ {
+  "state": "summit"
+ },
+ {
+  "eval": "document.getElementById('ui').style.visibility = 'hidden'; true"
+ },
+ {
+  "eval": "__face(); __hero(5.2, 3.4, 1.7, 60, 24)"
+ },
+ {
+  "wait": 1200
+ },
+ {
+  "shot": "h12-summit-hero"
+ },
+ {
+  "state": "hero1"
+ },
+ {
+  "eval": "__hero(13, 5.5, -4.5, 80, 30)"
+ },
+ {
+  "wait": 800
+ },
+ {
+  "shot": "h13-summit-wide"
+ },
+ {
+  "time": 21.6
+ },
+ {
+  "eval": "__hero(5.2, 3.4, 1.7, 60, 24)"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "shot": "h14-summit-hero-2136"
+ },
+ {
+  "state": "hero2"
+ },
+ {
+  "eval": "__K.camera(null); true"
+ },
+ {
+  "eval": "document.getElementById('ui').style.visibility = ''; true"
+ },
+ {
+  "perf": "summit",
+  "ms": 2500
+ }
 ]

@@ -2,7 +2,7 @@
 
 import { h, clear, button, setText } from './dom.js';
 import { reportHeadline, reportRows, ticketModel } from './lib/logic.js';
-import { int, money, SPECIES_INFO } from './lib/format.js';
+import { int, money, duration } from './lib/format.js';
 
 export function createReportPanel(ctx, { close }) {
   const kicker = h('div.rep-kicker');
@@ -31,7 +31,7 @@ export function createReportPanel(ctx, { close }) {
       const hd = reportHeadline(r);
       el.dataset.tone = hd.tone;
       const mins = Number(r?.minutes);
-      setText(kicker, `Set ${r?.setNumber ?? ''}${Number.isFinite(mins) && mins > 0 ? ` · ${mins} min` : ''} · ${hd.kicker}`);
+      setText(kicker, `Set ${r?.setNumber ?? ''}${Number.isFinite(mins) && mins > 0 ? ` · ${duration(mins / 60)}` : ''} · ${hd.kicker}`);
       setText(title, hd.title);
       setText(line, hd.line);
       clear(rows);

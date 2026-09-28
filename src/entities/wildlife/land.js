@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { Herd } from './herd.js';
 import { buildQuadruped, QUADS } from './shapes.js';
+import { buildBear } from './bear.js';
 import { clamp, damp, dampAngle, wrapAngle, headingOf, noise1, TAU, lerp, smoothstep, hash01 } from './math.js';
 import { planBears, createEncounter, stepEncounter, ENCOUNTER } from './behaviour.js';
 
@@ -18,9 +19,11 @@ export function createLand(env) {
   const R = rng.fork('land');
   const hm = ctx.heightmap;
 
+  const BEARS = { boar: 1, sow: 1, cub: 1 };
   const quadHerd = (kind, cap, shadow = false) => {
-    const g0 = buildQuadruped(kind);
-    const g1 = buildQuadruped(kind, { lod: 1 });
+    const build = BEARS[kind] ? (o) => buildBear(kind, o) : (o) => buildQuadruped(kind, o);
+    const g0 = build({});
+    const g1 = build({ lod: 1 });
     const ud = g0.userData;
     const mat = mats.quad(kind, [ud.hipY, ud.hipZ]);
     const depth = shadow ? mats.quadDepth(kind, [ud.hipY, ud.hipZ]) : null;
@@ -93,6 +96,7 @@ export function createLand(env) {
         ? animal('bear', 'boar', spot.x + (R.next() - 0.5) * 20, spot.z + (R.next() - 0.5) * 20)
         : animal('bear', g.type === 'subadults' ? 'subadult' : 'sow', spot.x + (R.next() - 0.5) * 12, spot.z + (R.next() - 0.5) * 12);
     lead.site = site;
+    lead.wadeIdx = bears.filter((o) => o.site === site && !o.mother).length;
     lead.tint = tintBear();
     lead.enc = createEncounter();
     lead.scale = lead.age === 'subadult' ? 0.82 : 0.94 + R.next() * 0.12;
@@ -158,6 +162,35 @@ export function createLand(env) {
   const bearStride = (a) => ({ boar: 1.55, sow: 1.35, subadult: 1.2, cub: 0.65 })[a.age] ?? 1.3;
   const bearLen = (a) => ({ boar: 1.2, sow: 1.0, subadult: 0.85, cub: 0.42 })[a.age] ?? 1;
 
+  // Fishing spots: knee-to-elbow-deep water on the rendered terrain near the analysed wading point (the coarse site
+  // analysis runs on the DEM; this refines it once on the full-detail surface). Up to three spots at least 11 m
+  // apart, so two bears at one mouth keep their distance.
+  function wadeSpot(s, idx = 0) {
+    if (!s.wadeFine) {
+      const cands = [];
+      for (let r = 0; r <= 36; r += 2) {
+        const n = r === 0 ? 1 : Math.round(r * 1.5);
+        for (let k = 0; k < n; k++) {
+          const a = (k / n) * TAU;
+          const x = s.wade.x + Math.cos(a) * r;
+          const z = s.wade.z + Math.sin(a) * r;
+          const h = ground(x, z);
+          if (h > -0.18 || h < -0.55) continue;
+          cands.push({ x, z, score: Math.abs(h + 0.36) * 20 + Math.hypot(x - s.x, z - s.z) * 0.05 });
+        }
+      }
+      cands.sort((p, q) => p.score - q.score);
+      const out = [];
+      for (const c of cands) {
+        if (out.length >= 3) break;
+        if (out.some((o) => Math.hypot(o.x - c.x, o.z - c.z) < 11)) continue;
+        out.push(c);
+      }
+      s.wadeFine = out.length ? out : [s.wade];
+    }
+    return s.wadeFine[idx % s.wadeFine.length];
+  }
+
   function pickWaypoint(a) {
     const s = a.site;
     const u = R.next();
@@ -180,12 +213,15 @@ export function createLand(env) {
           nextActivity(a);
           break;
         }
-        const wx = s.wade.x + 4 * Math.sin(a.seed * 20 + t * 0.02);
-        const wz = s.wade.z + 4 * Math.cos(a.seed * 13 + t * 0.017);
+        const W = wadeSpot(s, a.wadeIdx ?? 0);
+        const wx = W.x + 3 * Math.sin(a.seed * 20 + t * 0.02);
+        const wz = W.z + 3 * Math.cos(a.seed * 13 + t * 0.017);
         if (!a.pounce) {
           const d = moveTo(a, wx, wz, 1.1, dt);
           if (d < 1.5) {
             a.speed = damp(a.speed, 0, 3, dt);
+            // Face out over the shallows where the salmon come in, shifting now and then.
+            a.heading = dampAngle(a.heading, (s.heading ?? a.heading) + 0.9 * noise1(t * 0.05, a.seed * 60), 0.6, dt);
             targetHead = 0.55 + 0.15 * Math.sin(t * 0.7 + a.seed * 5);
             a.headYaw = 0.5 * noise1(t * 0.25, a.seed * 40);
             a.pounceIn = (a.pounceIn ?? 3 + R.next() * 8) - dt;
@@ -291,67 +327,116 @@ export function createLand(env) {
     if ((a.state === 'walk' || a.state === 'graze') && !a.target) a.state = 'rest';
   }
 
+  // Cubs and subadults: each keeps its own loose station around the mother and its own little agenda (follow, sit
+  // and watch her fish from the bank, nose about, play-fight a sibling), so a family never moves in lockstep.
   function updateYoung(c, dt, t) {
     const m = c.mother;
     c.t += dt;
-    // Cubs trail and flank their mother, dash about, and copy her.
-    const side = c.slot % 2 ? 1 : -1;
-    const back = 1.6 + c.slot * 0.9;
-    const fwdX = Math.sin(m.heading);
-    const fwdZ = -Math.cos(m.heading);
-    const rX = Math.cos(m.heading);
-    const rZ = Math.sin(m.heading);
-    let ox = -fwdX * back + rX * side * (1.1 + 0.6 * Math.sin(t * 0.3 + c.seed * 9));
-    let oz = -fwdZ * back + rZ * side * (1.1 + 0.6 * Math.sin(t * 0.3 + c.seed * 9));
-    if (m.state === 'fishing' && m.site?.bank && c.age === 'cub') {
-      // Cubs wait on the bank while she fishes.
-      const b = m.site.bank;
-      ox = b.x + side * (2 + c.slot) - m.position.x;
-      oz = b.z + (c.slot - 1) * 1.5 - m.position.z;
+    const cs = (c.cs ??= { mode: 'follow', next: 0, a: Math.PI + (R.next() - 0.5) * 2, d: 1.6 + R.next() * 1.6, tx: 0, tz: 0 });
+    const bank = m.site?.bank;
+    const fishing = m.state === 'fishing' && bank && c.age === 'cub';
+    const alarmed = m.state === 'watch' || m.state === 'charge' || m.state === 'retreat';
+    const sib = m.cubs.find((o) => o !== c) ?? null;
+    cs.next -= dt;
+    if (cs.next < 0 || (alarmed && cs.mode !== 'follow')) {
+      const u = R.next();
+      if (alarmed) cs.mode = 'follow';
+      else if (fishing) cs.mode = u < 0.45 ? 'watch' : u < 0.7 && sib ? 'play' : 'nose';
+      else if (m.state === 'rest') cs.mode = u < 0.65 ? 'rest' : sib && u < 0.85 ? 'play' : 'nose';
+      else cs.mode = u < 0.7 ? 'follow' : u < 0.85 && sib ? 'play' : 'nose';
+      cs.next = cs.mode === 'play' ? 3 + R.next() * 4 : 5 + R.next() * 9;
+      cs.a = (fishing ? R.next() * Math.PI * 2 : Math.PI + (R.next() - 0.5) * 2.4) + c.slot;
+      cs.d = cs.mode === 'nose' ? 3 + R.next() * 3 : 1.4 + R.next() * 1.8;
     }
-    const play = Math.sin(t * 0.21 + c.seed * 17) > 0.8 && m.state !== 'watch';
-    if (play) {
-      ox += 3 * Math.cos(t * 1.4 + c.seed * 6);
-      oz += 3 * Math.sin(t * 1.4 + c.seed * 6);
+    // Anchor: the mother, or while she fishes a spot on the bank a few metres above the waterline.
+    let ax = m.position.x;
+    let az = m.position.z;
+    let ah = m.heading;
+    if (fishing) {
+      ax = bank.x;
+      az = bank.z;
+      ah = headingOf(m.position.x - bank.x, m.position.z - bank.z);
     }
-    const d = moveTo(c, m.position.x + ox, m.position.z + oz, play ? 3.2 : Math.max(1.3, m.speed * 1.4 + 0.4), dt, 4);
-    if (d < 0.8) {
+    const ca = Math.cos(ah);
+    const sa = Math.sin(ah);
+    // Offset in the anchor's frame (angle 0 = ahead): rotate by heading.
+    const ox = Math.sin(cs.a) * cs.d;
+    const oz = -Math.cos(cs.a) * cs.d;
+    let tx = ax + ox * ca - oz * sa;
+    let tz = az + ox * sa + oz * ca;
+    let speed = Math.max(1.3, m.speed * 1.35 + 0.4);
+    let head = 0.1;
+    let lie = 0;
+    let rear = m.rear > 0.3 ? 1 : 0;
+    if (cs.mode === 'play' && sib) {
+      // Circle and tussle with the sibling.
+      const pa = t * 1.7 + c.slot * Math.PI;
+      tx = sib.position.x + Math.cos(pa) * 0.9;
+      tz = sib.position.z + Math.sin(pa) * 0.9;
+      speed = 2.6;
+      head = 0.35;
+      if (Math.hypot(sib.position.x - c.position.x, sib.position.z - c.position.z) < 1.1 && Math.sin(t * 2.3 + c.seed * 9) > 0.55) rear = 0.8;
+    } else if (cs.mode === 'nose') {
+      speed = 0.7;
+      head = 0.75;
+    } else if (cs.mode === 'watch') {
+      speed = 1.2;
+      head = -0.1;
+    } else if (cs.mode === 'rest') {
+      speed = 0.9;
+    }
+    // Stay out of deep water.
+    if (ground(tx, tz) < -0.25) {
+      tx = (tx + ax) / 2;
+      tz = (tz + az) / 2;
+    }
+    const d = moveTo(c, tx, tz, speed, dt, 4);
+    if (d < 0.6) {
       c.speed = damp(c.speed, 0, 5, dt);
-      c.heading = dampAngle(c.heading, m.heading + side * 0.3, 1.5, dt);
+      if (cs.mode === 'watch') {
+        c.heading = dampAngle(c.heading, headingOf(m.position.x - c.position.x, m.position.z - c.position.z), 2, dt);
+        lie = 0.55;
+      } else if (cs.mode === 'rest') lie = 1;
+      else if (cs.mode === 'follow') c.heading = dampAngle(c.heading, m.heading + (c.seed - 0.5) * 0.8, 1.2, dt);
     }
-    c.rear = damp(c.rear, m.rear > 0.3 ? 1 : 0, 3, dt);
-    c.lie = damp(c.lie, m.state === 'rest' ? 1 : 0, 1, dt);
-    c.headPitch = damp(c.headPitch, m.state === 'graze' ? 0.6 : m.rear > 0.3 ? -0.3 : 0.1, 3, dt);
+    c.rear = damp(c.rear, rear, 3, dt);
+    c.lie = damp(c.lie, lie, 1.5, dt);
+    c.headPitch = damp(c.headPitch, m.state === 'graze' && cs.mode === 'follow' ? 0.6 : c.rear > 0.3 ? -0.3 : head, 3, dt);
     c.headYaw = 0.4 * noise1(t * 0.5, c.seed * 20);
     gaitFrom(c, dt, bearStride(c));
     placeOnGround(c, bearLen(c));
   }
 
-  // ------------------------------------------------------------------------------------------------ encounters
-  let encounterBear = null;
-  function updateEncounter(dt, t) {
-    const av = ctx.game?.avatar?.();
-    const onFoot = ctx.state.control === 'foot' && av?.control === 'foot' && ctx.state.mode === 'play';
-    let nearest = null;
-    let nd = Infinity;
-    if (onFoot) {
-      for (const b of bears) {
-        if (!b.enc || !b.active) continue;
-        const d = Math.hypot(b.position.x - av.x, b.position.z - av.z);
-        if (d < nd) {
-          nd = d;
-          nearest = b;
-        }
-      }
+  // A bear that comes into range after a while out of it resumes where its activity would have taken it (at the
+  // wading spot, on its beach path), not where it was left.
+  function warmStart(b) {
+    if (b.mother) return;
+    const s = b.site;
+    if (b.state === 'fishing' && s?.wade) {
+      const W = wadeSpot(s, b.wadeIdx ?? 0);
+      b.position.x = W.x + (R.next() - 0.5) * 5;
+      b.position.z = W.z + (R.next() - 0.5) * 5;
+    } else if ((b.state === 'walk' || b.state === 'graze') && b.target) {
+      const u = 0.3 + 0.6 * R.next();
+      b.position.x = lerp(b.position.x, b.target.x, u);
+      b.position.z = lerp(b.position.z, b.target.z, u);
     }
-    // One encounter at a time: the engaged bear keeps it until it ends.
-    const b = encounterBear ?? nearest;
-    if (!b) return;
-    const dist = b ? Math.hypot(b.position.x - (av?.x ?? 1e9), b.position.z - (av?.z ?? 1e9)) : Infinity;
-    const change = stepEncounter(b.enc, { dist, onFoot, dt, time: t });
-    if (!change) return;
+    for (const c of b.cubs ?? []) {
+      const a = R.next() * TAU;
+      const home = b.state === 'fishing' && s?.bank && c.age === 'cub' ? s.bank : b.position;
+      c.position.x = home.x + Math.cos(a) * 2;
+      c.position.z = home.z + Math.sin(a) * 2;
+      c.cs = null;
+    }
+  }
+
+  // ------------------------------------------------------------------------------------------------ encounters
+  // Every bear runs its own encounter state machine (behaviour.js). At most one bear at a time is watching or
+  // charging the person; bears already retreating finish on their own, so a second bear can engage meanwhile.
+  const engaged = new Set();
+  let encounterBear = null;
+  function applyStage(b, change, av) {
     if (change === 'watch') {
-      encounterBear = b;
       b.prevState = b.state === 'watch' || b.state === 'charge' || b.state === 'retreat' ? 'walk' : b.state;
       b.state = 'watch';
       b.t = 0;
@@ -371,10 +456,42 @@ export function createLand(env) {
       }
       b.retreatTo = { x: rx, z: rz };
     } else if (change === 'none') {
-      encounterBear = null;
       nextActivity(b);
     }
     if (change !== 'none') ctx.events.emit('bear:encounter', { stage: change, bearId: b.id, x: b.position.x, z: b.position.z });
+  }
+  function updateEncounter(dt, t) {
+    const av = ctx.game?.avatar?.();
+    const onFoot = ctx.state.control === 'foot' && av?.control === 'foot' && ctx.state.mode === 'play';
+    const distTo = (b) => (av ? Math.hypot(b.position.x - av.x, b.position.z - av.z) : Infinity);
+    let primary = null;
+    for (const b of [...engaged]) {
+      const change = stepEncounter(b.enc, { dist: distTo(b), onFoot, dt, time: t });
+      if (change) applyStage(b, change, av);
+      if (b.enc.stage === 'none') engaged.delete(b);
+      else if (b.enc.stage === 'watch' || b.enc.stage === 'charge') primary = b;
+    }
+    if (!primary && onFoot) {
+      let nearest = null;
+      let nd = Infinity;
+      for (const b of bears) {
+        if (!b.enc || !b.active || engaged.has(b)) continue;
+        const d = distTo(b);
+        if (d < nd) {
+          nd = d;
+          nearest = b;
+        }
+      }
+      if (nearest) {
+        const change = stepEncounter(nearest.enc, { dist: nd, onFoot, dt, time: t });
+        if (change === 'watch') {
+          engaged.add(nearest);
+          applyStage(nearest, change, av);
+          primary = nearest;
+        }
+      }
+    }
+    encounterBear = primary ?? [...engaged][0] ?? null;
   }
 
   // ------------------------------------------------------------------------------------------------ deer, goats, fox
@@ -486,7 +603,10 @@ export function createLand(env) {
     for (const b of bears) {
       const d = Math.hypot(b.position.x - cam.x, b.position.z - cam.z);
       const da = av ? Math.hypot(b.position.x - av.x, b.position.z - av.z) : Infinity;
+      const was = b.active;
       b.active = d < 2600 * rangeMul || da < 400 || b.drawn;
+      if (b.active && !was && ctx.time.elapsed - (b.lastActive ?? -1e9) > 20) warmStart(b);
+      if (b.active) b.lastActive = ctx.time.elapsed;
     }
     for (const b of bears) {
       if (!b.active) continue;
@@ -545,17 +665,30 @@ export function createLand(env) {
     get encounter() {
       return encounterBear ? { bearId: encounterBear.id, stage: encounterBear.enc.stage } : null;
     },
-    // Sets a bear's activity for QA shots: 'fishing' | 'walk' | 'graze' | 'rest'.
-    stage(bearId, state) {
-      const b = bears.find((x) => x.id === bearId);
+    // Sets a bear's activity for QA shots: 'fishing' | 'walk' | 'graze' | 'rest', optionally moving it (and its
+    // young) to (x, z) first.
+    stage(bearId, state, x, z) {
+      const b = bears.find((o) => o.id === bearId);
       if (!b || b.mother) return false;
+      if (Number.isFinite(x) && Number.isFinite(z)) {
+        b.position.x = x;
+        b.position.z = z;
+        for (const c of b.cubs ?? []) {
+          c.position.x = x + (R.next() - 0.5) * 4;
+          c.position.z = z + (R.next() - 0.5) * 4;
+          c.cs = null;
+        }
+      }
       b.state = state;
       b.t = 0;
+      b.next = 60;
+      b.pounce = null;
       if (state === 'walk' || state === 'graze') b.target = (state === 'graze' ? b.site.meadow : b.site.path)?.[0] ?? { x: b.position.x + 20, z: b.position.z };
       return true;
     },
     reset() {
       encounterBear = null;
+      engaged.clear();
       for (const b of bears) {
         if (b.enc) Object.assign(b.enc, createEncounter());
         if (!b.mother) {

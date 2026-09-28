@@ -1,0 +1,144 @@
+[
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+  "timeout": 90000
+ },
+ {
+  "start": {}
+ },
+ {
+  "eval": "document.getElementById('boot')?.remove(); document.querySelectorAll('vite-error-overlay').forEach((e) => e.remove()); const ui = document.getElementById('ui'); if (ui) ui.style.visibility = 'hidden'; 1"
+ },
+ {
+  "weather": "partly"
+ },
+ {
+  "time": 9
+ },
+ {
+  "press": "KeyW"
+ },
+ {
+  "wait": 120
+ },
+ {
+  "press": "KeyW"
+ },
+ {
+  "wait": 120
+ },
+ {
+  "press": "KeyW"
+ },
+ {
+  "wait": 120
+ },
+ {
+  "press": "KeyW"
+ },
+ {
+  "wait": 120
+ },
+ {
+  "press": "KeyW"
+ },
+ {
+  "wait": 120
+ },
+ {
+  "press": "KeyW"
+ },
+ {
+  "wait": 120
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "eval": "const W = __KODIAK__.systems.water; W.debugToggles.field = true; W.setReflections(true); 1"
+ },
+ {
+  "perf": "on-0",
+  "ms": 2500
+ },
+ {
+  "eval": "const W = __KODIAK__.systems.water; W.debugToggles.field = false; 1"
+ },
+ {
+  "perf": "field-off-0",
+  "ms": 2500
+ },
+ {
+  "eval": "const W = __KODIAK__.systems.water; W.debugToggles.field = true; W.setReflections(false); 1"
+ },
+ {
+  "perf": "refl-off-0",
+  "ms": 2500
+ },
+ {
+  "eval": "const W = __KODIAK__.systems.water; W.debugToggles.field = true; W.setReflections(true); 1"
+ },
+ {
+  "perf": "on-1",
+  "ms": 2500
+ },
+ {
+  "eval": "const W = __KODIAK__.systems.water; W.debugToggles.field = false; 1"
+ },
+ {
+  "perf": "field-off-1",
+  "ms": 2500
+ },
+ {
+  "eval": "const W = __KODIAK__.systems.water; W.debugToggles.field = true; W.setReflections(false); 1"
+ },
+ {
+  "perf": "refl-off-1",
+  "ms": 2500
+ },
+ {
+  "eval": "const W = __KODIAK__.systems.water; W.debugToggles.field = true; W.setReflections(true); 1"
+ },
+ {
+  "perf": "on-2",
+  "ms": 2500
+ },
+ {
+  "eval": "const W = __KODIAK__.systems.water; W.debugToggles.field = false; 1"
+ },
+ {
+  "perf": "field-off-2",
+  "ms": 2500
+ },
+ {
+  "eval": "const W = __KODIAK__.systems.water; W.debugToggles.field = true; W.setReflections(false); 1"
+ },
+ {
+  "perf": "refl-off-2",
+  "ms": 2500
+ },
+ {
+  "eval": "const W = __KODIAK__.systems.water; W.debugToggles.field = true; W.setReflections(true); 1"
+ },
+ {
+  "perf": "on-3",
+  "ms": 2500
+ },
+ {
+  "eval": "const W = __KODIAK__.systems.water; W.debugToggles.field = false; 1"
+ },
+ {
+  "perf": "field-off-3",
+  "ms": 2500
+ },
+ {
+  "eval": "const W = __KODIAK__.systems.water; W.debugToggles.field = true; W.setReflections(false); 1"
+ },
+ {
+  "perf": "refl-off-3",
+  "ms": 2500
+ },
+ {
+  "eval": "const W = __KODIAK__.systems.water; W.debugToggles.field = true; W.setReflections(true); 1"
+ }
+]

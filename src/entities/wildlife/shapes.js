@@ -368,12 +368,12 @@ export function buildHumpback({ lod = 0 } = {}) {
   };
   const mb = new ModelBuilder();
   const keys = [
-    { t: 0.0, cy: -0.05, rx: 0.12, ry: 0.08, pw: 2.2 },
-    { t: 0.04, cy: -0.1, rx: 0.55, ry: 0.32, pw: 2.3 },
-    { t: 0.12, cy: -0.22, rx: 0.98, ry: 0.66, pw: 2.2 },
-    { t: 0.22, cy: -0.36, rx: 1.34, ry: 1.02 },
-    { t: 0.34, cy: -0.3, rx: 1.58, ry: 1.3 },
-    { t: 0.46, cy: -0.12, rx: 1.56, ry: 1.36 },
+    { t: 0.0, cy: -0.08, rx: 0.16, ry: 0.07, pw: 2.4 },
+    { t: 0.04, cy: -0.14, rx: 0.64, ry: 0.27, pw: 2.5 },
+    { t: 0.12, cy: -0.26, rx: 1.08, ry: 0.6, pw: 2.3 },
+    { t: 0.22, cy: -0.38, rx: 1.42, ry: 1.0 },
+    { t: 0.34, cy: -0.3, rx: 1.66, ry: 1.3 },
+    { t: 0.46, cy: -0.12, rx: 1.62, ry: 1.36 },
     { t: 0.58, cy: 0.0, rx: 1.32, ry: 1.22 },
     { t: 0.68, cy: 0.06, rx: 0.98, ry: 1.0 },
     { t: 0.78, cy: 0.06, rx: 0.56, ry: 0.76 },
@@ -443,7 +443,7 @@ export function buildHumpback({ lod = 0 } = {}) {
     const st = [];
     for (let i = 0; i <= (lod ? 4 : 9); i++) {
       const t = i / (lod ? 4 : 9);
-      const chord = 0.95 * (1 - t) + 0.22 * t + 0.08 * Math.sin(t * 14) * (1 - t) * (lod ? 0 : 1);
+      const chord = 1.2 * (1 - t) ** 0.8 * (1 - 0.15 * t) + 0.2 * t + 0.09 * Math.abs(Math.sin(t * 16)) * (1 - t) * (lod ? 0 : 1);
       st.push({ s: len * t, lead: -chord * 0.35, trail: chord * 0.65, t: 0.2 * (1 - 0.8 * t), off: [0, 0, len * t * 0.55] });
     }
     const dir = [side * 0.78, -0.6, 0];
@@ -749,25 +749,10 @@ export function buildOtter({ lod = 0 } = {}) {
 // ---------------------------------------------------------------------------------------------------- quadrupeds
 
 export const QUADS = {
-  boar: {
-    len: 2.35, shoulderH: 1.38, hipH: 1.2, girth: 0.46, hump: 0.14, neck: 0.42, headLen: 0.44, headR: 0.2, snout: 0.2, snoutR: 0.1,
-    ear: 0.075, legTop: 0.19, legBot: 0.12, paw: [0.12, 0.07, 0.19], tail: 0.08, legX: 0.25,
-    colors: { coat: '#6b4829', tips: '#a67d45', legs: '#35251a', face: '#7d5936', nose: '#141110', ear: '#45301f' },
-  },
-  sow: {
-    len: 1.95, shoulderH: 1.13, hipH: 1.0, girth: 0.37, hump: 0.1, neck: 0.36, headLen: 0.37, headR: 0.165, snout: 0.17, snoutR: 0.085,
-    ear: 0.068, legTop: 0.15, legBot: 0.1, paw: [0.1, 0.06, 0.16], tail: 0.07, legX: 0.2,
-    colors: { coat: '#7a532f', tips: '#bf9458', legs: '#3b291d', face: '#8c6640', nose: '#141110', ear: '#4d3421' },
-  },
-  cub: {
-    len: 0.82, shoulderH: 0.52, hipH: 0.48, girth: 0.18, hump: 0.02, neck: 0.16, headLen: 0.2, headR: 0.1, snout: 0.08, snoutR: 0.045,
-    ear: 0.05, legTop: 0.075, legBot: 0.055, paw: [0.05, 0.03, 0.07], tail: 0.03, legX: 0.09,
-    colors: { coat: '#583a25', tips: '#7f5b3a', legs: '#2f2016', face: '#6a4a31', nose: '#141110', ear: '#3d2a1d', collar: '#cdbf9d' },
-  },
   deer: {
-    len: 1.35, shoulderH: 0.88, hipH: 0.9, girth: 0.2, hump: 0.0, neck: 0.42, neckUp: 0.75, headLen: 0.26, headR: 0.075, snout: 0.12, snoutR: 0.04,
-    ear: 0.075, earLong: true, legTop: 0.065, legBot: 0.025, paw: [0.025, 0.03, 0.04], tail: 0.17, legX: 0.1, slim: true,
-    colors: { coat: '#8b5a34', tips: '#9c6a40', legs: '#6e4a2e', face: '#8a6a4a', nose: '#141110', ear: '#6e4f36', rump: '#efe9dc', tail: '#1c1714' },
+    len: 1.25, shoulderH: 0.84, hipH: 0.86, girth: 0.19, hump: 0.0, neck: 0.34, neckUp: 0.8, headLen: 0.22, headR: 0.062, snout: 0.1, snoutR: 0.032,
+    ear: 0.085, earLong: true, legTop: 0.05, legBot: 0.017, paw: [0.02, 0.025, 0.035], tail: 0.16, legX: 0.09, slim: true,
+    colors: { coat: '#8a5a36', tips: '#97683f', legs: '#5a3c26', face: '#7c5d41', nose: '#141110', ear: '#5e4330', rump: '#e9e2d3', tail: '#1c1714' },
   },
   goat: {
     len: 1.3, shoulderH: 0.95, hipH: 0.88, girth: 0.27, hump: 0.06, neck: 0.3, neckUp: 0.4, headLen: 0.26, headR: 0.08, snout: 0.1, snoutR: 0.045,
@@ -781,7 +766,8 @@ export const QUADS = {
   },
 };
 
-// Parametric quadruped. Origin between the feet on the ground; faces -z.
+// Parametric quadruped (deer, goat, fox; the bears have their own builder in bear.js). Origin between the feet on the
+// ground; faces -z.
 export function buildQuadruped(kind, { lod = 0 } = {}) {
   const P = QUADS[kind];
   const C = Object.fromEntries(Object.entries(P.colors).map(([k, v]) => [k, lin(v)]));
@@ -823,7 +809,7 @@ export function buildQuadruped(kind, { lod = 0 } = {}) {
   // Neck and head: from the shoulders forward (and up for deer, goats, foxes).
   const up = P.neckUp ?? 0.05;
   const nb = [0, P.shoulderH - P.girth * 0.55 + P.hump * 0.3, zChest + L * 0.08];
-  const nd = [0, Math.sin(up) * P.neck - (kind === 'boar' || kind === 'sow' || kind === 'cub' ? 0.08 * L : 0), -Math.cos(up) * P.neck];
+  const nd = [0, Math.sin(up) * P.neck, -Math.cos(up) * P.neck];
   const hc = [nb[0] + nd[0], nb[1] + nd[1], nb[2] + nd[2]];
   const neckPiv = () => [nb[1], nb[2] + L * 0.06, 0, 0];
   mb.add(
@@ -839,7 +825,7 @@ export function buildQuadruped(kind, { lod = 0 } = {}) {
     { color: (m) => mix3(coatCol({ ...m, t: 0.1 }), C.face, 0.2), rig: (m) => [0, 0, sm(nb[2] + 0.07 * L, hc[2], m.z), 0], pivot: neckPiv, noise: 0.1, noiseScale: 11 },
   );
   // Head: skull + snout (dished face for bears).
-  const headDown = kind === 'boar' || kind === 'sow' || kind === 'cub' ? 0.25 : kind === 'deer' || kind === 'goat' ? 0.9 : 0.35;
+  const headDown = kind === 'deer' || kind === 'goat' ? 0.9 : 0.35;
   const hdir = [0, -Math.sin(headDown), -Math.cos(headDown)];
   const skull = [hc[0] + hdir[0] * P.headLen * 0.25, hc[1] + hdir[1] * P.headLen * 0.25 + P.headR * 0.1, hc[2] + hdir[2] * P.headLen * 0.25];
   mb.add(ellipsoid(skull, [P.headR * (kind === 'fox' ? 1.1 : 1.0), P.headR * 0.95, P.headLen * 0.45], { rings: lod ? 5 : 7, segs, rot: [-headDown * 0.6, 0, 0] }), {
@@ -862,7 +848,7 @@ export function buildQuadruped(kind, { lod = 0 } = {}) {
       color: (m) => {
         const d = Math.hypot(m.x - snoutEnd[0], m.y - snoutEnd[1], m.z - snoutEnd[2]);
         if (d < P.snoutR * 0.9) return C.nose;
-        return kind === 'boar' || kind === 'sow' || kind === 'cub' ? mix3(C.face, C.tips, 0.35) : C.face;
+        return C.face;
       },
       rig: () => [0, 0, 1, 0],
       pivot: neckPiv,
@@ -894,15 +880,6 @@ export function buildQuadruped(kind, { lod = 0 } = {}) {
         noise: 0,
       });
     }
-    if (kind === 'cub') {
-      // Some spring cubs wear a pale natal collar.
-      mb.add(tube([{ p: [0, nb[1] - 0.01, nb[2] - 0.02], rx: P.girth * 0.66, ry: P.girth * 0.7 }, { p: [0, nb[1] + 0.005, nb[2] - 0.06], rx: P.girth * 0.64, ry: P.girth * 0.66 }], { segs }), {
-        color: C.collar,
-        rig: () => [0, 0, 0.3, 0],
-        pivot: neckPiv,
-        noise: 0.1,
-      });
-    }
   }
   // Legs: shoulder/hip joint to the ground, with a paw or hoof.
   const legs = [
@@ -927,7 +904,7 @@ export function buildQuadruped(kind, { lod = 0 } = {}) {
     }
     const legT = (m) => Math.min(1, Math.max(0, 1 - m.y / jy));
     mb.add(tube(nodes, { segs: lod ? 5 : 8, up: [0, 0, -1] }), {
-      color: (m) => mix3(coatCol({ ...m, t: hind ? 0.8 : 0.2 }), C.legs, sm(0.1, 0.6, legT(m))),
+      color: (m) => mix3(scale3(C.coat, 0.85), C.legs, sm(0.05, 0.5, legT(m))),
       rig: (m) => [id, legT(m), 0, 0],
       pivot: () => [jy, jz, kneeY, 0],
       noise: 0.1,

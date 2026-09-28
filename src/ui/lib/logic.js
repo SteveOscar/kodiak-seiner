@@ -64,6 +64,31 @@ export function compassLayout(heading, markers, halfSpan = 70) {
   });
 }
 
+// Which compass markers keep their text label: highest priority first, and a label is dropped when its estimated
+// extent (charPx per character, centred on the marker) would overlap one already kept. Edge markers carry no label.
+// Mutates and returns the markers (label set to '' when dropped).
+export function dedupeCompassLabels(laid, pxPerDeg, charPx = 6.1, pad = 6) {
+  const kept = [];
+  for (const m of [...laid].sort((a, b) => (b.prio ?? 0) - (a.prio ?? 0))) {
+    if (!m.label || m.edge) continue;
+    const x = m.offsetDeg * pxPerDeg;
+    const half = m.label.length * charPx * 0.5 + pad;
+    if (kept.some(([a, b]) => x + half > a && x - half < b)) m.label = '';
+    else kept.push([x - half, x + half]);
+  }
+  return laid;
+}
+
+// Skiff-pull advice while pursing/hauling: how far the pull is off the ideal line and which key swings it round
+// (D turns the tow heading clockwise). Headings in radians (0 = north, clockwise).
+export function pullAdvice(towHeading, idealHeading) {
+  if (!Number.isFinite(idealHeading) || !Number.isFinite(towHeading)) return { off: 0, key: null, state: 'none' };
+  const turn = deltaDeg(headingDeg(idealHeading), headingDeg(towHeading));
+  const off = Math.abs(turn);
+  if (off < 20) return { off, key: null, state: 'on' };
+  return { off, key: turn > 0 ? 'D' : 'A', state: off < 55 ? 'near' : 'off' };
+}
+
 // Bearing (degrees) and distance from (x, z) to a target.
 export function bearingDistance(x, z, tx, tz) {
   return { bearingDeg: headingDeg(bearing(x, z, tx, tz)), distance: Math.hypot(tx - x, tz - z) };
@@ -130,6 +155,37 @@ export function tensionState(tension, band = [0.4, 0.7]) {
   const lo = Number(band?.[0]) || 0;
   const hi = Number(band?.[1]) || 1;
   return { t, lo, hi, zone: t < lo ? 'low' : t > hi ? 'high' : 'good' };
+}
+
+// ---------------------------------------------------------------- what to do next
+
+// One quiet line for the status panel saying what the skipper should do next, or null when the moment speaks for
+// itself (a set in progress, ashore, a delivery prompt already on screen). Pure: every input is a plain value.
+//   s = { control, fishing, freeExplore, open, holdLbs, capacityLbs, fuelFrac, fuelEmpty, hours,
+//         moored ('dock'|'anchor'|null), tender: {name, nm} | null, opensToday ('6:00 AM' | null), interactId }
+export function nextStep(s) {
+  if (!s || s.control === 'foot' || (s.fishing && s.fishing !== 'idle')) return null;
+  const cap = Math.max(1, Number(s.capacityLbs) || 1);
+  const hold = Math.max(0, Number(s.holdLbs) || 0);
+  const t = s.tender ? `the ${s.tender.name}${Number.isFinite(s.tender.nm) ? ` · ${s.tender.nm < 10 ? s.tender.nm.toFixed(1) : Math.round(s.tender.nm)} nm` : ''}` : 'a tender';
+  if (!s.freeExplore && s.fuelEmpty) return s.interactId === 'tow' ? null : 'Out of fuel — call for a tow';
+  if (s.interactId === 'deliver') return null;
+  if (hold >= cap * 0.95) return `Hold’s full — deliver to ${t}`;
+  if (!s.freeExplore && Number(s.fuelFrac) <= 0.2) return 'Fuel’s low — top off at a tender';
+  if (s.open) {
+    if (hold >= cap * 0.6) return `Deliver to ${t}`;
+    if (s.moored === 'dock') return 'Cast off (W) and look for jumpers';
+    if (s.moored === 'anchor') return 'Pick up the anchor (W) — the period is open';
+    return 'Look for jumpers and working gulls';
+  }
+  if (hold > 0) return `Closed — deliver to ${t}`;
+  if (s.hours >= 22 || s.hours < 4) {
+    if (s.interactId === 'sleep') return 'Turn in — sleep until morning';
+    return s.moored ? 'Night — rest here until morning' : 'Night — anchor or tie up, then sleep';
+  }
+  if (s.opensToday) return `Opener at ${s.opensToday} — scout for jumpers`;
+  if (s.interactId === 'waitOpener') return 'Closed — wait here for the opener';
+  return 'Closed — explore, or wait at anchor';
 }
 
 // ---------------------------------------------------------------- set report

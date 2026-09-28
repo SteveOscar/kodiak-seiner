@@ -27,9 +27,10 @@ export const COVER = {
   beachTop: 1.7, // game m: gravel/sand beach up to about here
   snowLineKodiak: 214,
   snowLinePeninsula: 172,
-  rock0: 1.56, // rock score where solid rock starts (score ~ gradient magnitude; 1.56 ~ 57° in game, ~34° real)
-  rock1: 1.86,
+  rock0: 1.66, // rock score where solid rock starts (score ~ gradient magnitude; 1.66 ~ 59° in game, ~35° real)
+  rock1: 1.98,
   ledge0: 1.25, // rock ledges start breaking through the turf
+  rillAlder: 0.85, // alder weight in the trough of a fall-line rill on mid slopes (material.js, rillAt)
 };
 
 // Signed distance (world m) from the directed line a->b; positive to the left of travel (x east, z south).
@@ -107,12 +108,41 @@ export function forestFrom(x, z, h, s, sd, spruce, dev) {
 }
 
 // Sitka alder and salmonberry: thickets along drainages on mid slopes, plus scattered patches.
+export const ALDER_T0 = 0.36;
+export const ALDER_T1 = 0.6;
 export function alderFrom(x, z, h, s, forest, dev, wet) {
-  const band = smoothstep(4, 16, h) * (1 - smoothstep(92, 136, h));
-  const slope = smoothstep(0.1, 0.34, s) * (1 - smoothstep(1.1, 1.45, s));
+  const band = smoothstep(4, 14, h) * (1 - smoothstep(88, 132, h));
+  const slope = smoothstep(0.1, 0.3, s) * (1 - smoothstep(1.15, 1.5, s));
   const patchN = vnoise(x / 120 + 7.3, z / 120 - 3.9) * 0.7 + vnoise(x / 37 - 2.2, z / 37 + 5.1) * 0.3;
-  const thicket = smoothstep(0.42, 0.66, patchN * 0.6 + smoothstep(0.08, 0.38, wet) * 0.62);
+  const thicket = smoothstep(ALDER_T0, ALDER_T1, patchN * 0.62 + smoothstep(0.06, 0.34, wet) * 0.62);
   return band * slope * thicket * (1 - forest) * (1 - dev);
+}
+
+// Fall-line rills (mirror of the terrain shader's per-pixel relief, material.js): 0 in the trough of a rill, 1 between
+// them. Stretched value noise is evaluated in the two nearest of four fixed orientations and blended, so the pattern
+// runs downhill without swirling.
+export function rillAt(x, z, gx, gz) {
+  const s = Math.hypot(gx, gz);
+  const slopeW = smoothstep(0.2, 0.55, s) * (1 - smoothstep(1.5, 2.2, s));
+  if (slopeW <= 0) return 1;
+  let ang = Math.atan2(gz, gx) * (4 / Math.PI);
+  if (ang < 0) ang += 4;
+  const k0 = Math.floor(ang);
+  const bw = smoothstep(0, 1, ang - k0);
+  let rc = 0;
+  for (let i = 0; i < 2; i++) {
+    const a = ((k0 + i) * Math.PI) / 4;
+    const dx = Math.cos(a);
+    const dz = Math.sin(a);
+    const n = vnoise((x * -dz + z * dx) / 15 + 11.3 + i * 5.1, (x * dx + z * dz) / 90 + 2.9);
+    rc += (i === 0 ? 1 - bw : bw) * smoothstep(0, 0.45, Math.abs(2 * n - 1));
+  }
+  return 1 + (rc - 1) * slopeW;
+}
+
+// Alder in rill troughs on mid slopes (added to the drainage thickets by max()).
+export function rillAlderFrom(h, rill, forest, dev) {
+  return (1 - rill) * COVER.rillAlder * smoothstep(5, 16, h) * (1 - smoothstep(88, 125, h)) * (1 - forest) * (1 - dev);
 }
 
 export function snowFrom(x, z, h, gx, gz, s, pen, curv = 0) {
@@ -143,9 +173,9 @@ export function rockFrom(x, z, h, s, sd, curv) {
 export function screeFrom(x, z, h, s, rock, wet) {
   const n = vnoise(x / 57 + 1.9, z / 57 - 6.6);
   const high = smoothstep(125, 175, h + 50 * (n - 0.5));
-  const steep = smoothstep(0.8, 1.15, s);
-  const chute = smoothstep(0.2, 0.45, wet) * smoothstep(0.85, 1.2, s) * smoothstep(80, 130, h);
-  const patchy = smoothstep(0.3, 0.55, vnoise(x / 23 - 4.4, z / 23 + 2.8) * 0.6 + n * 0.4);
+  const steep = smoothstep(0.95, 1.3, s);
+  const chute = smoothstep(0.25, 0.5, wet) * smoothstep(1.0, 1.35, s) * smoothstep(85, 135, h);
+  const patchy = smoothstep(0.38, 0.6, vnoise(x / 23 - 4.4, z / 23 + 2.8) * 0.6 + n * 0.4);
   return Math.min(1, high * steep * patchy + chute * 0.6) * (1 - rock);
 }
 
@@ -197,6 +227,8 @@ export function createLandcover({ surface, heightmap, region, half, isDeveloped,
 
   const api = {
     regionAt,
+    rillAt,
+    rillAlderFrom,
     flowersFrom,
     noise: vnoise,
     forestFrom,
@@ -231,7 +263,8 @@ export function createLandcover({ surface, heightmap, region, half, isDeveloped,
     alderDensity(x, z) {
       const q = sample(x, z);
       if (q.h < 0) return 0;
-      return alderFrom(x, z, q.h, q.s, forestFrom(x, z, q.h, q.s, q.sd, q.spruce, q.dev), q.dev, q.wet);
+      const f = forestFrom(x, z, q.h, q.s, q.sd, q.spruce, q.dev);
+      return Math.max(alderFrom(x, z, q.h, q.s, f, q.dev, q.wet), rillAlderFrom(q.h, rillAt(x, z, q.gx, q.gz), f, q.dev));
     },
 
     // Lakes in the DEM are perfectly flat plateaus above sea level (Karluk, Frazer, Red, Akalura...).
@@ -252,7 +285,7 @@ export function createLandcover({ surface, heightmap, region, half, isDeveloped,
       if (screeFrom(x, z, q.h, q.s, rock, q.wet) > 0.5) return 'gravel';
       const f = forestFrom(x, z, q.h, q.s, q.sd, q.spruce, q.dev);
       if (f > 0.5) return 'forest';
-      if (alderFrom(x, z, q.h, q.s, f, q.dev, q.wet) > 0.5) return 'alder';
+      if (Math.max(alderFrom(x, z, q.h, q.s, f, q.dev, q.wet), rillAlderFrom(q.h, rillAt(x, z, q.gx, q.gz), f, q.dev)) > 0.5) return 'alder';
       return 'grass';
     },
   };

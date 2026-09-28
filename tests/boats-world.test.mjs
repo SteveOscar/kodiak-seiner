@@ -40,6 +40,25 @@ test('title cinematic: 5-7 golden-hour or dawn shots of real places, cut in a lo
   assert.equal(shotAt(TITLE_SHOTS, TITLE_SHOTS[0].duration + 0.5).index, 1);
 });
 
+test('title path shots see their subject: no ridge between the camera and the look target', () => {
+  const surface = (x, z) => Math.max(0, hm.heightAt(x, z));
+  for (const s of TITLE_SHOTS) {
+    if (s.kind !== 'path') continue;
+    for (const [cam, look] of [[s.from, s.lookFrom], [s.to, s.lookTo]]) {
+      const cy = surface(cam.x, cam.z) + cam.h;
+      assert.ok(hm.heightAt(cam.x, cam.z) < cy - 5, `${s.id}: camera clear of the ground`);
+      // The last stretch may rise onto the peak being framed.
+      for (let k = 1; k <= 40; k++) {
+        const t = (k / 40) * 0.85;
+        const x = cam.x + (look.x - cam.x) * t;
+        const z = cam.z + (look.z - cam.z) * t;
+        const y = cy + (look.y - cy) * t;
+        assert.ok(hm.heightAt(x, z) < y, `${s.id}: terrain blocks the view ${(t * 100).toFixed(0)}% of the way`);
+      }
+    }
+  }
+});
+
 test('fleet data: 4-6 tenders on real grounds, eight fleet-board seiners, ferry and cutter stops', async () => {
   assert.ok(TENDERS.length >= 4 && TENDERS.length <= 6);
   const places = resolve(ctx.geo).places;

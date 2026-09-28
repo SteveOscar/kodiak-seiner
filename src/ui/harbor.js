@@ -35,8 +35,8 @@ export function createHarborPanel(ctx, { close, resume }) {
   function render() {
     const e = eco();
     const svc = place?.services ?? [];
-    setText(kicker, place?.kind === 'town' ? 'Harbour' : place?.kind === 'cannery' ? 'Cannery dock' : 'Tied up');
-    setText(title, place?.name ?? 'Harbour');
+    setText(kicker, place?.kind === 'town' ? 'Harbor' : place?.kind === 'cannery' ? 'Cannery dock' : 'Tied up');
+    setText(title, place?.name ?? 'Harbor');
     clear(services);
     for (const s of svc) services.append(h('span.hb-chip', { text: { sell: 'Fish buyer', fuel: 'Fuel dock', upgrades: 'Boatyard', ice: 'Ice', rest: 'Rest' }[s] ?? s }));
 

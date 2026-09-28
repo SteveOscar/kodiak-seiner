@@ -6,7 +6,9 @@
 //   gradientSlope(...)       steepest slope of the ground (degrees) and its downhill direction
 //   wadeFactor(depth)        speed factor in the shallows; 0 beyond knee depth (no swimming)
 //   findLanding(...)         the best walkable beach within reach of an anchored boat, or a reason why there is none
+//   stepOffPoint / dryPointAhead   first wadeable spot ahead of the skiff's bow / first dry beach beyond it
 //   findSummit / perchPoint  top of the hill a named peak marks (hill-climb), or a viewpoint's own spot, for perches
+//   isHilltop(...)           standing on a local high point (summit or ridge crest) — the camera's summit framing
 //
 // Slopes are game slopes: the terrain is vertically exaggerated ~2.35x (a real 25° hillside is ~48° in game), which is
 // what makes the upper ridges of Kodiak a scramble.
@@ -175,6 +177,31 @@ export function stepOffPoint(heightAt, bowX, bowZ, ux, uz, { maxAhead = 9, depth
     if (heightAt(px, pz) >= -depth) return { x: px, z: pz, ahead: t };
   }
   return null;
+}
+
+// First dry ground (at least `dry` m above the sea) walking from (x, z) along (ux, uz), plus `extra` metres further
+// up the beach when that is still dry; null when none within `maxAhead`.
+export function dryPointAhead(heightAt, x, z, ux, uz, { maxAhead = 16, dry = 0.15, extra = 1.2 } = {}) {
+  for (let t = 0; t <= maxAhead; t += 0.4) {
+    const px = x + ux * t;
+    const pz = z + uz * t;
+    if (heightAt(px, pz) < dry) continue;
+    const qx = px + ux * extra;
+    const qz = pz + uz * extra;
+    return heightAt(qx, qz) >= dry ? { x: qx, z: qz } : { x: px, z: pz };
+  }
+  return null;
+}
+
+// True when a walker at height y on (x, z) stands on a local high point: the ground `r` metres away is at least
+// `drop` lower in `need` of `dirs` directions (a summit, or a ridge crest that stays level along its length).
+export function isHilltop(heightAt, x, z, y, { r = 25, drop = 3, dirs = 8, need = 6 } = {}) {
+  let lower = 0;
+  for (let i = 0; i < dirs; i++) {
+    const a = (i / dirs) * Math.PI * 2;
+    if (heightAt(x + Math.sin(a) * r, z - Math.cos(a) * r) < y - drop) lower++;
+  }
+  return lower >= need;
 }
 
 // Summit of the hill a named peak marks: hill-climb from (cx, cz), staying within `radius`, so a higher neighbour

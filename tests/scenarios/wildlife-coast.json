@@ -1,0 +1,113 @@
+[
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+  "timeout": 120000
+ },
+ {
+  "start": {}
+ },
+ {
+  "time": 19.8
+ },
+ {
+  "weather": "clear"
+ },
+ {
+  "eval": "document.getElementById('ui').style.visibility = 'hidden'; window.__W = __KODIAK__.systems.wildlife; window.__H = __KODIAK__.ctx.heightmap; window.__off = (x, z, d) => { const g = { x: 0, z: 0 }; __H.shoreGradient(x, z, g); return [x + g.x * d, z + g.z * d]; }; window.__near = (list, x, z) => list.slice().sort((a, b) => Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z))[0]; 'ok'"
+ },
+ {
+  "eval": "(() => { const r = __near(__W.qa.rafts, 5885, -4544); const [bx, bz] = __off(r.x, r.z, 160); __KODIAK__.teleport(bx, bz, 0); return [bx, bz]; })()"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "eval": "(() => { const r = __near(__W.qa.rafts, 5885, -4544); const o = r.members[0]; const [cx, cz] = __off(o.position.x, o.position.z, 16); __KODIAK__.camera([cx + 4, 2.4, cz + 3], [o.position.x, 0.2, o.position.z]); return r.members.map(m => m.state).join(','); })()"
+ },
+ {
+  "wait": 1200
+ },
+ {
+  "shot": "otters-raft"
+ },
+ {
+  "eval": "(() => { const r = __near(__W.qa.rafts, 5885, -4544); const o = r.members[3]; const [cx, cz] = __off(o.position.x, o.position.z, 7); __KODIAK__.camera([cx + 1.5, 1.2, cz + 1], [o.position.x, 0.15, o.position.z]); return 1; })()"
+ },
+ {
+  "wait": 800
+ },
+ {
+  "shot": "otters-close"
+ },
+ {
+  "eval": "(() => { const h = __W.qa.haulouts.find(h => h.id === 'haul-islet-15'); const m = h.members[0]; const [bx, bz] = __off(m.home.x, m.home.z, 220); __KODIAK__.teleport(bx, bz, 0); return [h.members.length, bx, bz]; })()"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "eval": "(() => { const h = __W.qa.haulouts.find(h => h.id === 'haul-islet-15'); const m = h.members[0]; const [cx, cz] = __off(m.home.x, m.home.z, 42); __KODIAK__.camera([cx, 3.2, cz], [m.position.x, m.position.y + 0.6, m.position.z]); return h.members.map(s => +s.position.y.toFixed(1)).join(','); })()"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "shot": "sealions"
+ },
+ {
+  "eval": "(() => { const c = __near(__W.qa.colonies, 5629, 2570); const [bx, bz] = __off(c.x, c.z, 300); __KODIAK__.teleport(bx, bz, 0); return [bx, bz]; })()"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "eval": "(() => { const c = __near(__W.qa.colonies, 5629, 2570); const p = c.puffinRaft[0]; const [cx, cz] = __off(p.position.x, p.position.z, 12); __KODIAK__.camera([cx, 1.6, cz], [p.position.x, 0.3, p.position.z]); return c.puffinRaft.length; })()"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "shot": "puffins"
+ },
+ {
+  "eval": "(() => { const h = __W.qa.haulouts.find(h => h.kind === 'rookery'); const c = h.closed; const a = Math.atan2(-0.3, -1); const bx = c.x + Math.cos(a) * (c.radius + 180), bz = c.z + Math.sin(a) * (c.radius + 180); __KODIAK__.teleport(bx, bz, 60); return [bx, bz, c.radius]; })()"
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "eval": "(() => { const h = __W.qa.haulouts.find(h => h.kind === 'rookery'); const m = h.members[5]; const s = __KODIAK__.systems.seiner.position; __KODIAK__.camera([s.x, 8, s.z], [m.position.x, m.position.y + 1, m.position.z]); return [Math.hypot(m.position.x - s.x, m.position.z - s.z), h.alarm]; })()"
+ },
+ {
+  "wait": 800
+ },
+ {
+  "shot": "rookery-naked-eye"
+ },
+ {
+  "camera": null
+ },
+ {
+  "eval": "(() => { const h = __W.qa.haulouts.find(h => h.kind === 'rookery'); const c = h.clusters[0]; const s = __KODIAK__.systems.seiner.position; const hd = Math.atan2(c.x - s.x, -(c.z - s.z)) * 180 / Math.PI; __KODIAK__.teleport(s.x, s.z, hd); return [hd, Math.hypot(c.x - s.x, c.z - s.z)]; })()"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "key": "KeyB",
+  "down": true
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "shot": "rookery-binoculars"
+ },
+ {
+  "key": "KeyB",
+  "up": true
+ },
+ {
+  "state": "end"
+ }
+]

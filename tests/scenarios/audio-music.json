@@ -1,0 +1,6 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 90000 },
+  { "eval": "JSON.stringify(__KODIAK__.systems.audio.qa.pianoRoll(['title', 'dawn', 'triumph'], { bars: 16 }))" },
+  { "shot": "piano-roll" },
+  { "eval": "__KODIAK__.systems.audio.qa.clear(); 1" }
+]

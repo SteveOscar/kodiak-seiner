@@ -277,10 +277,11 @@ function hash2(a, b) {
 // ---------------------------------------------------------------- labels
 
 // Greedy label placement. items: [{ id, x, y (screen anchor), w, h, priority (higher first), anchor: 'point'|'center',
-// gap, cands? ([[ox, oy], ...] offsets of the label's top-left from the anchor, tried in order) }]. Returns the placed
+// gap, cands? ([[ox, oy], ...] offsets of the label's top-left from the anchor, tried in order) }]. Labels stay inside
+// [left, width] × [top, height]. Returns the placed
 // items with { lx, ly } = label top-left; skipped items are omitted. `blocked` is an optional list of rects
 // {x, y, w, h} to avoid (the boat, the legend); `out.rects` receives every occupied rect when given.
-export function placeLabels(items, { width = Infinity, height = Infinity, blocked = [], pad = 2, out = null } = {}) {
+export function placeLabels(items, { left = 0, top = 0, width = Infinity, height = Infinity, blocked = [], pad = 2, out = null } = {}) {
   const placed = [];
   const rects = blocked.map((r) => ({ ...r }));
   const sorted = [...items].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
@@ -297,7 +298,7 @@ export function placeLabels(items, { width = Infinity, height = Infinity, blocke
           ]);
     for (const [ox, oy] of cands) {
       const r = { x: it.x + ox, y: it.y + oy, w: it.w, h: it.h };
-      if (r.x < 0 || r.y < 0 || r.x + r.w > width || r.y + r.h > height) continue;
+      if (r.x < left || r.y < top || r.x + r.w > width || r.y + r.h > height) continue;
       if (rects.some((q) => overlap(q, r, pad))) continue;
       rects.push(r);
       placed.push({ ...it, lx: r.x, ly: r.y });

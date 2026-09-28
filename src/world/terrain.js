@@ -1,18 +1,22 @@
 // WP-TERRAIN: the Kodiak archipelago and the Alaska Peninsula backdrop (SPEC §6.4).
 //
 //   geometry    CDLOD quadtree of instanced 32x32 grid quadrants displaced on the GPU from a despiked copy of the DEM
-//               (terrain/quadtree.js, terrain/material.js); heightAt() returns exactly the finest-level surface.
-//   material    slope/height/aspect/shore splatting, triplanar rock, detail normals, lakes, seabed with caustics and
-//               kodiak_underwater; direct sun = uSunColor x uTerrainShadow.
+//               (terrain/quadtree.js, terrain/lodMesh.js, terrain/material.js); heightAt() returns exactly the
+//               finest-level surface. A second, coarser mesh with a cheap shader is drawn only by the planar water
+//               reflection (camera layer 1).
+//   material    slope/height/aspect/shore/drainage splatting, fall-line rills and alder fingers, triplanar rock,
+//               detail normals, lakes, seabed with caustics and kodiak_underwater; direct sun = uSunColor x
+//               uTerrainShadow.
 //   shadow      GPU raymarched terrain sun shadow published as uniforms.uTerrainShadow (terrain/shadowPass.js) and
 //               the matching CPU sunVisibilityAt() (terrain/sunvis.js).
-//   vegetation  spruce forests with impostors, alder and salmonberry, grass and wildflowers, beach boulders and
-//               driftwood, bull kelp (terrain/vegetation/*).
+//   vegetation  spruce forests with impostors and shadow proxies, alder and salmonberry, grass, ferns, fireweed and
+//               lupine, beach boulders and driftwood, bull kelp (terrain/vegetation/*).
 
 import * as THREE from 'three';
 import { despike } from './terrain/despike.js';
 import { createSurface, createCurvature, L0, latticeRGBA, LATTICE_N } from './terrain/surface.js';
-import { createBounds, createSelector, morphParams, QUAD, DEFAULT_RANGES, ROOT_LEVEL } from './terrain/quadtree.js';
+import { createBounds, DEFAULT_RANGES, ROOT_LEVEL } from './terrain/quadtree.js';
+import { createPatchGeometry, createLodMesh, TRIANGLES_PER_QUADRANT } from './terrain/lodMesh.js';
 import { buildRegion, createLandcover, REGION_SIZE } from './terrain/landcover.js';
 import { createSunVisibility } from './terrain/sunvis.js';
 import { computeDrainage, createWetnessSampler, drainageR8 } from './terrain/drainage.js';
@@ -23,43 +27,9 @@ import { createTerrainMaterial } from './terrain/material.js';
 import { createVegetation } from './terrain/vegetation/index.js';
 
 const MAX_INSTANCES = 4096;
-
-// One quadrant: (QUAD+1)^2 grid vertices plus a skirt ring. position = (i, skirt, j).
-function createPatchGeometry() {
-  const n = QUAD + 1;
-  const pos = [];
-  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) pos.push(i, 0, j);
-  const border = [];
-  for (let i = 0; i < QUAD; i++) border.push([i, 0]);
-  for (let j = 0; j < QUAD; j++) border.push([QUAD, j]);
-  for (let i = QUAD; i > 0; i--) border.push([i, QUAD]);
-  for (let j = QUAD; j > 0; j--) border.push([0, j]);
-  const skirtBase = pos.length / 3;
-  for (const [i, j] of border) pos.push(i, 1, j);
-  const idx = [];
-  for (let j = 0; j < QUAD; j++) {
-    for (let i = 0; i < QUAD; i++) {
-      const a = j * n + i;
-      const b = a + 1;
-      const c = a + n;
-      const d = c + 1;
-      idx.push(a, c, b, b, c, d);
-    }
-  }
-  for (let k = 0; k < border.length; k++) {
-    const [i0, j0] = border[k];
-    const [i1, j1] = border[(k + 1) % border.length];
-    const t0 = j0 * n + i0;
-    const t1 = j1 * n + i1;
-    const s0 = skirtBase + k;
-    const s1 = skirtBase + ((k + 1) % border.length);
-    idx.push(t0, s0, t1, t1, s0, s1, t0, t1, s0, t1, s1, s0);
-  }
-  const g = new THREE.InstancedBufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setIndex(idx);
-  return g;
-}
+// LOD ranges of the reflection mesh: about half the main view's detail (the planar reflection is half resolution and
+// wave-distorted); every level still spans ~2 of its node sizes, and skirts cover the rest.
+const REFLECTION_RANGES = [60, 360, 1100, 2200, 4200, 8000, 16000, 52000];
 
 export async function create(ctx) {
   const { renderer, scene, camera, uniforms, heightmap, geo, pipeline, quality } = ctx;
@@ -124,47 +94,35 @@ export async function create(ctx) {
   shadow.update(readSun(), 0);
   uniforms.uTerrainShadow.value = shadow.texture;
 
-  // ---- LOD mesh
+  // ---- LOD meshes: the main view (layer 0) and a coarser, cheaply shaded copy that only the planar water
+  // reflection draws (layer 1). Both select land from the real camera; the reflection keeps what the mirror sees.
+  const textures = { info: info.texture, coverA: cover.a.texture, coverB: cover.b.texture, coverC: cover.c.texture, lattice: latticeTex, region: regionTex, rock: detail.rock.texture, cliff: detail.cliff.texture, ground: detail.ground.texture, gravel: detail.gravel.texture };
+  const matOpts = { uniforms, textures, heightTex, size, half, getEnvDefines: () => ctx.systems.sky?.envMapDefines ?? null };
   const lodUniform = { value: [] };
-  let selector = null;
-  function setRanges(scale) {
-    const ranges = DEFAULT_RANGES.map((r) => r * scale);
-    lodUniform.value = morphParams(ranges).map((m) => new THREE.Vector4(m.start, m.inv, m.spacing, m.skirt));
-    selector = createSelector({ bounds, ranges, maxInstances: MAX_INSTANCES });
-  }
-  setRanges(quality.name === 'low' ? 0.7 : 1);
-  const geometry = createPatchGeometry();
-  const nodeData = new Float32Array(MAX_INSTANCES * 4);
-  const nodeAttr = new THREE.InstancedBufferAttribute(nodeData, 4);
-  nodeAttr.setUsage(THREE.DynamicDrawUsage);
-  geometry.setAttribute('tkNode', nodeAttr);
-  geometry.instanceCount = 0;
-  geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e9);
-  geometry.boundingBox = new THREE.Box3(new THREE.Vector3(-1e5, -100, -1e5), new THREE.Vector3(1e5, 1000, 1e5));
-  const material = createTerrainMaterial({
-    uniforms,
-    textures: { info: info.texture, coverA: cover.a.texture, coverB: cover.b.texture, coverC: cover.c.texture, lattice: latticeTex, region: regionTex, rock: detail.rock.texture, cliff: detail.cliff.texture, ground: detail.ground.texture, gravel: detail.gravel.texture },
-    lodUniform,
-    heightTex,
-    size,
-    half,
-    getEnvDefines: () => ctx.systems.sky?.envMapDefines ?? null,
-  });
+  const reflLodUniform = { value: [] };
+  const material = createTerrainMaterial({ ...matOpts, lodUniform });
+  const reflMaterial = createTerrainMaterial({ ...matOpts, lodUniform: reflLodUniform, cheap: true });
+  reflMaterial.userData.tk.tkSunScale = material.userData.tk.tkSunScale;
   const dbg = new URLSearchParams(globalThis.location?.search ?? '').get('tkdbg');
-  if (dbg) {
-    material.defines = material.defines ?? {};
-    for (const d of dbg.split('.')) material.defines[`TK_DBG_${d.toUpperCase()}`] = 1;
-  }
-  material.userData.textures = { info: info.texture, coverA: cover.a.texture, coverB: cover.b.texture, coverC: cover.c.texture, lattice: latticeTex, region: regionTex, rock: detail.rock.texture, cliff: detail.cliff.texture, ground: detail.ground.texture, gravel: detail.gravel.texture };
   material.defines = material.defines ?? {};
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.name = 'terrain';
-  mesh.frustumCulled = false;
+  if (dbg) for (const d of dbg.split('.')) material.defines[`TK_DBG_${d.toUpperCase()}`] = 1;
+  material.userData.textures = textures;
+  const baseRangeScale = quality.name === 'low' ? 0.7 : 1;
+  const patch = createPatchGeometry();
+  const main = createLodMesh({ base: patch, bounds, ranges: DEFAULT_RANGES.map((r) => r * baseRangeScale), lodUniform, material, maxInstances: MAX_INSTANCES, name: 'terrain' });
+  const refl = createLodMesh({ base: patch, bounds, ranges: REFLECTION_RANGES, lodUniform: reflLodUniform, material: reflMaterial, maxInstances: 2048, reflectOnly: true, name: 'terrain-reflection' });
+  const mesh = main.mesh;
   mesh.receiveShadow = true;
   mesh.castShadow = false;
-  mesh.matrixAutoUpdate = false;
-  mesh.layers.enable(1);
+  mesh.layers.set(0);
   scene.add(mesh);
+  const reflMesh = refl.mesh;
+  reflMesh.receiveShadow = true;
+  reflMesh.castShadow = false;
+  reflMesh.layers.set(1);
+  scene.add(reflMesh);
+  // The low preset has no planar reflection (WP-OCEAN), so its mesh is never drawn; skip its selection too.
+  const reflectionsPossible = quality.name !== 'low';
 
   // ---- vegetation
   let vegetation = null;
@@ -187,47 +145,34 @@ export async function create(ctx) {
 
   const frustum = new THREE.Frustum();
   const projView = new THREE.Matrix4();
-  let instances = 0;
   let selectMs = 0;
-  let debugMaxInstances = MAX_INSTANCES;
-
-  // Near quadrants first so early depth rejection skips the hills hidden behind them.
-  const order = new Uint16Array(MAX_INSTANCES);
-  const keys = new Float32Array(MAX_INSTANCES);
-  const scratch = new Float32Array(MAX_INSTANCES * 4);
-  function sortFrontToBack(n) {
-    const cx = camera.position.x;
-    const cz = camera.position.z;
-    for (let i = 0; i < n; i++) {
-      const k = i * 4;
-      const hs = nodeData[k + 2] * 0.5;
-      const dx = nodeData[k] + hs - cx;
-      const dz = nodeData[k + 1] + hs - cz;
-      keys[i] = Math.max(0, Math.hypot(dx, dz) - hs * 1.41);
-      order[i] = i;
+  // Selection depends only on the camera, so it is skipped while the camera holds still (paused, photo framing).
+  const lastView = new Float64Array(32).fill(NaN);
+  let forceSelect = true;
+  function cameraChanged() {
+    const a = camera.matrixWorld.elements;
+    const b = camera.projectionMatrix.elements;
+    let changed = forceSelect;
+    for (let i = 0; i < 16; i++) {
+      if (lastView[i] !== a[i] || lastView[16 + i] !== b[i]) {
+        changed = true;
+        lastView[i] = a[i];
+        lastView[16 + i] = b[i];
+      }
     }
-    const idx = Array.from(order.subarray(0, n)).sort((a, b) => keys[a] - keys[b]);
-    scratch.set(nodeData.subarray(0, n * 4));
-    for (let i = 0; i < n; i++) {
-      const src = idx[i] * 4;
-      nodeData[i * 4] = scratch[src];
-      nodeData[i * 4 + 1] = scratch[src + 1];
-      nodeData[i * 4 + 2] = scratch[src + 2];
-      nodeData[i * 4 + 3] = scratch[src + 3];
-    }
+    forceSelect = false;
+    return changed;
   }
-
   function selectLod() {
-    const t0 = performance.now();
     camera.updateMatrixWorld();
+    if (!cameraChanged()) return;
+    const t0 = performance.now();
     projView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     frustum.setFromProjectionMatrix(projView, camera.coordinateSystem, camera.reversedDepth);
-    instances = Math.min(debugMaxInstances, selector.select(camera.position, frustum.planes, nodeData));
-    sortFrontToBack(instances);
-    geometry.instanceCount = instances;
-    nodeAttr.clearUpdateRanges();
-    nodeAttr.addUpdateRange(0, instances * 4);
-    nodeAttr.needsUpdate = true;
+    main.select(camera.position, frustum.planes);
+    // The reflection is only rendered from above the sea surface.
+    if (reflectionsPossible && camera.position.y > 0.05) refl.select(camera.position, frustum.planes);
+    else refl.clear();
     selectMs += (performance.now() - t0 - selectMs) * 0.05;
   }
 
@@ -267,6 +212,7 @@ export async function create(ctx) {
   const normalTmp = { x: 0, y: 1, z: 0 };
   const sys = {
     mesh,
+    reflectionMesh: reflMesh,
     material,
     surface,
     landcover,
@@ -358,10 +304,24 @@ void main() {
     update() {
       sunvis.refresh();
     },
+    // The camera is final here in play (cameraRig moves it in lateUpdate), and this runs before the water system's
+    // beforeRender reflection pass, which draws the reflection mesh with this frame's selection. beforeRender selects
+    // again only if the camera moved since (photo mode, debug camera).
+    frame() {
+      // A debug camera override is applied after frame(), so selecting here would be wasted work.
+      if (ctx.debug?.cameraOverride) return;
+      try {
+        selectLod();
+      } catch (err) {
+        if (!hookErrors++) console.error('[terrain] LOD selection failed', err);
+      }
+    },
     // Debug switches for profiling: { flat, noDetail, hidden, veg: { name: bool }, defines: { NAME: bool }, maxInstances }.
-    setDebug({ flat, noDetail, hidden, veg, defines, maxInstances, rangeScale } = {}) {
-      if (maxInstances !== undefined) debugMaxInstances = maxInstances ?? MAX_INSTANCES;
-      if (rangeScale !== undefined) setRanges(rangeScale);
+    setDebug({ flat, noDetail, hidden, veg, defines, maxInstances, rangeScale, reflection } = {}) {
+      if (maxInstances !== undefined) main.limit = maxInstances;
+      if (rangeScale !== undefined) main.setRanges(DEFAULT_RANGES.map((r) => r * rangeScale));
+      if (reflection !== undefined) reflMesh.visible = !!reflection;
+      forceSelect = true;
       if (defines) {
         material.defines = material.defines ?? {};
         for (const [k, v] of Object.entries(defines)) {
@@ -379,14 +339,18 @@ void main() {
         if (noDetail) material.defines.TK_DEBUG_NODETAIL = 1;
         else delete material.defines.TK_DEBUG_NODETAIL;
       }
-      if (hidden !== undefined) mesh.visible = !hidden;
+      if (hidden !== undefined) mesh.visible = reflMesh.visible = !hidden;
       material.needsUpdate = true;
     },
-    debugSelect: () => selectLod(),
+    debugSelect: () => {
+      forceSelect = true;
+      selectLod();
+    },
     debugState() {
       return {
-        instances,
-        triangles: instances * (QUAD * QUAD * 2 + QUAD * 16),
+        instances: main.instances,
+        triangles: main.instances * TRIANGLES_PER_QUADRANT,
+        reflectionInstances: refl.instances,
         cpuMs: +hookMs.toFixed(3),
         selectMs: +selectMs.toFixed(3),
         shadowComputations: shadow.computations,

@@ -305,10 +305,12 @@ export async function create(ctx) {
     }
     if (!changingMode && mode === 'play' && stack.length) closeAll({ silent: true });
     hudTick.force();
+    hudBeat = false;
   });
   events.on('game:start', (e) => {
     hud.resetPrompts();
     hudTick.force();
+    hudBeat = false;
     if (e?.newGame) {
       setTimeout(() => sys.hint('ui-controls', 'Throttle (W) (S), rudder (A) (D). Press F1 any time for the controls, (M) for the chart and (L) for the logbook.'), 9000);
     }
@@ -345,7 +347,8 @@ export async function create(ctx) {
   ctx.pipeline?.onResize?.(() => map.onResize());
 
   // ---------------------------------------------------------------- per frame
-  const hudTick = createThrottle(10);
+  const hudTick = createThrottle(20);
+  let hudBeat = false;
   const keys = new Set();
   let time = 0;
 
@@ -361,6 +364,8 @@ export async function create(ctx) {
     if (kp('F1') || kp('Slash')) keys.add('help');
     if (kp('KeyH')) keys.add('photo');
     if (kp('Space') || kp('Enter')) keys.add('confirm');
+    if (kp('ArrowUp') || kp('KeyW')) keys.add('up');
+    if (kp('ArrowDown') || kp('KeyS')) keys.add('down');
     return keys;
   }
 
@@ -382,9 +387,14 @@ export async function create(ctx) {
     const typing = (ae?.tagName === 'INPUT' && ae.type === 'text') || ae?.tagName === 'TEXTAREA';
     if (k.size && !typing) {
       const t = top();
+      const nav = mode === 'paused' && t && typeof panels[t]?.nav === 'function';
       if (k.has('confirm') && t === 'confirm') {
         // Enter/Space accepts a confirm dialog.
         confirmPanel.el.querySelector('.panel-actions .btn.primary')?.click();
+      } else if (nav && (k.has('up') || k.has('down'))) {
+        panels[t].nav(k.has('up') ? -1 : 1);
+      } else if (nav && k.has('confirm')) {
+        panels[t].activate?.();
       } else {
         const act = routeKeys(mode, t, k);
         if (act?.type === 'open') open(act.panel);
@@ -412,10 +422,14 @@ export async function create(ctx) {
     const showHud = inGame() && ctx.state.mode !== 'photo';
     if (showHud) {
       hud.frame();
+      // A 20 Hz beat alternating between the HUD panels and the sonar: each refreshes at 10 Hz on its own frames.
       if (hudTick.due(dt)) {
-        hud.update(time);
-        overlays.update();
-        checkWaypoint();
+        hudBeat = !hudBeat;
+        if (hudBeat) {
+          hud.update(time);
+          overlays.update();
+          checkWaypoint();
+        } else hud.updateSonar(time);
       }
     }
   };

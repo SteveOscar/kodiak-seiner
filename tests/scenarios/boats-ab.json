@@ -1,0 +1,20 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 120000 },
+  { "start": {} },
+  { "time": 20.5 },
+  { "teleport": [5440, -330, 150] },
+  { "wait": 1500 },
+  { "eval": "window.__K = __KODIAK__; const sc = __K.ctx.scene; const names = new Set(['seiner','skiff','fleet','seiner-exhaust','seiner-spray','seiner-light-pool','anchor-rode','skiff-line','tie-stake','skiff-spray','skiff-exhaust','fleet-light-pools']); window.__boatObjs = sc.children.filter(o => names.has(o.name)); let tris = 0; __K.systems.seiner.object3d.traverse(o => { if (o.isMesh && o.geometry?.index) tris += o.geometry.index.count / 3; }); let skt = 0; __K.systems.skiff.object3d.traverse(o => { if (o.isMesh && o.geometry?.index) skt += o.geometry.index.count / 3; }); JSON.stringify({ objs: __boatObjs.map(o => o.name), seinerTris: tris, skiffTris: skt })" },
+  { "key": "KeyW", "down": true },
+  { "perf": "boats-on-a", "ms": 3000 },
+  { "eval": "__boatObjs.forEach(o => o.visible = false); true" },
+  { "perf": "boats-off", "ms": 3000 },
+  { "eval": "__boatObjs.forEach(o => o.visible = true); true" },
+  { "perf": "boats-on-b", "ms": 3000 },
+  { "time": 23.6 },
+  { "press": "KeyN" },
+  { "perf": "night-on", "ms": 3000 },
+  { "eval": "__boatObjs.forEach(o => o.visible = false); true" },
+  { "perf": "night-off", "ms": 3000 },
+  { "eval": "__boatObjs.forEach(o => o.visible = true); true" }
+]

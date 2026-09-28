@@ -13,17 +13,18 @@ export const gainToDb = (g) => (g > 0 ? 20 * Math.log10(g) : -Infinity);
 export const midiToHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
 export const TUNING = {
-  bus: { ambience: 0.9, sfx: 1.0, music: 0.42, ui: 0.8 },
-  ocean: { deep: 0.2, surf: 0.075, wash: 0.5 },
+  bus: { ambience: 1.3, sfx: 1.0, music: 0.5, ui: 0.8 },
+  ocean: { deep: 0.2, surf: 0.09, wash: 0.5, lap: 0.11 },
   wind: { gain: 0.2, whistle: 0.018 },
   rain: { patter: 0.3, hiss: 0.05 },
-  harbor: { hum: 0.035, clinkRate: 0.45 },
-  engine: { main: 0.6, skiff: 0.5, fleet: 0.4, genset: 0.07 },
+  harbor: { hum: 0.035, clinkRate: 0.2 },
+  engine: { main: 0.38, skiff: 0.4, fleet: 0.4, genset: 0.07 },
   hydraulics: 0.12,
   hullWash: 0.16,
+  trim: 1.6, // make-up gain into the limiter
   maxVoices: 28,
   speedOfSound: 343,
-  radio: { squelch: 0.3, bed: 0.03, voice: 0.05 },
+  radio: { squelch: 0.17, bed: 0.022, voice: 0.045 },
 };
 
 export const VOLUME_KEYS = ['master', 'music', 'sfx', 'ambience'];
@@ -45,11 +46,6 @@ export function mergeVolumes(current, patch) {
     }
   }
   return out;
-}
-
-// Inverse distance law as PannerNode computes it (distanceModel 'inverse').
-export function distanceGain(d, ref = 1, rolloff = 1) {
-  return d <= ref ? 1 : ref / (ref + rolloff * (d - ref));
 }
 
 // Air absorption as a low-pass cutoff (Hz): distant blows, horns and thunder lose their top.
@@ -83,8 +79,27 @@ export function oceanParams({ shoreDist = 1000, camHeight = 10, hs = 0.6, windSp
     swellDepth: 0.22 + 0.22 * Math.min(1, hs),
     swellHz: 1 / clamp(7 + hs * 1.6, 7, 12),
     washLevel: T.wash * smoothstep(380, 25, shoreDist) * sea * high * (shoreDist < 0 ? Math.exp(shoreDist / 120) : 1) * (1 - 0.6 * interior),
+    // Wavelets slopping and crests spilling close by: the mid/high texture that says "water" on small speakers.
+    lapGain: T.lap * clamp(0.45 + 0.35 * hs + 0.6 * chop, 0.3, 1.6) * Math.pow(high, 1.5) * inland * (1 - 0.7 * interior),
+    lapCentre: (800 + 900 * chop + 500 * near) * (1 - 0.4 * interior),
+    lapRate: 0.7 + 0.5 * Math.min(2, hs) + 0.8 * chop,
     near,
   };
+}
+
+// Lapping: a train of soft sloshes (Poisson onsets at `rate` per second; each swells in ~0.1 s and ebbs over ~0.5 s).
+// st = { env, target, next } is updated in place; returns a gain envelope ~0.2..1.2.
+export function lapStep(st, dt, rate, r = Math.random) {
+  st.next = (st.next ?? 0) - dt;
+  if (st.next <= 0) {
+    st.next = 0.08 - Math.log(1 - Math.min(0.999, r())) / Math.max(0.05, rate);
+    st.target = Math.max(st.target ?? 0, 0.35 + 0.65 * r());
+  }
+  st.target = (st.target ?? 0) * Math.exp(-dt / 0.25);
+  const env = st.env ?? 0;
+  const k = st.target > env ? 1 - Math.exp(-dt / 0.08) : 1 - Math.exp(-dt / 0.45);
+  st.env = env + (st.target - env) * k;
+  return clamp(0.2 + st.env, 0, 1.2);
 }
 
 // Surf breaks arrive every 6–11 s on a gently shelving Kodiak beach; bigger seas break less often but harder.
@@ -134,20 +149,14 @@ export function rainParams({ rain = 0, interior = 0 } = {}) {
   };
 }
 
-// Harbour/town ambience level from the distance to the nearest settlement (radius in metres).
-export function harborLevel(distance, radius = 200) {
-  if (!Number.isFinite(distance)) return 0;
-  return smoothstep(radius + 650, radius * 0.6, distance);
-}
-
 // ----------------------------------------------------------------------------------------------------- engines
 
 export const DIESELS = {
   // 58' limit seiner: a big six at 650–1800 rpm, heavy flywheel.
-  main: { cylinders: 6, idleRpm: 650, maxRpm: 1800, spoolUp: 1.4, spoolDown: 1.9, ref: 22, gain: 1 },
+  main: { cylinders: 6, idleRpm: 650, maxRpm: 1800, spoolUp: 1.4, spoolDown: 1.9, ref: 22, gain: 1, turbo: 1 },
   // Seine skiff: a big inboard diesel revved hard, lighter and quicker.
-  skiff: { cylinders: 6, idleRpm: 750, maxRpm: 2500, spoolUp: 0.55, spoolDown: 0.8, ref: 12, gain: 1 },
-  fleet: { cylinders: 6, idleRpm: 700, maxRpm: 1750, spoolUp: 1.6, spoolDown: 2, ref: 20, gain: 1 },
+  skiff: { cylinders: 6, idleRpm: 750, maxRpm: 2500, spoolUp: 0.55, spoolDown: 0.8, ref: 12, gain: 1, turbo: 0.25 },
+  fleet: { cylinders: 6, idleRpm: 700, maxRpm: 1750, spoolUp: 1.6, spoolDown: 2, ref: 20, gain: 1, turbo: 0.6 },
 };
 
 export function newEngineState() {
@@ -205,7 +214,7 @@ export function dieselVoice(st, cfg = DIESELS.main) {
   return {
     cycleHz: Math.max(0.5, rpm / 120),
     firingHz: Math.max(1, (rpm / 120) * cfg.cylinders),
-    gain: on * (cranking ? 0.25 : 0.5 + 0.3 * r + 0.35 * load),
+    gain: on * (cranking ? 0.25 : 0.52 + 0.2 * r + 0.22 * load),
     cutoff: 320 + 1000 * r + 900 * load,
     body: on * (0.55 + 0.25 * load),
     clatter: on * (cranking ? 0.05 : 0.2 * (1 - 0.55 * r) * (1 - 0.3 * load)),
@@ -213,7 +222,7 @@ export function dieselVoice(st, cfg = DIESELS.main) {
     exhaust: on * (0.05 + 0.3 * load + 0.12 * r),
     exhaustCutoff: 380 + 700 * r + 500 * load,
     turboHz: 1900 + 3400 * r,
-    turbo: on * 0.012 * r * (0.3 + load),
+    turbo: on * 0.006 * r * (0.3 + load) * (cfg.turbo ?? 1),
     hiss: on * 0.035 * r * (0.4 + load),
   };
 }
@@ -319,13 +328,13 @@ export function splashPlan({ species = 'pink', size, style } = {}, r = Math.rand
 
 // Footstep recipes by terrain surface (terrain.surfaceAt + 'water' wading + 'skiff' deck).
 export const FOOTSTEPS = {
-  gravel: { thudHz: 140, thud: 0.35, grains: 7, grainHz: 3400, grainQ: 1.6, grain: 0.3, spread: 0.07, swish: 0, ping: 0, slosh: 0 },
-  sand: { thudHz: 110, thud: 0.4, grains: 3, grainHz: 1500, grainQ: 0.8, grain: 0.1, spread: 0.06, swish: 0.12, swishHz: 900, ping: 0, slosh: 0 },
+  gravel: { thudHz: 140, thud: 0.25, grains: 14, grainHz: 3200, grainQ: 1.6, grain: 0.45, spread: 0.09, swish: 0.14, swishHz: 2600, ping: 0, slosh: 0 },
+  sand: { thudHz: 110, thud: 0.3, grains: 4, grainHz: 1500, grainQ: 0.8, grain: 0.14, spread: 0.06, swish: 0.22, swishHz: 1100, ping: 0, slosh: 0 },
   grass: { thudHz: 120, thud: 0.3, grains: 0, grainHz: 0, grainQ: 1, grain: 0, spread: 0, swish: 0.24, swishHz: 4200, ping: 0, slosh: 0 },
   forest: { thudHz: 100, thud: 0.4, grains: 3, grainHz: 2600, grainQ: 4, grain: 0.35, spread: 0.1, swish: 0.1, swishHz: 2600, ping: 0, slosh: 0 },
   alder: { thudHz: 115, thud: 0.3, grains: 1, grainHz: 2800, grainQ: 3, grain: 0.2, spread: 0.05, swish: 0.3, swishHz: 3600, ping: 0, slosh: 0 },
-  rock: { thudHz: 170, thud: 0.3, grains: 2, grainHz: 1900, grainQ: 2, grain: 0.3, spread: 0.02, swish: 0, ping: 0.12, pingHz: 820, slosh: 0 },
-  snow: { thudHz: 95, thud: 0.3, grains: 9, grainHz: 1700, grainQ: 1.2, grain: 0.22, spread: 0.12, swish: 0.06, swishHz: 1500, ping: 0, slosh: 0 },
+  rock: { thudHz: 170, thud: 0.28, grains: 4, grainHz: 2400, grainQ: 2, grain: 0.4, spread: 0.03, swish: 0.08, swishHz: 3200, ping: 0.1, pingHz: 820, slosh: 0 },
+  snow: { thudHz: 95, thud: 0.25, grains: 12, grainHz: 1700, grainQ: 1.2, grain: 0.3, spread: 0.12, swish: 0.12, swishHz: 1500, ping: 0, slosh: 0 },
   water: { thudHz: 90, thud: 0.15, grains: 0, grainHz: 0, grainQ: 1, grain: 0, spread: 0, swish: 0, ping: 0, slosh: 0.5 },
   skiff: { thudHz: 190, thud: 0.35, grains: 1, grainHz: 2400, grainQ: 2, grain: 0.15, spread: 0.01, swish: 0, ping: 0.22, pingHz: 410, slosh: 0 },
 };
@@ -339,7 +348,7 @@ export function footstepRecipe(surface, run = false) {
 // Mean seconds between gull calls near the listener.
 export function gullInterval({ near = 0, working = 0, swarm = false, harbor = 0, daylight = 1 } = {}) {
   const day = 0.25 + 0.75 * clamp(daylight, 0, 1);
-  const rate = (0.05 + 0.1 * Math.sqrt(near) + 0.35 * working + (swarm ? 1.4 : 0) + 0.2 * harbor) * day;
+  const rate = (0.04 + 0.08 * Math.sqrt(near) + 0.3 * working + (swarm ? 1.2 : 0) + 0.12 * harbor) * day;
   return 1 / Math.max(0.01, rate);
 }
 
@@ -397,22 +406,3 @@ export function musicCue({ mode, hours = 12, day = 0, fishing = 'idle', dawnDay 
   if (hours >= 4.3 && hours < 7.5 && dawnDay !== day && (mode === 'play' || mode === 'paused')) return 'dawn';
   return null;
 }
-
-export const PRIORITY = {
-  ui: 10,
-  radio: 9,
-  stinger: 9,
-  horn: 9,
-  collision: 9,
-  chain: 8,
-  gear: 7,
-  bear: 7,
-  footstep: 6,
-  whale: 5,
-  splash: 4,
-  bird: 3,
-  thunder: 8,
-  wash: 3,
-  slap: 2,
-  ambient: 1,
-};

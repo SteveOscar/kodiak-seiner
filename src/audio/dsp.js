@@ -92,23 +92,30 @@ export function seamless(src, n) {
 // Sparse drop texture: short damped sinusoids of random pitch and log-distributed loudness. Rain patter when looped
 // dense, pebble rattle in a surf backwash, radio crackle when band-passed, spray falling back after a splash.
 export function fillDrops(out, sampleRate, rnd, { rate = 300, fMin = 1800, fMax = 9000, dMin = 0.0015, dMax = 0.007 } = {}) {
-  const n = Math.round((out.length / sampleRate) * rate);
+  const N = out.length;
+  const n = Math.round((N / sampleRate) * rate);
   for (let k = 0; k < n; k++) {
-    const start = Math.floor(rnd() * out.length);
+    const start = Math.floor(rnd() * N);
     const f = fMin * Math.pow(fMax / fMin, rnd());
     const d = dMin + (dMax - dMin) * rnd();
     const amp = Math.pow(10, -rnd() * 1.6) * (rnd() < 0.5 ? -1 : 1);
     const len = Math.min(Math.floor(d * 6 * sampleRate), 2000);
+    // Damped sinusoid by recurrence (y[i] = 2·r·cos(w)·y[i-1] − r²·y[i-2]): no per-sample trig.
     const w = (TAU * f) / sampleRate;
-    const decay = Math.exp(-1 / (d * sampleRate));
-    let e = 1;
-    for (let i = 0; i < len; i++) {
-      const j = (start + i) % out.length;
-      out[j] += amp * e * Math.sin(w * i + (i === 0 ? 0 : 0.3));
-      e *= decay;
+    const r = Math.exp(-1 / (d * sampleRate));
+    const c = 2 * r * Math.cos(w);
+    const r2 = r * r;
+    let y1 = amp * r * Math.sin(w + 0.3);
+    let y2 = amp * Math.sin(0.3);
+    let j = start;
+    out[j] += amp * 0.6; // a tiny click at the impact
+    for (let i = 1; i < len; i++) {
+      if (++j === N) j = 0;
+      out[j] += y1;
+      const y = c * y1 - r2 * y2;
+      y2 = y1;
+      y1 = y;
     }
-    // A tiny click at the impact.
-    out[start] += amp * 0.6;
   }
   return out;
 }
@@ -138,8 +145,10 @@ export function impulseResponse(sampleRate, seconds, rnd, { decay = 1.1, predela
 }
 
 // One full four-stroke cycle of a diesel's exhaust pressure at the stack: `pulses` firing pulses with small timing
-// and strength irregularities (the lope that makes it chug), each a sharp rise and a ringing decay.
-export function dieselCycle(n, { pulses = 6, rnd = rand(7), jitter = 0.018, spread = 0.16, ring = 5.5, width = 0.45 } = {}) {
+// and strength irregularities (the lope that makes it chug), each a sharp rise and a decay with a little ring. Keep
+// ringDepth small for oscillator waves: a ring baked into the wave scales with rpm and reads as a whine; the stack's
+// fixed resonance is a filter in the engine chain instead.
+export function dieselCycle(n, { pulses = 6, rnd = rand(7), jitter = 0.018, spread = 0.16, ring = 5.5, width = 0.45, ringDepth = 0.25 } = {}) {
   const out = new Float32Array(n);
   const slot = 1 / pulses;
   for (let p = 0; p < pulses; p++) {
@@ -152,7 +161,7 @@ export function dieselCycle(n, { pulses = 6, rnd = rand(7), jitter = 0.018, spre
       if (t >= len * 3) continue;
       const u = t / len; // 0..3
       const env = (1 - Math.exp(-u * 40)) * Math.exp(-u * 2.2);
-      out[i] += amp * env * (0.75 + 0.25 * Math.cos(TAU * ring * u));
+      out[i] += amp * env * (1 - ringDepth + ringDepth * Math.cos(TAU * ring * u));
     }
   }
   removeDC(out);
@@ -160,21 +169,31 @@ export function dieselCycle(n, { pulses = 6, rnd = rand(7), jitter = 0.018, spre
 }
 
 // Fourier coefficients (cosine = real, sine = imag) of one period of `wave` for harmonics 1..count, as
-// createPeriodicWave expects (index 0 is DC and ignored).
+// createPeriodicWave expects (index 0 is DC and ignored). Power-of-two lengths use the FFT; others a direct sum.
 export function harmonicsOf(wave, count) {
   const n = wave.length;
   const real = new Float32Array(count + 1);
   const imag = new Float32Array(count + 1);
+  if ((n & (n - 1)) === 0 && n >= 2 * (count + 1)) {
+    const re = Float32Array.from(wave);
+    const im = new Float32Array(n);
+    fft(re, im);
+    for (let h = 1; h <= count; h++) {
+      real[h] = (2 * re[h]) / n;
+      imag[h] = (-2 * im[h]) / n;
+    }
+    return { real, imag };
+  }
   for (let h = 1; h <= count; h++) {
-    let re = 0;
-    let im = 0;
+    let a = 0;
+    let b = 0;
     const w = (TAU * h) / n;
     for (let i = 0; i < n; i++) {
-      re += wave[i] * Math.cos(w * i);
-      im += wave[i] * Math.sin(w * i);
+      a += wave[i] * Math.cos(w * i);
+      b += wave[i] * Math.sin(w * i);
     }
-    real[h] = (2 * re) / n;
-    imag[h] = (2 * im) / n;
+    real[h] = (2 * a) / n;
+    imag[h] = (2 * b) / n;
   }
   return { real, imag };
 }

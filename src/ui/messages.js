@@ -10,6 +10,9 @@ import { clockTime } from './lib/format.js';
 
 const MAX_TOASTS = 4;
 const MAX_RADIO = 2;
+const MAX_RADIO_QUEUE = 6;
+const CPS = 42; // typewriter characters per second
+const RADIO_GAP = 0.55; // seconds of quiet between transmissions
 const KIND_LABEL = {
   cape: 'Cape', bay: 'Bay', strait: 'Strait', town: 'Town', village: 'Village', harbor: 'Harbor', cannery: 'Cannery',
   hatchery: 'Hatchery', landmark: 'Landmark', island: 'Island', river: 'River', lake: 'Lake', peak: 'Peak',
@@ -27,13 +30,21 @@ export function createMessages(ctx, root) {
   root.append(layer, fadeEl);
 
   const toasts = []; // { el, t, life }
-  const radios = []; // { el, t, life }
+  const radios = []; // { el, t, life, typing, tip }
+  const radioQueue = [];
   let banner = null; // { el, t, life }
+  let bannerGap = 0; // seconds until the next banner may start (the last one is still fading out)
   const bannerQueue = [];
   const hintQueue = [];
   let hint = null;
   let fadeTimer = 0;
   let fadeHold = 0;
+
+  function fadeTick(realDt) {
+    fadeTimer -= realDt * 1000;
+    if (fadeTimer <= fadeHold && fadeEl.classList.contains('hold')) fadeEl.classList.remove('hold');
+    if (fadeTimer <= 0) fadeEl.classList.remove('on');
+  }
 
   // Queues filled by event handlers; drained in frame().
   const inbox = { toasts: [], discoveries: [], radio: [], hints: [], banners: [] };
@@ -64,6 +75,7 @@ export function createMessages(ctx, root) {
     bannerBox.append(el);
     requestAnimationFrame(() => el.classList.add('in'));
     banner = { el, t: 0, life: b.life ?? 5 };
+    layer.classList.add('has-banner');
   }
 
   // Typewriter: characters (and keycaps) fade in one after another via CSS animation delays.
@@ -103,21 +115,40 @@ export function createMessages(ctx, root) {
     return frag;
   }
 
-  function makeRadio({ from, text, channel, tip }) {
+  // One transmission at a time, like a real channel: a caption types out fully (plus a short beat) before the next
+  // starts. Arrival order and pacing match WP-AUDIO's radio voice (42 characters per second, serialised), so the
+  // squelch and murmur line up with the caption being typed.
+  function makeRadio({ from, text, channel, tip, hours }, cps = CPS) {
     const ch = String(channel ?? '16').replace(/^ch\s*/i, '');
     const el = h(`div.radio${tip ? '.radio-tip' : ''}`, null, [
       h('div.radio-head', null, [
         h('span.radio-ch', null, [svgFrom(GLYPHS.radio), h('span', { text: /^wx/i.test(ch) ? 'WX' : `CH ${ch}` })]),
         h('span.radio-from', { text: from || 'VHF' }),
         tip ? h('span.radio-tag', { text: 'Tip' }) : null,
-        h('span.radio-time', { text: clockTime(ctx.clock?.hours ?? 0) }),
+        h('span.radio-time', { text: clockTime(Number.isFinite(hours) ? hours : ctx.clock?.hours ?? 0) }),
       ]),
-      h('div.radio-text', null, typewriter(text)),
+      h('div.radio-text', null, typewriter(text, cps)),
     ]);
     radioBox.append(el);
     requestAnimationFrame(() => el.classList.add('in'));
-    radios.push({ el, t: 0, life: radioDuration(text) + (tip ? 3 : 0) });
+    radios.push({ el, t: 0, life: radioDuration(text, cps) + (tip ? 3 : 0), typing: String(text).length / cps, tip: !!tip });
     while (radios.length > MAX_RADIO) retire(radios.shift());
+    ctx.events?.emit?.('ui:radioShown', { from: from || 'VHF', channel: ch, tip: !!tip });
+  }
+
+  function enqueueRadio(r) {
+    radioQueue.push({ ...r, hours: ctx.clock?.hours });
+    while (radioQueue.length > MAX_RADIO_QUEUE) {
+      const i = radioQueue.findIndex((q) => !q.tip);
+      radioQueue.splice(i < 0 ? 0 : i, 1);
+    }
+  }
+
+  function pumpRadio() {
+    if (!radioQueue.length) return;
+    const cur = radios[radios.length - 1];
+    if (cur && !cur.dead && cur.t < cur.typing + RADIO_GAP) return;
+    makeRadio(radioQueue.shift());
   }
 
   function makeHint({ text }) {
@@ -168,8 +199,16 @@ export function createMessages(ctx, root) {
         for (const d of disc) if (!d.used && !d.memorial) bannerQueue.push(discoveryBanner(d, ''));
       }
       for (const b of inbox.banners.splice(0)) bannerQueue.push(b);
-      for (const r of inbox.radio.splice(0)) makeRadio(r);
-      if (!banner && bannerQueue.length && hudVisible) showBanner(bannerQueue.shift());
+      for (const r of inbox.radio.splice(0)) enqueueRadio(r);
+      // Messages hold still behind menus, the chart and photo mode, so nothing is missed while paused.
+      const running = mode === 'play' || mode === 'cutscene';
+      if (!running) {
+        if (fadeTimer > 0) fadeTick(realDt);
+        return;
+      }
+      pumpRadio();
+      if (bannerGap > 0) bannerGap -= realDt;
+      if (!banner && bannerGap <= 0 && bannerQueue.length && hudVisible) showBanner(bannerQueue.shift());
       if (!hint && hintQueue.length && mode === 'play') makeHint(hintQueue.shift());
 
       for (const t of toasts) {
@@ -185,8 +224,10 @@ export function createMessages(ctx, root) {
       if (banner) {
         banner.t += realDt;
         if (banner.t > banner.life) {
-          retire(banner);
+          retire(banner, 400);
           banner = null;
+          bannerGap = 0.9;
+          layer.classList.remove('has-banner');
         }
       }
       if (hint && mode === 'play') {
@@ -196,18 +237,14 @@ export function createMessages(ctx, root) {
           hint = null;
         }
       }
-      if (fadeTimer > 0) {
-        fadeTimer -= realDt * 1000;
-        if (fadeTimer <= fadeHold && fadeEl.classList.contains('hold')) fadeEl.classList.remove('hold');
-        if (fadeTimer <= 0) fadeEl.classList.remove('on');
-      }
+      if (fadeTimer > 0) fadeTick(realDt);
     },
 
     queueHint(hint) {
       hintQueue.push(hint);
     },
     radioNow(r) {
-      makeRadio(r);
+      enqueueRadio(r);
     },
 
     // Full-screen "time passes" card (travel, sleep, waiting, tying up).
@@ -226,8 +263,10 @@ export function createMessages(ctx, root) {
       for (const r of radios) retire(r);
       toasts.length = 0;
       radios.length = 0;
+      radioQueue.length = 0;
       if (banner) retire(banner);
       banner = null;
+      layer.classList.remove('has-banner');
       bannerQueue.length = 0;
       if (hint) retire(hint);
       hint = null;
@@ -236,7 +275,7 @@ export function createMessages(ctx, root) {
     },
 
     debugState() {
-      return { toasts: toasts.length, radio: radios.length, banner: banner ? banner.el.querySelector('.banner-title')?.textContent : null, hintQueued: hintQueue.length + (hint ? 1 : 0) };
+      return { toasts: toasts.length, radio: radios.length, radioQueued: radioQueue.length, banner: banner ? banner.el.querySelector('.banner-title')?.textContent : null, hintQueued: hintQueue.length + (hint ? 1 : 0) };
     },
   };
   return api;

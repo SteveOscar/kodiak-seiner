@@ -43,8 +43,12 @@ export async function create(ctx) {
   const blend = { t: 1, dur: 0.9, pos: new THREE.Vector3(), quat: new THREE.Quaternion(), fov: baseFov };
 
   const chase = { yaw: 0, pitch: 0.24, dist: 34, heading: 0, pull: 1, focus: new THREE.Vector3(), sx: { v: 0 }, sy: { v: 0 }, sz: { v: 0 } };
-  const nest = { yaw: 0, pitch: 1.05, height: 68, heading: 0, focus: new THREE.Vector3(), sx: { v: 0 }, sz: { v: 0 }, h: 68 };
-  const bridge = { yaw: 0, pitch: 0.06 };
+  const NEST_PITCH = 0.9;
+  const NEST_HEIGHT = 60;
+  const nest = { yaw: 0, pitch: NEST_PITCH, height: NEST_HEIGHT, heading: 0, focus: new THREE.Vector3(), sx: { v: 0 }, sz: { v: 0 }, h: NEST_HEIGHT };
+  // Default bridge pitch looks down over the console to the bow, with the horizon in the upper third.
+  const BRIDGE_PITCH = 0.17;
+  const bridge = { yaw: 0, pitch: BRIDGE_PITCH };
   const foot = { yaw: 0, pitch: 0.3, dist: 6.5, pull: 1, focus: new THREE.Vector3(), sx: { v: 0 }, sy: { v: 0 }, sz: { v: 0 }, last: new THREE.Vector3(), moveHeading: 0 };
   const free = { pos: new THREE.Vector3(), yaw: 0, pitch: 0, fov: baseFov };
   const title = { t: 0, index: -1 };
@@ -199,7 +203,8 @@ export async function create(ctx) {
     orbitPosition(chase.focus.x, chase.focus.y, chase.focus.z, yaw, chase.pitch, Math.max(8, chase.dist * chase.pull), orbit);
     desired.pos.set(orbit.x, orbit.y, orbit.z);
     desired.pos.y = Math.max(desired.pos.y, minCamY(desired.pos.x, desired.pos.z));
-    lookQuat(desired.pos, tmpV2.copy(chase.focus).setY(chase.focus.y + chase.dist * 0.02));
+    // Look a little above the boat so it sits in the lower third with the coast and sky above it.
+    lookQuat(desired.pos, tmpV2.copy(chase.focus).setY(chase.focus.y + chase.dist * 0.07));
     desired.fov = baseFov;
     desired.near = low ? 2 : 0.5;
     focus.set(s.position.x, s.position.y, s.position.z);
@@ -215,7 +220,7 @@ export async function create(ctx) {
     if (look.wheel) nest.height = clamp(nest.height * (1 + look.wheel * 0.1), 35, 420);
     if (time - lastLookAt > 3) {
       nest.yaw = dampAngle(nest.yaw, 0, 2.2, dt);
-      nest.pitch = damp(nest.pitch, 1.05, 3, dt);
+      nest.pitch = damp(nest.pitch, NEST_PITCH, 3, dt);
     }
     nest.heading = snap ? s.heading : dampAngle(nest.heading, s.heading, 2.2, dt);
     const f = s.forward(tmpV);
@@ -273,7 +278,7 @@ export async function create(ctx) {
     bridge.pitch = clamp(bridge.pitch + look.dy * 0.0032, -0.6, 1.0);
     if (time - lastLookAt > 3) {
       bridge.yaw = damp(bridge.yaw, 0, 1.3, dt);
-      bridge.pitch = damp(bridge.pitch, 0.06, 2, dt);
+      bridge.pitch = damp(bridge.pitch, BRIDGE_PITCH, 2, dt);
     }
     const eye = s.eyePoint ? s.eyePoint(desired.pos) : desired.pos.copy(s.position).setY(s.position.y + 7.4);
     if (low) {
@@ -663,7 +668,7 @@ export async function create(ctx) {
       chase.yaw = 0;
       chase.pitch = 0.24;
       chase.dist = 34;
-      nest.height = 68;
+      nest.height = NEST_HEIGHT;
       bino.logged.clear();
       snapNext = true;
     },

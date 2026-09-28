@@ -2,7 +2,7 @@
 // JS modules are the reference. Uniforms expected by TK_HEIGHT: tkHeight (R32F DEM, texelFetch), tkSize, tkHalf.
 
 import { DETAIL, L0, OUTSIDE_DEPTH, OUTSIDE_FALLOFF } from './surface.js';
-import { COVER } from './landcover.js';
+import { COVER, ALDER_T0, ALDER_T1 } from './landcover.js';
 
 const f = (v) => (Number.isInteger(v) ? `${v}.0` : `${v}`);
 
@@ -139,10 +139,10 @@ float tkForest( vec2 p, float h, float s, float sd, float spruce, float dev ) {
   return d * smoothstep( 0.1, 0.3, glade );
 }
 float tkAlder( vec2 p, float h, float s, float forest, float dev, float wet ) {
-  float band = smoothstep( 4.0, 16.0, h ) * ( 1.0 - smoothstep( 92.0, 136.0, h ) );
-  float slope = smoothstep( 0.1, 0.34, s ) * ( 1.0 - smoothstep( 1.1, 1.45, s ) );
+  float band = smoothstep( 4.0, 14.0, h ) * ( 1.0 - smoothstep( 88.0, 132.0, h ) );
+  float slope = smoothstep( 0.1, 0.3, s ) * ( 1.0 - smoothstep( 1.15, 1.5, s ) );
   float patchN = tkNoise( p / 120.0 + vec2( 7.3, -3.9 ) ) * 0.7 + tkNoise( p / 37.0 + vec2( -2.2, 5.1 ) ) * 0.3;
-  float thicket = smoothstep( 0.42, 0.66, patchN * 0.6 + smoothstep( 0.08, 0.38, wet ) * 0.62 );
+  float thicket = smoothstep( ${f(ALDER_T0)}, ${f(ALDER_T1)}, patchN * 0.62 + smoothstep( 0.06, 0.34, wet ) * 0.62 );
   return band * slope * thicket * ( 1.0 - forest ) * ( 1.0 - dev );
 }
 float tkSnow( vec2 p, float h, vec2 g, float s, float pen, float curv ) {
@@ -163,9 +163,9 @@ float tkRockScore( vec2 p, float h, float s, float sd, float curv ) {
 float tkScree( vec2 p, float h, float s, float rock, float wet ) {
   float n = tkNoise( p / 57.0 + vec2( 1.9, -6.6 ) );
   float high = smoothstep( 125.0, 175.0, h + 50.0 * ( n - 0.5 ) );
-  float steep = smoothstep( 0.8, 1.15, s );
-  float chute = smoothstep( 0.2, 0.45, wet ) * smoothstep( 0.85, 1.2, s ) * smoothstep( 80.0, 130.0, h );
-  float patchy = smoothstep( 0.3, 0.55, tkNoise( p / 23.0 + vec2( -4.4, 2.8 ) ) * 0.6 + n * 0.4 );
+  float steep = smoothstep( 0.95, 1.3, s );
+  float chute = smoothstep( 0.25, 0.5, wet ) * smoothstep( 1.0, 1.35, s ) * smoothstep( 85.0, 135.0, h );
+  float patchy = smoothstep( 0.38, 0.6, tkNoise( p / 23.0 + vec2( -4.4, 2.8 ) ) * 0.6 + n * 0.4 );
   return min( 1.0, high * steep * patchy + chute * 0.6 ) * ( 1.0 - rock );
 }
 `;

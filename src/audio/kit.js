@@ -20,7 +20,7 @@ import {
   gritCurve,
 } from './dsp.js';
 
-const shared = new Map(); // sampleRate → { buffers data, waves data }
+const shared = new Map(); // sampleRate → { data: { item → sample data }, gen }
 
 function makeBuffer(ac, channels) {
   const buf = ac.createBuffer(channels.length, channels[0].length, ac.sampleRate);
@@ -28,51 +28,78 @@ function makeBuffer(ac, channels) {
   return buf;
 }
 
-// Raw sample data, generated once per sample rate (~1.5 M samples, ~20 ms).
-function sharedData(sr) {
-  if (shared.has(sr)) return shared.get(sr);
-  const r = rand(1985);
-  const xf = Math.floor(sr * 0.08);
-  const gen = (seconds, fill, peak = 0.9) => {
-    const a = new Float32Array(Math.floor(seconds * sr) + xf);
-    fill(a, r);
-    removeDC(a);
-    return normalize(seamless(a, xf), peak);
-  };
-  const drops = (seconds, opts) => {
-    const a = new Float32Array(Math.floor(seconds * sr));
-    fillDrops(a, sr, r, opts);
-    return normalize(a, 0.9);
-  };
-  const data = {
-    white: [gen(2.1, fillWhite)],
-    pink: [gen(5.3, fillPink)],
-    brown: [gen(6.7, fillBrown)],
-    pinkStereo: [gen(7.3, fillPink), gen(7.3, fillPink)],
-    brownStereo: [gen(8.9, fillBrown), gen(8.9, fillBrown)],
-    rain: [drops(3.7, { rate: 900 }), drops(3.7, { rate: 900 })],
-    pebbles: [drops(2.9, { rate: 260, fMin: 2500, fMax: 7000, dMin: 0.001, dMax: 0.003 })],
-    crackle: [drops(2.3, { rate: 70, fMin: 1500, fMax: 5000, dMin: 0.0005, dMax: 0.002 })],
-    ir: impulseResponse(sr, 3.4, r, { decay: 3.0, predelay: 0.018, bright: 0.7, dark: 0.08 }),
-    irSmall: impulseResponse(sr, 1.2, r, { decay: 0.9, predelay: 0.006, bright: 0.8, dark: 0.2 }),
-    waves: {
-      diesel: harmonicsOf(dieselCycle(4096, { pulses: 6, rnd: rand(58), jitter: 0.02, spread: 0.2, ring: 5.5 }), 220),
-      dieselSkiff: harmonicsOf(dieselCycle(4096, { pulses: 6, rnd: rand(22), jitter: 0.012, spread: 0.12, ring: 7, width: 0.35 }), 220),
-      dieselFleet: harmonicsOf(dieselCycle(4096, { pulses: 6, rnd: rand(91), jitter: 0.025, spread: 0.25, ring: 5 }), 200),
-      string: stringHarmonics(40, { pos: 0.17, bright: 0.93 }),
-      pad: padHarmonics(28),
+// Raw sample data, generated once per sample rate (~1.5 M samples, a few tens of ms). Items can be built one at a
+// time in idle callbacks before the first gesture (warmStep), so unlocking audio never hitches a frame.
+const ITEMS = {
+  white: (g) => [g.noise(2.1, fillWhite)],
+  pink: (g) => [g.noise(5.3, fillPink)],
+  brown: (g) => [g.noise(6.7, fillBrown)],
+  pinkStereo: (g) => [g.noise(7.3, fillPink), g.noise(7.3, fillPink)],
+  brownStereo: (g) => [g.noise(8.9, fillBrown), g.noise(8.9, fillBrown)],
+  rain: (g) => [g.drops(3.7, { rate: 900 }), g.drops(3.7, { rate: 900 })],
+  pebbles: (g) => [g.drops(2.9, { rate: 260, fMin: 2500, fMax: 7000, dMin: 0.001, dMax: 0.003 })],
+  crackle: (g) => [g.drops(2.3, { rate: 70, fMin: 1500, fMax: 5000, dMin: 0.0005, dMax: 0.002 })],
+  ir: (g) => impulseResponse(g.sr, 3.0, g.r, { decay: 2.8, predelay: 0.018, bright: 0.7, dark: 0.08 }),
+  waves: () => ({
+    diesel: harmonicsOf(dieselCycle(4096, { pulses: 6, rnd: rand(58), jitter: 0.02, spread: 0.2, ring: 5.5, ringDepth: 0.05 }), 220),
+    dieselSkiff: harmonicsOf(dieselCycle(4096, { pulses: 6, rnd: rand(22), jitter: 0.012, spread: 0.12, ring: 7, width: 0.35, ringDepth: 0.05 }), 220),
+    dieselFleet: harmonicsOf(dieselCycle(4096, { pulses: 6, rnd: rand(91), jitter: 0.025, spread: 0.25, ring: 5, ringDepth: 0.05 }), 200),
+    string: stringHarmonics(40, { pos: 0.17, bright: 0.93 }),
+    pad: padHarmonics(28),
+  }),
+  softClip: () => softClipCurve(2048, 0.8, 0.985),
+  grit: () => gritCurve(1024, 3),
+};
+
+function generator(sr) {
+  // Seeded streams in a fixed item order: every session hears the same textures.
+  let salt = 0;
+  const g = {
+    sr,
+    r: rand(1985),
+    xf: Math.floor(sr * 0.08),
+    noise(seconds, fill, peak = 0.9) {
+      const a = new Float32Array(Math.floor(seconds * sr) + g.xf);
+      fill(a, rand(1985 + ++salt * 7919));
+      removeDC(a);
+      return normalize(seamless(a, g.xf), peak);
     },
-    softClip: softClipCurve(2048, 0.8, 0.985),
-    grit: gritCurve(1024, 3),
+    drops(seconds, opts) {
+      const a = new Float32Array(Math.floor(seconds * sr));
+      fillDrops(a, sr, rand(4242 + ++salt * 7919), opts);
+      return normalize(a, 0.9);
+    },
   };
-  shared.set(sr, data);
-  return data;
+  return g;
+}
+
+function entry(sr) {
+  if (!shared.has(sr)) shared.set(sr, { data: {}, gen: generator(sr) });
+  return shared.get(sr);
+}
+
+// Builds one missing item for this sample rate; → true when everything is ready.
+export function warmStep(sr) {
+  const e = entry(sr);
+  for (const [k, build] of Object.entries(ITEMS)) {
+    if (!(k in e.data)) {
+      e.gen.r = rand(1985 + k.length * 131);
+      e.data[k] = build(e.gen);
+      return false;
+    }
+  }
+  return true;
+}
+
+function sharedData(sr) {
+  while (!warmStep(sr));
+  return entry(sr).data;
 }
 
 export function createKit(ac) {
   const d = sharedData(ac.sampleRate);
   const buf = {};
-  for (const k of ['white', 'pink', 'brown', 'pinkStereo', 'brownStereo', 'rain', 'pebbles', 'crackle', 'ir', 'irSmall']) buf[k] = makeBuffer(ac, d[k]);
+  for (const k of ['white', 'pink', 'brown', 'pinkStereo', 'brownStereo', 'rain', 'pebbles', 'crackle', 'ir']) buf[k] = makeBuffer(ac, d[k]);
   const waves = {};
   for (const [k, w] of Object.entries(d.waves)) waves[k] = ac.createPeriodicWave(w.real, w.imag, { disableNormalization: false });
 
@@ -152,7 +179,12 @@ export function createKit(ac) {
     // Random value curve (0..1 scaled into [lo, hi]) for jittery scrapes and gusts.
     jitter(param, t, dur, lo, hi, points = 24) {
       const c = new Float32Array(points);
-      for (let i = 0; i < points; i++) c[i] = lo + (hi - lo) * Math.random();
+      for (let i = 0; i < points; i++) {
+        const u = i / (points - 1);
+        // Tapers over the last third so the texture fades out instead of stopping.
+        const taper = u < 0.65 ? 1 : Math.pow(1 - (u - 0.65) / 0.35, 1.5);
+        c[i] = (lo + (hi - lo) * Math.random()) * taper;
+      }
       c[0] = lo;
       c[points - 1] = 0;
       param.setValueCurveAtTime(c, t, Math.max(0.01, dur));

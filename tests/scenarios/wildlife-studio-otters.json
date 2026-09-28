@@ -1,0 +1,15 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 120000 },
+  { "start": {} },
+  { "time": 19.5 },
+  { "weather": "clear" },
+  { "teleport": [5300, -700, 0] },
+  { "eval": "document.getElementById('ui').style.visibility = 'hidden'; window.__W = __KODIAK__.systems.wildlife; 'ok'" },
+  { "wait": 1200 },
+  { "eval": "__W.studio([{ herd: 'otter', x: 5440, y: 0.02, z: -520, heading: 2.2, a: [0, 0, 0, 0.1], b: [0.2, 0, 0, 0], radius: 2 }, { herd: 'otter', x: 5441.5, y: 0.02, z: -518.3, heading: 0.9, roll: 0.3, a: [0, 0, 0, 0.3], b: [0.3, 0, 0, 0], radius: 2 }, { herd: 'otter', x: 5442.3, y: 0.02, z: -521.2, heading: -0.6, a: [0, 0, 0, 0.2], b: [0.1, 0.4, 0, 0], radius: 2 }]); __KODIAK__.camera([5436.5, 1.4, -519.5], [5441, 0.1, -519.8]); 'ok'" },
+  { "wait": 800 },
+  { "shot": "otters-close" },
+  { "eval": "__W.studio([{ herd: 'sealion', x: 5444, y: 0.4, z: -523, heading: 1.2, b: [0.5, 0, 0, 0], radius: 3 }, { herd: 'sealion-bull', x: 5445, y: 0.4, z: -518, heading: 2.4, b: [0.8, 0, 0, 0], radius: 3 }, { herd: 'seal', x: 5441, y: 0.3, z: -516, heading: 1.9, b: [0.3, 0, 0.3, 0], radius: 2 }, { herd: 'sealion', x: 5447, y: 0.4, z: -521, heading: 4.2, b: [0.1, 0, 0, 0], radius: 3 }]); __KODIAK__.camera([5436, 2.0, -519], [5444, 0.6, -519.5]); 'ok'" },
+  { "wait": 800 },
+  { "shot": "pinnipeds-close" }
+]

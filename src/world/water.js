@@ -4,8 +4,10 @@
 // amplitudes follow sky.weather and shrink in shallow water and sheltered bays. Every formula is mirrored on the CPU
 // (water/waves.js) so heightAt/sample/velocityAt match the rendered surface. Shading: thin transparent layer over the
 // kodiak_underwater-attenuated seabed, fresnel sky reflection (sky.envMap, CubeUV), two-lobe sun specular (glitter
-// path), crest subsurface tint, detail normals, whitecaps, stamp foam/wakes/ripples, shore foam and wash, rain rings,
-// mountain shadow, fog. An opaque abyss plane at y = -40 sits under everything.
+// path), crest subsurface tint, detail normals, whitecaps, shore foam and wash, rain rings, mountain shadow, fog.
+// Stamps (water/stamps.js semantics) feed a GPU field around the camera focus (water/foamField.js): foam, a lingering
+// aerated trail, and wake waves from a small wave simulation, so any moving hull leaves a Kelvin-like V with a churned
+// centre trail. An opaque abyss plane at y = -40 sits under everything.
 
 import * as THREE from 'three';
 import { computeFetch } from './water/fetch.js';
@@ -19,10 +21,13 @@ import { createReflection } from './water/reflection.js';
 import { patchUnderwater } from '../render/shaderChunks.js';
 
 const FIELD_SIZE = 1024;
+const FIELD_RES = 1024;
+// Wake waves are small (centimetres); their slopes are exaggerated so the V reads from the chase camera.
+const WAKE_SLOPE_GAIN = 3.5;
 // Cells per level half-side at waterSegments = 1. Components too short for the lattice are shaded per pixel, which
 // is cheaper than more vertices (each vertex sums every resolved component).
 const GRID_CELLS = 64;
-const REFLECTION_INTERVAL = 3; // frames between planar reflection renders while the camera moves smoothly
+const REFLECTION_INTERVAL = 4; // frames between planar reflection renders while the camera moves smoothly
 const ABYSS_Y = -40;
 
 // Palette (sRGB hexes, converted to linear by THREE.Color).
@@ -121,6 +126,7 @@ export async function create(ctx) {
     uFoamField: { value: ph.zero },
     uRippleField: { value: ph.zero },
     uFieldInfo: { value: new THREE.Vector4(FIELD_SIZE, 0, 0, 0) },
+    uFieldTexel: { value: new THREE.Vector4(FIELD_SIZE / FIELD_RES, 1 / FIELD_RES, WAKE_SLOPE_GAIN, 0) },
     uRippleInfo: { value: new THREE.Vector4(512, 0, 0, 0) },
     uShelfColor: { value: SHELF.clone() },
     uSSSColor: { value: SSS.clone() },
@@ -370,6 +376,7 @@ export async function create(ctx) {
 
   // --- Per-frame GPU work (camera is final here) --------------------------------------------------------------------
   ctx.pipeline.beforeRender(() => {
+    const t0 = performance.now();
     const cam = ctx.camera.position;
     // Grid: snapped (rigid, world-fixed lattice between snaps).
     const c = desiredCentre(tmpC);
@@ -400,22 +407,25 @@ export async function create(ctx) {
         surfaceUniforms.uFoamNoise.value = baked.foamNoise;
       }
       if (!field) {
-        field = createFoamField({ THREE, renderer, size: FIELD_SIZE });
-        surfaceUniforms.uFoamField.value = field.foamTexture;
+        field = createFoamField({ THREE, renderer, size: FIELD_SIZE, res: FIELD_RES });
         surfaceUniforms.uRippleField.value = field.rippleTexture;
       }
       const fc = fieldCentre(tmpF);
       if (debugToggles.field) field.render(fc.x, fc.z, queue, fieldDt);
+      surfaceUniforms.uFoamField.value = field.foamTexture;
       renderReflection(renderer);
       fieldDt = 0;
       surfaceUniforms.uFieldInfo.value.set(FIELD_SIZE, field.state.centreX, field.state.centreZ, 1);
-      surfaceUniforms.uRippleInfo.value.set(field.rippleSize, field.state.rippleCentreX, field.state.rippleCentreZ, 1);
+      surfaceUniforms.uRippleInfo.value.set(field.rippleSize, field.state.rippleCentreX, field.state.rippleCentreZ, field.state.rippleValid ? 1 : 0);
     } catch (err) {
       if (!gpuFailed) console.error('[water] GPU field pass failed', err);
       gpuFailed = true;
     }
     queue.endFrame();
+    // CPU time of the camera-following work and secondary passes (not in perf().systemsMs, which times update()).
+    passMs += (performance.now() - t0 - passMs) * 0.05;
   });
+  let passMs = 0;
   const tmpC = { x: 0, z: 0 };
   const tmpV2 = new THREE.Vector2();
   const tmpF = { x: 0, z: 0 };
@@ -427,7 +437,9 @@ export async function create(ctx) {
     const u = surfaceUniforms.uRefl.value;
     const day = uniforms.uDaylight.value ?? 1;
     const amount = reflEnabled ? (1 - smooth(6, 10.5, sea.windSpeed)) * smooth(0.02, 0.12, day) : 0;
-    if (amount <= 0.01 || surfaceUniforms.uCamUnder.value > 0.5) {
+    // Not before the main view has rendered once: until then the sun's shadow map has no storage, and the reflected
+    // terrain (which receives shadows) would sample an unallocated depth texture.
+    if (amount <= 0.01 || surfaceUniforms.uCamUnder.value > 0.5 || !mainRendered) {
       u.x = 0;
       reflValid = false;
       return;
@@ -438,9 +450,9 @@ export async function create(ctx) {
       surfaceUniforms.uReflDepth.value = reflection.depthTexture;
       ctx.pipeline.onResize(() => reflection?.resize());
     }
-    // Every third frame: the shader projects through the matrix the image was rendered with, so an older reflection
-    // stays registered under camera rotation, and a few frames of camera travel are ~1 px of parallax against
-    // terrain hundreds of metres away (only terrain and the sky dome are reflected). Cuts, teleports and fast pans
+    // Every REFLECTION_INTERVAL frames: the shader projects through the matrix the image was rendered with, so an older
+    // reflection stays registered under camera rotation, and a few frames of camera travel are ~1 px of parallax
+    // against terrain hundreds of metres away (only terrain and the sky dome are reflected). Cuts, teleports and fast pans
     // (> ~3 degrees or 2 m since the last render) re-render at once.
     const camM = ctx.camera.matrixWorld.elements;
     let moved = 0;
@@ -616,7 +628,7 @@ export async function create(ctx) {
 
     // QA: false-colour views of shading terms (a compile-time define; a runtime branch costs several ms).
     debugView(mode) {
-      const modes = [null, 'foam', 'normal', 'spec', 'shadow', 'rough', 'alpha', 'detail', 'refl', 'fresnel', 'premult', 'col'];
+      const modes = [null, 'foam', 'normal', 'spec', 'shadow', 'rough', 'alpha', 'detail', 'refl', 'fresnel', 'premult', 'col', 'lod', 'wake', 'wakeslope'];
       const i = Math.max(0, modes.indexOf(mode ?? null));
       if (i > 0) material.defines.DEBUG_VIEW = i;
       else delete material.defines.DEBUG_VIEW;
@@ -636,6 +648,7 @@ export async function create(ctx) {
         centre: [Math.round(gridCentre.x), Math.round(gridCentre.z)],
         env: !!envTex,
         reflection: +surfaceUniforms.uRefl.value.x.toFixed(2),
+        passMs: +passMs.toFixed(3),
       };
     },
 
@@ -656,10 +669,12 @@ export async function create(ctx) {
   sys.debugToggles = debugToggles;
   // QA: direct access to the secondary passes (timing probes).
   sys.qaPasses = {
-    field: () => field && field.render(fieldCentre(tmpF).x, fieldCentre(tmpF).z, queue, 1 / 60),
+    field: (parts) => field && field.render(fieldCentre(tmpF).x, fieldCentre(tmpF).z, queue, 1 / 60, parts),
     reflection: () => reflection && reflection.render([ctx.systems.sky?.sunLight, ctx.systems.sky?.hemiLight]),
   };
+  let mainRendered = false;
   ctx.pipeline.afterRender(() => {
+    mainRendered = true;
     Object.assign(lastCalls, calls);
     calls.heightAt = calls.sample = calls.velocityAt = 0;
   });

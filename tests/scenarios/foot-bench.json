@@ -1,0 +1,55 @@
+[
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+  "timeout": 60000
+ },
+ {
+  "start": {}
+ },
+ {
+  "time": 20.5
+ },
+ {
+  "weather": "clear"
+ },
+ {
+  "teleport": [
+   1400,
+   -5650,
+   200
+  ]
+ },
+ {
+  "wait": 2000
+ },
+ {
+  "eval": "window.__K = __KODIAK__; window.__P = __K.systems.player; window.__trk = (dist, angDeg, h, lookH) => { cancelAnimationFrame(window.__trkId); const f = () => { const p = __P.position; const a = __P.heading + angDeg * Math.PI / 180; __K.camera([p.x + Math.sin(a) * dist, p.y + h, p.z - Math.cos(a) * dist], [p.x, p.y + lookH, p.z]); window.__trkId = requestAnimationFrame(f); }; f(); }; window.__stop = () => { cancelAnimationFrame(window.__trkId); __K.camera(null); }; window.__follow = (pts, run) => { window.__done = false; let i = 0; cancelAnimationFrame(window.__folId); const f = () => { const p = __P.position; while (i < pts.length && Math.hypot(pts[i][0] - p.x, pts[i][1] - p.z) < 1.8) i++; if (i >= pts.length) { __P.debugDrive(null); window.__done = true; return; } const dx = pts[i][0] - p.x, dz = pts[i][1] - p.z, d = Math.hypot(dx, dz); __P.debugDrive({ mx: dx / d, mz: dz / d, run }); window.__folId = requestAnimationFrame(f); }; f(); }; window.__orbit = (yawRad, dPitchPx) => { const c = __K.ctx.camera; const v = new __K.ctx.THREE.Vector3(); c.getWorldDirection(v); const cur = Math.atan2(v.x, -v.z); let d = yawRad - cur; d = Math.atan2(Math.sin(d), Math.cos(d)); const dx = -d / 0.0048; const gl = document.getElementById('gl'); gl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, buttons: 1 })); window.dispatchEvent(new MouseEvent('mousemove', { movementX: dx, movementY: dPitchPx || 0 })); setTimeout(() => window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, buttons: 0 })), 150); return d; }; window.__toBoat = () => { const p = __P.position, s = __K.systems.seiner.position; return Math.atan2(s.x - p.x, -(s.z - p.z)); }; window.__hero = (back, up, side, lookDist, lookDrop) => { const p = __P.position; const h = __toBoat(); __K.camera([p.x - Math.sin(h) * back + Math.cos(h) * side, p.y + up, p.z + Math.cos(h) * back + Math.sin(h) * side], [p.x + Math.sin(h) * lookDist, p.y - lookDrop, p.z - Math.cos(h) * lookDist]); return true; }; window.__beach = (back, up, side, lookH) => { const p = __P.position; const h = __toBoat(); const sk = __K.systems.skiff.position; const lx = (p.x + sk.x) / 2, lz = (p.z + sk.z) / 2; __K.camera([p.x - Math.sin(h) * back + Math.cos(h) * side, p.y + up, p.z + Math.cos(h) * back + Math.sin(h) * side], [lx + Math.sin(h) * 6, lookH, lz - Math.cos(h) * 6]); return true; }; window.__face = () => { const p = __P.position; __P.placeAt(p.x, p.z, __toBoat() * 180 / Math.PI); return true; }; window.__spotNear = (x, z, dist, px, pz) => { const hm = __K.ctx.heightmap; let best = null; for (let i = 0; i < 48; i++) { const a = i / 48 * Math.PI * 2; const sx = x + Math.sin(a) * dist, sz = z - Math.cos(a) * dist; const h = hm.heightAt(sx, sz); const n = hm.normalAt(sx, sz); if (h < 0.3 || n.y < 0.8) continue; const d = Math.hypot(sx - px, sz - pz); if (!best || d < best.d) best = { x: sx, z: sz, d }; } return best; }; window.__phase = () => __P.phase; true"
+ },
+ {
+  "eval": "__P.debugAshore()"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "eval": "__P.debugDrive({ headingDeg: 90 }); setTimeout(() => __P.debugDrive({ headingDeg: 270 }), 3000); setInterval(() => __P.debugDrive({ headingDeg: __P.heading * 180 / Math.PI > 0 ? 270 : 90 }), 3000); true"
+ },
+ {
+  "perf": "visible",
+  "ms": 5000
+ },
+ {
+  "eval": "__P.object3d.visible = false; true"
+ },
+ {
+  "perf": "hidden",
+  "ms": 5000
+ },
+ {
+  "eval": "__P.object3d.visible = true; true"
+ },
+ {
+  "perf": "visible2",
+  "ms": 5000
+ }
+]

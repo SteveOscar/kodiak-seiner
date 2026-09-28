@@ -2,7 +2,7 @@
 // the player system's ashore/return state machine under Node with the stub neighbours.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FOOT_RULES, slopeSpeed, slopeBand, wadeFactor, directionalSlope, gradientSlope, findLanding, stepOffPoint, findSummit, perchPoint, onSummit, losesFooting } from '../src/entities/player/rules.js';
+import { FOOT_RULES, slopeSpeed, slopeBand, wadeFactor, directionalSlope, gradientSlope, findLanding, stepOffPoint, dryPointAhead, findSummit, perchPoint, onSummit, isHilltop, losesFooting } from '../src/entities/player/rules.js';
 import { FOOT_TUNING, createFootState, stepFoot, placeFoot, standable } from '../src/entities/player/controller.js';
 import { createAnimator, createPose, animate, legIK, stepLength, SKELETON, BONE_NAMES } from '../src/entities/player/anim.js';
 import { fakeCtx } from './contract.test.mjs';
@@ -225,6 +225,25 @@ test('step-off point: first wadeable spot ahead of the bow', () => {
   assert.equal(stepOffPoint(() => -5, 0, 0, 1, 0), null);
 });
 
+test('dry point ahead: first dry beach beyond the bow, a step further when still dry', () => {
+  const beach = (x) => (x - 10) * 0.15; // waterline at x = 10, dry (>= 0.15 m) from x = 11
+  const p = dryPointAhead(beach, 0, 0, 1, 0);
+  assert.ok(p && beach(p.x) >= 0.15 && p.x > 11 && p.x < 13, `x ${p?.x}`);
+  const ledge = (x) => (x >= 11 && x < 11.6 ? 0.3 : x < 11 ? -1 : -0.2); // a dry sliver: no extra step onto the wet
+  const q = dryPointAhead(ledge, 0, 0, 1, 0);
+  assert.ok(q && ledge(q.x) >= 0.15, `sliver x ${q?.x}`);
+  assert.equal(dryPointAhead(() => -2, 0, 0, 1, 0), null);
+});
+
+test('hilltops: summits and level ridge crests count, slopes and flats do not', () => {
+  const hill = (x, z) => 60 * Math.exp(-(x * x + z * z) / 4000);
+  assert.ok(isHilltop(hill, 0, 0, hill(0, 0)));
+  assert.ok(!isHilltop(hill, 60, 0, hill(60, 0)), 'mid-slope');
+  const ridge = (x) => 50 - Math.abs(x) * 0.8; // crest along z
+  assert.ok(isHilltop(ridge, 0, 0, ridge(0)), 'ridge crest');
+  assert.ok(!isHilltop(() => 30, 0, 0, 30), 'plateau');
+});
+
 test('summits: hill-climb finds the marked hill, not a higher neighbour; viewpoints perch in place', () => {
   const hills = (x, z) => 80 * Math.exp(-((x - 20) ** 2 + z ** 2) / 3000) + 140 * Math.exp(-((x - 400) ** 2 + z ** 2) / 6000);
   const s = findSummit(hills, 0, 0, 150);
@@ -343,7 +362,9 @@ test('player system: contract, go ashore by skiff, walk, back aboard; teleport a
   ctx.systems.seiner.setPose(w.x, w.z, 0);
   frame(1);
 
+  assert.equal(player.cameraFraming, null, 'no framing aboard');
   assert.ok(player.goAshore());
+  assert.equal(player.cameraFraming?.kind, 'ferry', 'wide framing for the skiff run');
   assert.equal(ctx.state.mode, 'cutscene');
   assert.equal(ctx.state.control, 'foot');
   assert.deepEqual(modes, ['foot']);
@@ -376,14 +397,18 @@ test('player system: contract, go ashore by skiff, walk, back aboard; teleport a
   assert.ok(steps.length > 3 && steps.every((s) => typeof s.surface === 'string'), 'footsteps');
 
   // Bear bluff charge: fade, back at the skiff, radio quip, still ashore.
+  const hints = [];
+  ctx.events.on('ui:hint', (h) => hints.push(h));
   ctx.events.emit('bear:encounter', { stage: 'watch', bearId: 'b1', x: player.position.x + 20, z: player.position.z });
+  assert.ok(hints.some((h) => h.id === 'bear-watch' && /back away slowly/i.test(h.text)), 'back-away hint');
   ctx.events.emit('bear:encounter', { stage: 'charge', bearId: 'b1', x: player.position.x + 10, z: player.position.z });
   assert.equal(ctx.state.mode, 'cutscene');
   frame(120);
   assert.equal(ctx.state.mode, 'play');
   assert.equal(player.phase, 'foot');
   assert.ok(radio.some((r) => r.from === 'Skiffman'), 'radio quip');
-  assert.ok(player.position.distanceTo(ctx.systems.skiff.position) < 12, 'back by the skiff');
+  assert.ok(player.position.distanceTo(ctx.systems.skiff.position) < 22, 'back by the skiff');
+  assert.ok(ctx.heightmap.heightAt(player.position.x, player.position.z) > -FOOT_RULES.kneeDepth, 'on the beach, not out of depth');
 
   // Back to the boat.
   frame(1);

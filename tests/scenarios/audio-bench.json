@@ -1,0 +1,13 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 90000 },
+  { "start": {} },
+  { "time": 10 },
+  { "weather": "partly" },
+  { "wait": 1500 },
+  { "key": "KeyW", "down": true },
+  { "perf": "underway", "ms": 6000 },
+  { "key": "KeyW", "up": true },
+  { "eval": "__KODIAK__.setWeather('rain', 0); 1" },
+  { "perf": "rain", "ms": 5000 },
+  { "state": "end" }
+]

@@ -17,14 +17,27 @@ export const CARD_MAP_FRAGMENT = /* glsl */ `
   if ( vMapUv.y > -0.5 ) diffuseColor *= texture2D( map, vMapUv );
 #endif`;
 
-export const SUN_LIGHT_PATCH = (shadowExpr) =>
-  THREE.ShaderChunk.lights_fragment_begin.replace(
+// transExpr (optional): weight of sunlight transmitted through thin leaves and blades toward a viewer looking into the
+// sun (backlit grass and alder glow at golden hour).
+const RE_DIRECT_CALL = 'RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );';
+export const SUN_LIGHT_PATCH = (shadowExpr, transExpr = null) => {
+  const chunk = THREE.ShaderChunk.lights_fragment_begin;
+  const cut = chunk.indexOf('#if ( NUM_DIR_LIGHTS > 0 ) && defined( RE_Direct )');
+  let tail = chunk.slice(cut).replace(
     'getDirectionalLightInfo( directionalLight, directLight );',
     `getDirectionalLightInfo( directionalLight, directLight );
-		if ( dot( directLight.direction, normalize( ( viewMatrix * vec4( uSunDir, 0.0 ) ).xyz ) ) > 0.9995 ) {
-			directLight.color = uSunColor * tkSunScale * ( ${shadowExpr} );
-		}`,
+		bool vgSun = dot( directLight.direction, normalize( ( viewMatrix * vec4( uSunDir, 0.0 ) ).xyz ) ) > 0.9995;
+		if ( vgSun ) directLight.color = uSunColor * tkSunScale * ( ${shadowExpr} );`,
   );
+  if (transExpr) {
+    tail = tail.replace(
+      RE_DIRECT_CALL,
+      `${RE_DIRECT_CALL}
+		if ( vgSun ) reflectedLight.directDiffuse += directLight.color * material.diffuseColor * ( ( ${transExpr} ) * pow( saturate( dot( -geometryViewDir, directLight.direction ) ), 4.0 ) );`,
+    );
+  }
+  return chunk.slice(0, cut) + tail;
+};
 
 const HASH = /* glsl */ `
 float vgHash( vec2 p ) {
@@ -46,7 +59,13 @@ float vgHash( vec2 p ) {
  *   tintAmount      how much iRot.z brightens/darkens albedo
  *   thin            rank-based thinning with distance: [d0, d1] keep fraction falls from 1 at d0 to ~0.3 at d1
  *   extraVertex     GLSL run after the instance transform (has vgWorld, vgLocal, vgDist)
- *   standard        MeshStandardMaterial params
+ *   dryTint         iRot.w (0..1) turns the albedo toward straw (sun-cured grass, beach rye)
+ *   shadowFar       casters collapse beyond this distance in the shadow depth pass (stay inside the sky's box)
+ *   standard        material params (MeshStandardMaterial, or MeshLambertMaterial with `lambert`)
+ *   lambert         diffuse-only shading: cheaper, and no grazing-angle sheen on blades and leaves
+ *   translucency    backlit transmission weight (foliage)
+ *   grain           stone/wood albedo grain from object-space value noise: [scale (1/m), strength, ax, ay, az]
+ *                   (a = per-axis stretch, e.g. wood grain along the log)
  */
 export function createInstancedMaterial(opts) {
   const {
@@ -65,8 +84,19 @@ export function createInstancedMaterial(opts) {
     name = 'vegetation',
     cardMap = false,
     foliage = false,
+    dryTint = false,
+    shadowFar = 150,
+    lambert = false,
+    translucency = 0,
+    grain = null,
   } = opts;
-  const mat = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0, vertexColors: true, ...standard });
+  let mat;
+  if (lambert) {
+    const { roughness, metalness, ...rest } = standard;
+    mat = new THREE.MeshLambertMaterial({ vertexColors: true, ...rest });
+  } else {
+    mat = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0, vertexColors: true, ...standard });
+  }
   mat.name = name;
   const own = {
     vgFade: { value: new THREE.Vector4(...fade) },
@@ -78,6 +108,8 @@ export function createInstancedMaterial(opts) {
   if (fadeMode === 'dither') defines.push('#define VG_DITHER');
   if (nonUniform) defines.push('#define VG_NONUNIFORM');
   if (thin) defines.push('#define VG_THIN');
+  if (dryTint) defines.push('#define VG_DRY');
+  if (grain) defines.push('#define VG_GRAIN', `#define VG_GRAIN_SCALE ( ${grain[0].toFixed(3)} * vec3( ${(grain[2] ?? 1).toFixed(3)}, ${(grain[3] ?? 1).toFixed(3)}, ${(grain[4] ?? 1).toFixed(3)} ) )`, `#define VG_GRAIN_AMT ${grain[1].toFixed(3)}`);
 
   const vertPars = /* glsl */ `
 ${defines.join('\n')}
@@ -97,6 +129,10 @@ uniform float uWorldHalf;
 varying float vgShadow;
 varying float vgFadeV;
 varying float vgTint;
+varying float vgAux;
+#ifdef VG_GRAIN
+varying vec3 vgWP;
+#endif
 ${HASH}
 vec3 vgRotate( vec3 v ) { return vec3( v.x * iRot.x - v.z * iRot.y, v.y, v.x * iRot.y + v.z * iRot.x ); }
 `;
@@ -133,6 +169,10 @@ vec3 vgRotate( vec3 v ) { return vec3( v.x * iRot.x - v.z * iRot.y, v.y, v.x * i
   vgShadow = textureLod( uTerrainShadow, clamp( vgUV, 0.0, 1.0 ), 0.0 ).r;
   vgFadeV = vgF;
   vgTint = iRot.z;
+  vgAux = iRot.w;
+#ifdef VG_GRAIN
+  vgWP = vgLocal * 1.0 + vec3( iRot.z * 17.0, iRot.w * 5.0, iPos.x * 0.37 );
+#endif
   vec3 objectNormal = vgRotate( normal );
 `;
   const fragPars = /* glsl */ `
@@ -143,7 +183,22 @@ uniform float tkSunScale;
 varying float vgShadow;
 varying float vgFadeV;
 varying float vgTint;
+varying float vgAux;
 ${HASH}
+#ifdef VG_GRAIN
+varying vec3 vgWP;
+float vgN3( vec3 p ) {
+  vec3 i = floor( p );
+  vec3 f = fract( p );
+  f = f * f * ( 3.0 - 2.0 * f );
+  vec2 o = vec2( 1.0, 0.0 );
+  float a = mix( vgHash( i.xy + i.z * 7.13 ), vgHash( i.xy + o.xy + i.z * 7.13 ), f.x );
+  float b = mix( vgHash( i.xy + o.yx + i.z * 7.13 ), vgHash( i.xy + o.xx + i.z * 7.13 ), f.x );
+  float c = mix( vgHash( i.xy + ( i.z + 1.0 ) * 7.13 ), vgHash( i.xy + o.xy + ( i.z + 1.0 ) * 7.13 ), f.x );
+  float d = mix( vgHash( i.xy + o.yx + ( i.z + 1.0 ) * 7.13 ), vgHash( i.xy + o.xx + ( i.z + 1.0 ) * 7.13 ), f.x );
+  return mix( mix( a, b, f.y ), mix( c, d, f.y ), f.z );
+}
+#endif
 `;
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, own);
@@ -164,12 +219,25 @@ ${HASH}
 #endif`,
       )
       .replace('#include <map_fragment>', cardMap ? CARD_MAP_FRAGMENT : '#include <map_fragment>')
-      .replace('#include <color_fragment>', `#include <color_fragment>\n  diffuseColor.rgb *= 1.0 + vgTint * ${tintAmount.toFixed(3)};`)
-      .replace('#include <lights_fragment_begin>', SUN_LIGHT_PATCH('vgShadow'))
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+  diffuseColor.rgb *= 1.0 + vgTint * ${tintAmount.toFixed(3)};
+#ifdef VG_GRAIN
+  {
+    float gn = vgN3( vgWP * VG_GRAIN_SCALE ) * 0.6 + vgN3( vgWP * ( VG_GRAIN_SCALE * 3.7 ) ) * 0.4;
+    diffuseColor.rgb *= 1.0 + ( gn - 0.5 ) * 2.0 * VG_GRAIN_AMT;
+  }
+#endif
+#ifdef VG_DRY
+  diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.3, 0.26, 0.11 ) * ( 0.45 + 3.0 * dot( diffuseColor.rgb, vec3( 0.3333 ) ) ), vgAux * 0.75 );
+#endif`,
+      )
+      .replace('#include <lights_fragment_begin>', SUN_LIGHT_PATCH('vgShadow', translucency > 0 ? translucency.toFixed(3) : null))
       // Foliage: back faces keep the front normal (light passes through thin leaves and needles).
       .replace('normal *= faceDirection;', foliage ? '' : 'normal *= faceDirection;');
   };
-  mat.customProgramCacheKey = () => `vg|${name}|${defines.join(',')}|${wind}|${extraVertex.length}|${cardMap}|${foliage}`;
+  mat.customProgramCacheKey = () => `vg3|${name}|${defines.join(',')}|${wind}|${extraVertex.length}|${cardMap}|${foliage}|${translucency}`;
   if (underwater) patchUnderwater(mat, uniforms);
 
   // Depth material for casting sun shadows with the same instance transform.
@@ -179,12 +247,12 @@ ${HASH}
     for (const k of ['uCameraPos', 'uWindDir', 'uWindSpeed', 'uTime', 'uTerrainShadow', 'uWorldHalf']) shader.uniforms[k] = uniforms[k];
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${vertPars}`)
-      .replace('#include <begin_vertex>', `${vertMain.replace('vec3 objectNormal = vgRotate( normal );', '')}\n  vec3 transformed = vgWorld;`);
+      .replace('#include <begin_vertex>', `${vertMain.replace('vec3 objectNormal = vgRotate( normal );', '')}\n  if ( vgDist > ${shadowFar.toFixed(1)} ) vgWorld = iPos.xyz;\n  vec3 transformed = vgWorld;`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying float vgShadow;\nvarying float vgFadeV;\nvarying float vgTint;`)
+      .replace('#include <common>', `#include <common>\nvarying float vgShadow;\nvarying float vgFadeV;\nvarying float vgTint;\nvarying float vgAux;`)
       .replace('#include <map_fragment>', cardMap ? CARD_MAP_FRAGMENT : '#include <map_fragment>');
   };
-  depth.customProgramCacheKey = () => `vgd|${name}|${defines.join(',')}|${wind}|${cardMap}`;
+  depth.customProgramCacheKey = () => `vgd2|${name}|${defines.join(',')}|${wind}|${cardMap}|${shadowFar}`;
   return { material: mat, depthMaterial: depth };
 }
 

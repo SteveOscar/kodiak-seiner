@@ -11,6 +11,7 @@ import { findSites } from '../src/entities/wildlife/sites.js';
 import { composeMatrix, wrapAngle, headingOf } from '../src/entities/wildlife/math.js';
 import { createEncounter, stepEncounter, ENCOUNTER, planFlocks, planBears, seenWell } from '../src/entities/wildlife/behaviour.js';
 import { buildBird, buildHumpback, buildOrca, buildQuadruped, buildSeaLion, buildSeal, buildOtter, buildSnag, QUADS } from '../src/entities/wildlife/shapes.js';
+import { buildBear, BEAR_AGES } from '../src/entities/wildlife/bear.js';
 
 const ctx0 = fakeCtx();
 const R = resolve(ctx0.geo);
@@ -148,6 +149,7 @@ test('geometry: every model builds with finite attributes, rig channels and sane
     buildOtter(),
     buildSnag(),
     ...Object.keys(QUADS).map((k) => buildQuadruped(k)),
+    ...Object.keys(BEAR_AGES).flatMap((k) => [buildBear(k), buildBear(k, { lod: 1 })]),
   ];
   for (const g of geos) {
     for (const name of ['position', 'normal', 'color', 'aRig', 'aPivot']) {
@@ -161,8 +163,22 @@ test('geometry: every model builds with finite attributes, rig channels and sane
   assert.ok(hb.max.z - hb.min.z > 13 && hb.max.z - hb.min.z < 16.5, 'humpback ~14 m');
   const eagle = buildBird('eagle', { pose: 'fly' }).boundingBox;
   assert.ok(eagle.max.x - eagle.min.x > 1.9 && eagle.max.x - eagle.min.x < 2.5, 'eagle wingspan ~2.1 m');
-  const boar = buildQuadruped('boar').boundingBox;
-  assert.ok(boar.max.y > 1.3 && boar.max.y < 1.8 && boar.min.y > -0.1, 'boar stands ~1.4 m at the shoulder');
+  // Kodiak brown bears: a boar ~1.5 m at the hump and ~2.8 m nose to tail, a sow ~1.2 m, a spring cub ~0.5 m; all
+  // standing on the ground, with the rig's leg joints inside the body.
+  const bb = (k) => buildBear(k).boundingBox;
+  assert.ok(bb('boar').max.y > 1.4 && bb('boar').max.y < 1.75 && bb('boar').min.y > -0.05, 'boar hump height');
+  assert.ok(bb('boar').max.z - bb('boar').min.z > 2.5 && bb('boar').max.z - bb('boar').min.z < 3.2, 'boar length');
+  assert.ok(bb('sow').max.y > 1.1 && bb('sow').max.y < 1.35, 'sow hump height');
+  assert.ok(bb('cub').max.y > 0.4 && bb('cub').max.y < 0.65, 'cub height');
+  for (const k of Object.keys(BEAR_AGES)) {
+    const g = buildBear(k);
+    const { hipY, shoulderY } = g.userData;
+    assert.ok(hipY > 0 && hipY < g.boundingBox.max.y && shoulderY > 0 && shoulderY < g.boundingBox.max.y, `${k} joints inside the body`);
+    const rig = g.attributes.aRig;
+    let legs = 0;
+    for (let i = 0; i < rig.count; i++) if (rig.getX(i) > 0.5) legs++;
+    assert.ok(legs > 100, `${k} has rigged legs`);
+  }
   const perched = buildBird('eagle', { pose: 'perch' }).boundingBox;
   assert.ok(perched.min.y > -0.5 && perched.max.y > 0.6, 'perched eagle stands on its feet');
 });
@@ -242,9 +258,17 @@ test('system: a person ashore near a bear gets watch, then a bluff charge, then 
   avatar.x = b.position.x + 8;
   avatar.z = b.position.z;
   step(5);
-  assert.equal(events[1]?.stage, 'charge');
+  const mine = () => events.filter((e) => e.bearId === id);
+  assert.equal(mine()[1]?.stage, 'charge');
   step(120);
-  assert.equal(events[2]?.stage, 'retreat');
+  assert.equal(mine()[2]?.stage, 'retreat');
   assert.ok(Math.hypot(b.position.x - avatar.x, b.position.z - avatar.z) > 2.5, 'the bluff charge stops short');
-  assert.ok(events.every((e) => e.bearId === id && Number.isFinite(e.x) && Number.isFinite(e.z)));
+  assert.ok(events.every((e) => Number.isFinite(e.x) && Number.isFinite(e.z)));
+  // While one bear watches or charges, no other bear starts an encounter.
+  let open = 0;
+  for (const e of events) {
+    if (e.stage === 'watch') open++;
+    if (e.stage === 'retreat') open--;
+    assert.ok(open <= 1, 'one watching/charging bear at a time');
+  }
 });

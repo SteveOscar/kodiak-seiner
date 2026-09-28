@@ -1,0 +1,21 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 120000 },
+  { "start": {} },
+  { "time": 20.3 },
+  { "weather": "clear" },
+  { "teleport": [-5380, 366, 167] },
+  { "eval": "document.getElementById('ui').style.visibility = 'hidden'; window.__K = __KODIAK__; window.__W = __K.systems.wildlife; window.__B = __W.bears.find((b) => b.site && b.site.streamId === 'karluk' && b.age === 'sow'); const s = __B.site; __W.stageBear(__B.id, 'walk', s.path[1].x, s.path[1].z); __B.target = s.path[0]; window.__trk = (dist, ang, h, lookH) => { cancelAnimationFrame(window.__trkId); const f = () => { const p = __B.position; const a = __B.heading + ang; __K.camera([p.x + Math.sin(a) * dist, Math.max(__K.systems.terrain.heightAt(p.x + Math.sin(a) * dist, p.z - Math.cos(a) * dist), p.y) + h, p.z - Math.cos(a) * dist], [p.x, p.y + lookH, p.z]); window.__trkId = requestAnimationFrame(f); }; f(); }; __trk(9, 1.4, 1.1, 0.8); [__B.id, s.path.length]" },
+  { "wait": 2500 },
+  { "shot": "walk-1" },
+  { "wait": 350 },
+  { "shot": "walk-2" },
+  { "wait": 350 },
+  { "shot": "walk-3" },
+  { "eval": "__trk(14, 2.4, 1.4, 0.6); 1" },
+  { "wait": 1200 },
+  { "shot": "walk-family" },
+  { "eval": "__trk(6, 0.6, 0.9, 0.9); 1" },
+  { "wait": 600 },
+  { "shot": "walk-front" },
+  { "eval": "(() => { cancelAnimationFrame(window.__trkId); return __W.bears.filter(b => b.mother === __B).map(c => [c.id, c.age, c.cs && c.cs.mode, +c.position.x.toFixed(1), +c.position.z.toFixed(1)]); })()" }
+]

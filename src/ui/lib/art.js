@@ -1,97 +1,230 @@
 // Procedural line art for the UI (pure string builders, no DOM): the leaping-salmon mark on the title screen and the
 // small glyphs used on the HUD and chart.
 
-// Straight salmon, facing right, snout at x = 100, tail tip at x = 0, centre line y = 0 (SVG y down). Each entry is a
-// path of absolute commands whose coordinate pairs are bent afterwards, so control points bend with their curves.
-const BODY = [
-  'M100,1',
-  'C98,-3 94,-6 86,-9.4',
-  'C76,-12.4 62,-13.4 52,-12.4',
-  'C40,-11.2 28,-7.6 17,-3.6',
-  // Caudal fin: broad, gently forked lobes.
-  'Q10.5,-5.6 1.2,-13.2 Q3.9,-5.6 7.4,0 Q3.9,5.4 1.4,12.4 Q10.5,5.4 17,3.4',
-  'C28,7.2 40,11.2 54,12.2',
-  'C66,12.8 78,10.8 88,7',
-  'C94,4.6 98,3 100,1',
+// The leaping salmon is built along a curved spine (snout to the wrist of the tail) with a depth profile measured off
+// a bright ocean salmon, so the outline stays anatomically smooth at any pose; fins, gill cover, eye, lateral line and
+// spots sit in the spine's local frame. The tail fin keeps the spine's direction at the wrist, flicked slightly up.
+
+// Half-depths (fractions of spine length) of the back and belly from snout (s = 0) to the wrist of the tail (s = 1).
+const PROFILE = [
+  [0, 0, 0],
+  [0.03, 0.03, 0.02],
+  [0.08, 0.058, 0.043],
+  [0.15, 0.084, 0.066],
+  [0.25, 0.104, 0.085],
+  [0.38, 0.113, 0.094],
+  [0.5, 0.107, 0.09],
+  [0.62, 0.091, 0.077],
+  [0.74, 0.07, 0.059],
+  [0.85, 0.05, 0.043],
+  [0.93, 0.039, 0.035],
+  [1, 0.036, 0.033],
 ];
 
-const DETAILS = [
-  // Dorsal fin.
-  'M63,-13.1 C61,-17.6 58.6,-20.2 55.2,-21 C54.6,-18 53.8,-14.8 52.2,-12.5',
-  // Adipose fin.
-  'M30.2,-7.4 C29.6,-10 27.6,-11 25.6,-10.8 C26,-9.2 26,-7.8 25.4,-6.2',
-  // Anal fin.
-  'M35.5,9.6 C33.4,13.2 30.4,15 27.6,14.8 C28.4,12.4 28.4,9.6 27.6,7.2',
-  // Pelvic fin.
-  'M53.5,12.2 C51.6,15 49.4,16.4 47,16.6 C47.6,14.8 47.6,13.2 47,11.7',
-  // Pectoral fin.
-  'M80.5,3.4 C77.4,5.4 74,7.2 70.4,7.8 C72.6,6 74.8,4.6 76.4,3',
-  // Gill cover.
-  'M85.4,-8.6 C82.4,-4.2 82,1.4 84.2,6.6',
-  // Mouth.
-  'M100,1 L94.6,2.2',
-];
-
-const LATERAL = 'M83,-1.4 C70,-2.4 52,-2.2 36,-1.2 C28,-0.6 22,-0.2 17.4,0';
-
-// Spots across the back and tail (pink salmon carry big oval spots on the back and caudal fin).
-const SPOTS = [
-  [60, -9.2], [54, -8.6], [47, -8.4], [40, -7], [33, -5.4], [67, -9.6], [26, -3.6],
-  [9.2, -6.2], [9.4, 5.8],
-];
-
-function bendPoint(x, y, R, rot) {
-  const th = (x - 50) / R;
-  const r = R - y;
-  let px = 50 + r * Math.sin(th);
-  let py = R - r * Math.cos(th);
-  // Rotate about the body centre so the fish rises out of the water.
-  const c = Math.cos(rot);
-  const s = Math.sin(rot);
-  const dx = px - 50;
-  const dy = py;
-  px = 50 + dx * c - dy * s;
-  py = dx * s + dy * c;
-  return [px, py];
+// Catmull-Rom through the profile knots, so the outline has no flats or bumps at the knots.
+function profileAt(s) {
+  const n = PROFILE.length;
+  let i = 1;
+  while (i < n - 1 && s > PROFILE[i][0]) i++;
+  const k0 = PROFILE[Math.max(0, i - 2)];
+  const k1 = PROFILE[i - 1];
+  const k2 = PROFILE[i];
+  const k3 = PROFILE[Math.min(n - 1, i + 1)];
+  const t = Math.max(0, Math.min(1, (s - k1[0]) / (k2[0] - k1[0])));
+  const cr = (a, b, c, d) => {
+    const m1 = ((c - a) / (k2[0] - k0[0] || 1)) * (k2[0] - k1[0]);
+    const m2 = ((d - b) / (k3[0] - k1[0] || 1)) * (k2[0] - k1[0]);
+    const t2 = t * t;
+    const t3 = t2 * t;
+    return (2 * t3 - 3 * t2 + 1) * b + (t3 - 2 * t2 + t) * m1 + (-2 * t3 + 3 * t2) * c + (t3 - t2) * m2;
+  };
+  return [Math.max(0, cr(k0[1], k1[1], k2[1], k3[1])), Math.max(0, cr(k0[2], k1[2], k2[2], k3[2]))];
 }
 
-function bendPath(d, R, rot, ox, oy) {
-  return d.replace(/(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/g, (_, a, b) => {
-    const [x, y] = bendPoint(Number(a), Number(b), R, rot);
-    return `${(x + ox).toFixed(2)},${(y + oy).toFixed(2)}`;
-  });
+// Cubic spine sampled by arc length: frame(s) → { p, back (unit tangent toward the tail), up (dorsal normal) }.
+function makeSpine(P) {
+  const at = (t) => {
+    const u = 1 - t;
+    const a = u * u * u;
+    const b = 3 * u * u * t;
+    const c = 3 * u * t * t;
+    const d = t * t * t;
+    return [a * P[0][0] + b * P[1][0] + c * P[2][0] + d * P[3][0], a * P[0][1] + b * P[1][1] + c * P[2][1] + d * P[3][1]];
+  };
+  const N = 200;
+  const pts = [];
+  const len = [0];
+  for (let i = 0; i <= N; i++) pts.push(at(i / N));
+  for (let i = 1; i <= N; i++) len.push(len[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const L = len[N];
+  const frame = (s) => {
+    const target = Math.max(0, Math.min(1, s)) * L;
+    let i = 1;
+    while (i < N && len[i] < target) i++;
+    const f = (target - len[i - 1]) / Math.max(1e-9, len[i] - len[i - 1]);
+    const p = [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * f, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * f];
+    const tx = pts[i][0] - pts[i - 1][0];
+    const ty = pts[i][1] - pts[i - 1][1];
+    const tl = Math.hypot(tx, ty) || 1;
+    const back = [tx / tl, ty / tl];
+    // SVG y points down, so the dorsal side of a fish swimming toward -back is the left-hand normal.
+    return { p, back, up: [-back[1], back[0]] };
+  };
+  return { L, frame };
 }
 
-// SVG markup of the leaping salmon over a swell line. `R` is the bend radius (smaller = more arched).
+const f2 = (v) => v.toFixed(2);
+const pt = (q) => `${f2(q[0])},${f2(q[1])}`;
+// Point in a local frame: origin o, `b` units toward the tail, `u` units toward the back.
+const loc = (o, fr, b, u) => [o[0] + fr.back[0] * b + fr.up[0] * u, o[1] + fr.back[1] * b + fr.up[1] * u];
+
+// Smooth open path through points (Catmull-Rom as cubic Béziers).
+function smooth(points, move = true) {
+  let d = move ? `M${pt(points[0])}` : '';
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(points.length - 1, i + 2)];
+    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    d += ` C${pt(c1)} ${pt(c2)} ${pt(p2)}`;
+  }
+  return d;
+}
+
+// SVG markup of the leaping salmon over a swell line. Smaller `R` arches the leap more; `rotDeg` tips it.
 export function salmonMarkSVG({ stroke = 'currentColor', width = 1.15, R = 60, rotDeg = -8, waves = true, cls = 'salmon-mark' } = {}) {
-  const rot = (rotDeg * Math.PI) / 180;
-  const ox = 10;
-  const oy = 33;
-  const body = bendPath(BODY.join(' '), R, rot, ox, oy);
-  const details = DETAILS.map((d) => bendPath(d, R, rot, ox, oy));
-  const lateral = bendPath(LATERAL, R, rot, ox, oy);
-  const spots = SPOTS.map(([x, y]) => {
-    const [px, py] = bendPoint(x, y, R, rot);
-    return `<ellipse cx="${(px + ox).toFixed(2)}" cy="${(py + oy).toFixed(2)}" rx="0.95" ry="0.7" />`;
-  }).join('');
-  const [ex, ey] = bendPoint(92.4, -2.6, R, rot);
+  const arch = Math.max(0.3, Math.min(1.6, 60 / Math.max(10, R)));
+  const rot = ((rotDeg + 8) * Math.PI) / 180;
+  const cx = 62;
+  const cy = 34;
+  const turn = (x, y) => [cx + (x - cx) * Math.cos(rot) - (y - cy) * Math.sin(rot), cy + (x - cx) * Math.sin(rot) + (y - cy) * Math.cos(rot)];
+  // Snout high on the right, wrist of the tail low on the left: the arc of a fish clearing the water. The head dips
+  // below the chord and the tail rises above it, more so with a stronger arch.
+  const head = [106, 27];
+  const wrist = [22, 51];
+  const ha = (3 + 7 * arch) * (Math.PI / 180);
+  const ta = -(26 + 14 * arch) * (Math.PI / 180);
+  const P = [
+    turn(...head),
+    turn(head[0] - Math.cos(ha) * 30, head[1] - Math.sin(ha) * 30),
+    turn(wrist[0] + Math.cos(ta) * 30, wrist[1] + Math.sin(ta) * 30),
+    turn(...wrist),
+  ];
+  const { L, frame } = makeSpine(P);
+  const edge = (s, side) => {
+    const fr = frame(s);
+    const [d, v] = profileAt(s);
+    return loc(fr.p, fr, 0, side > 0 ? d * L * 1.08 : -v * L * 1.08);
+  };
+
+  // Body outline: back from snout to wrist, the tail fin, belly back to the snout.
+  const S = 36;
+  const backPts = [];
+  const bellyPts = [];
+  for (let i = 0; i <= S; i++) {
+    const s = i / S;
+    backPts.push(edge(s, 1));
+    bellyPts.push(edge(s, -1));
+  }
+  const w = frame(1);
+  // The caudal fin follows the wrist, flicked a little toward the back.
+  const flick = 0.16;
+  const tf = {
+    back: [w.back[0] * Math.cos(flick) - w.back[1] * Math.sin(flick), w.back[1] * Math.cos(flick) + w.back[0] * Math.sin(flick)],
+  };
+  tf.up = [-tf.back[1], tf.back[0]];
+  const wristTop = backPts[S];
+  const wristBot = bellyPts[S];
+  const upTip = loc(w.p, tf, 13, 10.5);
+  const notch = loc(w.p, tf, 8.6, 0.3);
+  const lowTip = loc(w.p, tf, 12.6, -9.8);
+  const tail =
+    ` C${pt(loc(wristTop, tf, 4.5, 1.2))} ${pt(loc(upTip, tf, -5.5, -3.2))} ${pt(upTip)}` +
+    ` C${pt(loc(upTip, tf, -1.6, -4.4))} ${pt(loc(notch, tf, 0.6, 3.4))} ${pt(notch)}` +
+    ` C${pt(loc(notch, tf, 0.6, -3.4))} ${pt(loc(lowTip, tf, -1.6, 4.2))} ${pt(lowTip)}` +
+    ` C${pt(loc(lowTip, tf, -5.5, 3))} ${pt(loc(wristBot, tf, 4.5, -1.2))} ${pt(wristBot)}`;
+  const body = `${smooth(backPts)}${tail}${smooth([...bellyPts].reverse(), false)} Z`;
+
+  // Fins: a leading edge rising from the body, a swept tip, a trailing edge back to the body.
+  const fin = (s0, s1, side, tipBack, tipOut) => {
+    const a = edge(s0, side);
+    const b = edge(s1, side);
+    const fa = frame(s0);
+    const tip = loc(a, fa, tipBack, side * tipOut);
+    return `M${pt(a)} C${pt(loc(a, fa, tipBack * 0.25, side * tipOut * 0.7))} ${pt(loc(tip, fa, -1.4, side * 0.4))} ${pt(tip)} C${pt(loc(tip, fa, 0.6, -side * tipOut * 0.45))} ${pt(loc(b, fa, -0.4, side * 1.4))} ${pt(b)}`;
+  };
+  const details = [
+    fin(0.37, 0.5, 1, 6.6, 7), // dorsal
+    fin(0.8, 0.855, 1, 3, 2.8), // adipose
+    fin(0.53, 0.58, -1, 4, 3.6), // pelvic
+    fin(0.72, 0.79, -1, 4.8, 4), // anal
+  ];
+  // Pectoral fin: a swept stroke low behind the gill.
+  {
+    const fr = frame(0.2);
+    const [, v] = profileAt(0.2);
+    const a = loc(fr.p, fr, 0, -v * L * 0.45);
+    details.push(`M${pt(a)} C${pt(loc(a, fr, 3, -0.8))} ${pt(loc(a, fr, 6, -2.2))} ${pt(loc(a, fr, 8, -3.2))} C${pt(loc(a, fr, 5.6, -1.4))} ${pt(loc(a, fr, 3, -0.4))} ${pt(loc(a, fr, 1, -0.1))}`);
+  }
+  // Gill cover: a curve across the head.
+  {
+    const s = 0.165;
+    const fr = frame(s);
+    const [d, v] = profileAt(s);
+    const top = loc(fr.p, fr, 0, d * L * 0.8);
+    const bot = loc(fr.p, fr, 0, -v * L * 0.78);
+    details.push(`M${pt(top)} C${pt(loc(top, fr, 2.4, -2.2))} ${pt(loc(bot, fr, 2.4, 2.2))} ${pt(bot)}`);
+  }
+  // Mouth.
+  {
+    const fr = frame(0.012);
+    const m = loc(fr.p, fr, 0, -0.3);
+    details.push(`M${pt(m)} L${pt(loc(m, fr, 5.2, -1.3))}`);
+  }
+  // Lateral line.
+  const lat = [];
+  for (let i = 0; i <= 12; i++) {
+    const s = 0.19 + (i / 12) * 0.76;
+    const fr = frame(s);
+    const [d] = profileAt(s);
+    lat.push(loc(fr.p, fr, 0, d * L * 0.16));
+  }
+  const lateral = smooth(lat);
+  // Spots on the back and the tail lobes.
+  const spots = [];
+  for (let i = 0; i < 8; i++) {
+    const s = 0.27 + i * 0.085;
+    const fr = frame(s);
+    const [d] = profileAt(s);
+    spots.push(loc(fr.p, fr, 0, d * L * (0.58 + 0.12 * Math.sin(i * 2.3))));
+  }
+  spots.push(loc(w.p, tf, 8.5, 5.6), loc(w.p, tf, 11.5, 8.6), loc(w.p, tf, 8.2, -5), loc(w.p, tf, 11.4, -7.8));
+  const spotSvg = spots.map((q) => `<ellipse cx="${f2(q[0])}" cy="${f2(q[1])}" rx="0.95" ry="0.7" />`).join('');
+  const ef = frame(0.07);
+  const [ed] = profileAt(0.07);
+  const eye = loc(ef.p, ef, 0, ed * L * 0.34);
+
   const wave = waves
     ? `<g class="salmon-waves" fill="none" stroke="${stroke}" stroke-width="${width * 0.8}" stroke-linecap="round">
         <path d="M2,72 C14,66 24,66 36,71 S58,77 70,71 S94,64 118,70" />
         <path class="w2" d="M14,79 C26,75 36,75 47,78.5 S68,83 80,78.5 S98,74 108,77" opacity="0.6" />
         <path class="w3" d="M30,85 C40,82.5 48,82.5 56,84.6 S72,87.4 82,84.6" opacity="0.35" />
       </g>
-      <g class="salmon-drops" fill="${stroke}" stroke="none"><circle cx="17" cy="58" r="0.9"/><circle cx="12" cy="52" r="0.6"/><circle cx="22" cy="51" r="0.55"/><circle cx="103" cy="56" r="0.7"/><circle cx="108" cy="50" r="0.5"/></g>`
+      <g class="salmon-drops" fill="${stroke}" stroke="none"><circle cx="15" cy="62" r="0.9"/><circle cx="10" cy="56" r="0.6"/><circle cx="21" cy="57" r="0.55"/><circle cx="27" cy="63" r="0.5"/><circle cx="8" cy="64" r="0.45"/></g>`
     : '';
   return `<svg class="${cls}" viewBox="0 0 120 92" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <g fill="none" stroke="${stroke}" stroke-width="${width}" stroke-linejoin="round" stroke-linecap="round">
-      <path class="salmon-body" d="${body}" />
+    <g class="salmon-lines" fill="none" stroke="${stroke}" stroke-width="${width}" stroke-linejoin="round" stroke-linecap="round">
+      <path class="salmon-body" d="${body}" pathLength="100" />
       ${details.map((d) => `<path d="${d}" />`).join('')}
       <path d="${lateral}" stroke-dasharray="0.6 2.2" stroke-width="${width * 0.8}" />
     </g>
-    <g fill="${stroke}" opacity="0.8">${spots}</g>
-    <circle cx="${(ex + ox).toFixed(2)}" cy="${(ey + oy).toFixed(2)}" r="1.25" fill="none" stroke="${stroke}" stroke-width="${width * 0.8}" />
-    <circle cx="${(ex + ox + 0.25).toFixed(2)}" cy="${(ey + oy - 0.2).toFixed(2)}" r="0.45" fill="${stroke}" />
+    <g class="salmon-spots" fill="${stroke}" fill-opacity="0.8">${spotSvg}</g>
+    <g class="salmon-eye">
+      <circle cx="${f2(eye[0])}" cy="${f2(eye[1])}" r="1.25" fill="none" stroke="${stroke}" stroke-width="${width * 0.8}" />
+      <circle cx="${f2(eye[0] + 0.25)}" cy="${f2(eye[1] - 0.2)}" r="0.45" fill="${stroke}" />
+    </g>
     ${wave}
   </svg>`;
 }

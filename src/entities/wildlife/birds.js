@@ -145,7 +145,7 @@ export function createBirds(env) {
       if (!g) break;
       // Station relative to the boat's centre: mostly over the stern and wake, a few abeam or over the wheelhouse.
       const u = R.next();
-      g.fb = { back: u < 0.7 ? 4 + 22 * R.next() : -6 + 10 * R.next(), side: (R.next() - 0.5) * (u < 0.7 ? 20 : 34), up: 4.5 + 9 * R.next(), w: [0.12 + 0.25 * R.next(), 0.1 + 0.25 * R.next(), 0.15 + 0.3 * R.next()], p: [R.next() * TAU, R.next() * TAU, R.next() * TAU], k: 0.7 + 0.6 * R.next(), loiterR: 12 + 26 * R.next(), loiterDir: R.next() < 0.5 ? -1 : 1, sitter: R.next() < 0.35 };
+      g.fb = { back: u < 0.75 ? 11 + 15 * R.next() : -6 + 10 * R.next(), side: (R.next() - 0.5) * (u < 0.75 ? 16 : 30), up: u < 0.75 ? 3.5 + 6 * R.next() : 9 + 5 * R.next(), w: [0.12 + 0.25 * R.next(), 0.1 + 0.25 * R.next(), 0.15 + 0.3 * R.next()], p: [R.next() * TAU, R.next() * TAU, R.next() * TAU], k: 0.7 + 0.6 * R.next(), loiterR: 12 + 26 * R.next(), loiterDir: R.next() < 0.5 ? -1 : 1, sitter: R.next() < 0.35 };
       if (near) g.position.set(p.x + (R.next() - 0.5) * 60, 8 + R.next() * 12, p.z + (R.next() - 0.5) * 60);
       else {
         const a = R.next() * TAU;
@@ -221,7 +221,8 @@ export function createBirds(env) {
         ay = 7 + F.up * 0.8 + 3 * Math.sin(t * F.w[2] + F.p[2]);
       } else {
         // Hang off the stern on the boat's slipstream, drifting about.
-        const back = F.back + 5 * Math.sin(t * F.w[0] + F.p[0]);
+        // Over the wake behind the stern (the low ones never drift forward over the deck).
+        const back = Math.max(F.up < 8 ? 10 : -8, F.back + 5 * Math.sin(t * F.w[0] + F.p[0]));
         const side = F.side + 6 * Math.sin(t * F.w[1] + F.p[1]);
         ax = s.position.x - fx_ * back + Math.cos(h) * side;
         az = s.position.z - fz * back + Math.sin(h) * side;
@@ -247,15 +248,17 @@ export function createBirds(env) {
       if (g.position.y < wy + 1.5) g.position.y = wy + 1.5;
       if (loiter || speed < 3) attitude(g, g.vel.x, g.vel.y, g.vel.z, dt, 'gull');
       else {
-        // Moving boat: the gull faces into the apparent wind (along the course) and holds station.
-        g.heading = dampAngle(g.heading, h + 0.15 * Math.sin(t * 0.7 + g.seed * 9), 3, dt);
+        // Moving boat: the gull faces into the apparent wind (along the course) and holds station in the slipstream,
+        // constantly trimming: yawing to look down at the wake, tilting and side-slipping on the gusts.
+        g.heading = dampAngle(g.heading, h + 0.4 * Math.sin(t * 0.43 + g.seed * 9) + 0.15 * Math.sin(t * 1.7 + g.seed * 3), 2.5, dt);
         const turn = (g.vel.x - vx) * Math.cos(h) + (g.vel.z - vz) * Math.sin(h);
-        g.bank = damp(g.bank, clamp(turn * 0.25 + accx * 0 + 0.1 * Math.sin(t * 1.3 + g.seed * 7), -0.6, 0.6), 3, dt);
-        g.pitch = damp(g.pitch, clamp(g.vel.y * 0.08, -0.3, 0.3) + 0.05, 3, dt);
+        g.bank = damp(g.bank, clamp(turn * 0.25 + 0.38 * Math.sin(t * 0.9 + g.seed * 7) + 0.12 * Math.sin(t * 2.3 + g.seed * 5), -0.75, 0.75), 3, dt);
+        g.pitch = damp(g.pitch, clamp(g.vel.y * 0.08, -0.3, 0.3) + 0.05 + 0.12 * Math.sin(t * 0.6 + g.seed * 11), 3, dt);
+        g.headYaw = 0.5 * Math.sin(t * 0.5 + g.seed * 13);
         const effort = clamp(Math.abs(accy) * 0.08 + Math.abs(accx * fx_ + accz * fz) * 0.08, 0, 1);
         g.burst -= dt;
-        if (g.burst < 0) g.burst = 2.5 + R.next() * 5;
-        const e = Math.max(effort, g.burst < 0.9 ? 0.6 : 0.05);
+        if (g.burst < 0) g.burst = 1.5 + R.next() * 3.5;
+        const e = Math.max(effort, g.burst < 0.9 ? 0.7 : 0.05);
         g.amp = damp(g.amp, e * 0.6, 5, dt);
         g.phase += dt * TAU * FLAP_HZ.gull * (0.85 + 0.3 * g.seed);
       }
@@ -272,9 +275,11 @@ export function createBirds(env) {
       const g = takeGull(kind);
       if (!g) break;
       const a = R.next() * TAU;
-      const far = 90 + R.next() * 120;
-      g.position.set(f.x + Math.cos(a) * far, 20 + R.next() * 20, f.z + Math.sin(a) * far);
-      g.wk = { r: radius * (0.35 + 0.9 * R.next()), alt: alt * (0.5 + 0.9 * R.next()), w: (R.next() < 0.5 ? -1 : 1) * (0.35 + 0.4 * R.next()), a: R.next() * TAU, diveIn: 3 + R.next() * 10, sit: R.next() < f.sitters };
+      const far = 40 + R.next() * 70;
+      g.position.set(f.x + Math.cos(a) * far, 10 + R.next() * 12, f.z + Math.sin(a) * far);
+      // A tight, low wheel over the feed: most birds within the ring, a few higher lookouts.
+      const hi = R.next() < 0.2;
+      g.wk = { r: radius * (0.3 + 0.8 * R.next()), alt: hi ? alt * (1.3 + 0.6 * R.next()) : alt * (0.45 + 0.6 * R.next()), w: (R.next() < 0.5 ? -1 : 1) * (0.35 + 0.4 * R.next()), a: R.next() * TAU, diveIn: 2 + R.next() * 8, sit: R.next() < f.sitters };
       g.state = 'flying';
       g.arrive = 0;
       f.members.push(g);
@@ -304,7 +309,7 @@ export function createBirds(env) {
       if (flocks.some((f) => f.schoolId === id)) continue;
       const sc = schools.find((s) => s.id === id);
       if (!sc) continue;
-      makeFlock('work', { x: sc.position.x, z: sc.position.z, school: sc }, 9 + Math.floor(R.next() * 8), { radius: 10 + (sc.radius ?? 15) * 0.6, alt: 9 + R.next() * 8, schoolId: id });
+      makeFlock('work', { x: sc.position.x, z: sc.position.z, school: sc }, 10 + Math.floor(R.next() * 10), { radius: 8 + (sc.radius ?? 15) * 0.45, alt: 7 + R.next() * 5, schoolId: id });
     }
     const bait = flocks.filter((f) => f.kind === 'work' && !f.schoolId);
     // Bait flocks: fish-free patches of feed a few hundred metres to a couple of kilometres off.
@@ -316,7 +321,7 @@ export function createBirds(env) {
       const x = focus.x + Math.cos(a) * d;
       const z = focus.z + Math.sin(a) * d;
       if (ctx.heightmap.shoreDistance(x, z) < 120) continue;
-      bait.push(makeFlock('work', { x, z, drift: { x: Math.cos(a + 1.7) * 0.25, z: Math.sin(a + 1.7) * 0.25 } }, 8 + Math.floor(R.next() * 7), { radius: 14, alt: 12 }));
+      bait.push(makeFlock('work', { x, z, drift: { x: Math.cos(a + 1.7) * 0.25, z: Math.sin(a + 1.7) * 0.25 } }, 9 + Math.floor(R.next() * 8), { radius: 11, alt: 8 }));
     }
   }
 
@@ -525,7 +530,15 @@ export function createBirds(env) {
     for (let i = 0; i < n; i++) {
       const e = bird('eagle', 'soar', c.x, c.top + 40, c.z);
       e.state = 'soaring';
-      e.soar = { cx: c.x + c.gx * (35 + 50 * R.next()), cz: c.z + c.gz * (35 + 50 * R.next()), top: c.top, r: 35 + 45 * R.next(), alt: c.top + 25 + 70 * R.next(), dir: R.next() < 0.5 ? -1 : 1, a: R.next() * TAU, ax: -c.gz, az: c.gx, speed: 9 + 2 * R.next() };
+      // Riding the updraft just seaward of the cliff edge, around cliff-top height, kept clear of the ground.
+      const S = { cx: c.x + c.gx * (40 + 50 * R.next()), cz: c.z + c.gz * (40 + 50 * R.next()), top: c.top, r: 30 + 40 * R.next(), alt: c.top * 0.8 + 8 + 30 * R.next(), dir: R.next() < 0.5 ? -1 : 1, a: R.next() * TAU, ax: -c.gz, az: c.gx, speed: 9 + 2 * R.next() };
+      let floor = 0;
+      for (let k = 0; k < 16; k++) {
+        const a = (k / 16) * TAU;
+        for (const along of [-90, 0, 90]) floor = Math.max(floor, ctx.heightmap.heightAt(S.cx + S.ax * along + Math.cos(a) * S.r, S.cz + S.az * along + Math.sin(a) * S.r));
+      }
+      S.alt = Math.max(S.alt, floor + 14 + 10 * R.next());
+      e.soar = S;
       members.push(e);
     }
     eagleGroups.push({ x: c.x, z: c.z, members, range: 3200 });
@@ -644,6 +657,24 @@ export function createBirds(env) {
   }
 
   // ------------------------------------------------------------------------------------------------ puffins & cormorants
+  // Low flights must stay over the sea: shrink an elliptical loop until it clears the land, or give up.
+  function waterLoop(L) {
+    for (let k = 0; k < 5; k++) {
+      let ok = true;
+      for (let i = 0; i < 24 && ok; i++) {
+        const a = (i / 24) * TAU;
+        const ex = Math.cos(a) * L.r;
+        const ez = Math.sin(a) * L.r * L.ecc;
+        const x = L.cx + ex * Math.cos(L.rot) - ez * Math.sin(L.rot);
+        const z = L.cz + ex * Math.sin(L.rot) + ez * Math.cos(L.rot);
+        if (ctx.heightmap.heightAt(x, z) > -0.5) ok = false;
+      }
+      if (ok) return true;
+      L.r *= 0.7;
+    }
+    return false;
+  }
+
   const colonies = [];
   for (const h of sites.haulouts) {
     if (!h.birds || !h.slots.length) continue;
@@ -655,8 +686,18 @@ export function createBirds(env) {
     if (puffins) {
       const rafts = h.kind === 'rookery' || (isl && isl.cells > 300) ? 3 : 1;
       for (let r = 0; r < rafts; r++) {
-        const a = R.next() * TAU;
-        const rc = { x: h.x + Math.cos(a) * (90 + 120 * R.next()), z: h.z + Math.sin(a) * (90 + 120 * R.next()) };
+        // Rafts sit on open water a little off the rocks.
+        let rc = null;
+        for (let k = 0; k < 12 && !rc; k++) {
+          const sl = h.slots[Math.floor(R.next() * h.slots.length)];
+          const gg = { x: 0, z: 0 };
+          ctx.heightmap.shoreGradient(sl.x, sl.z, gg);
+          const d = 35 + 110 * R.next();
+          const cx = sl.x + gg.x * d + (R.next() - 0.5) * 30;
+          const cz = sl.z + gg.z * d + (R.next() - 0.5) * 30;
+          if (ctx.heightmap.heightAt(cx, cz) < -3) rc = { x: cx, z: cz };
+        }
+        if (!rc) continue;
         const n = 6 + Math.floor(R.next() * 12);
         for (let i = 0; i < n; i++) {
           const p = bird('puffin', 'raft', rc.x + (R.next() - 0.5) * 18, 0, rc.z + (R.next() - 0.5) * 18);
@@ -667,9 +708,10 @@ export function createBirds(env) {
         }
         for (let i = 0; i < 3 + Math.floor(R.next() * 4); i++) {
           const p = bird('puffin', 'loop', rc.x, 2, rc.z);
-          p.loop = { a: R.next() * TAU, r: 60 + R.next() * 90, cx: (rc.x + h.x) / 2, cz: (rc.z + h.z) / 2, dir: R.next() < 0.5 ? -1 : 1, ecc: 0.4 + 0.4 * R.next(), rot: R.next() * TAU };
+          p.loop = { a: R.next() * TAU, r: 50 + R.next() * 80, cx: rc.x, cz: rc.z, dir: R.next() < 0.5 ? -1 : 1, ecc: 0.4 + 0.4 * R.next(), rot: R.next() * TAU };
           p.state = 'flying';
-          col.puffinFly.push(p);
+          if (waterLoop(p.loop)) col.puffinFly.push(p);
+          else p.loop = null;
         }
       }
       for (const s of h.slots.slice(0, 6)) {
@@ -689,10 +731,13 @@ export function createBirds(env) {
       col.corms.push(c);
     }
     if (R.next() < 0.6) {
-      const c = bird('cormorant', 'loop', h.x, 3, h.z);
-      c.loop = { a: R.next() * TAU, r: 150 + R.next() * 200, cx: h.x, cz: h.z, dir: R.next() < 0.5 ? -1 : 1, ecc: 0.3, rot: R.next() * TAU };
+      const sl = h.slots[Math.floor(R.next() * h.slots.length)];
+      const gg = { x: 0, z: 0 };
+      ctx.heightmap.shoreGradient(sl.x, sl.z, gg);
+      const c = bird('cormorant', 'loop', sl.x, 3, sl.z);
+      c.loop = { a: R.next() * TAU, r: 90 + R.next() * 120, cx: sl.x + gg.x * 140, cz: sl.z + gg.z * 140, dir: R.next() < 0.5 ? -1 : 1, ecc: 0.35, rot: R.next() * TAU };
       c.state = 'flying';
-      col.cormFly.push(c);
+      if (waterLoop(c.loop)) col.cormFly.push(c);
     }
     colonies.push(col);
   }
@@ -725,7 +770,7 @@ export function createBirds(env) {
     const nearSeiner = s?.position ? Math.hypot(s.position.x - cam.x, s.position.z - cam.z) < 3000 : false;
     // Followers: maintain the flock around the seiner (more when the boat is working).
     if (s?.position) {
-      const want = ctx.state.mode === 'title' ? 5 : (ctx.systems.fishing?.state ?? 'idle') !== 'idle' ? 12 : 9;
+      const want = ctx.state.mode === 'title' ? 6 : (ctx.systems.fishing?.state ?? 'idle') !== 'idle' ? 13 : 11;
       if (follow.members.length < want) spawnFollowers(want - follow.members.length, follow.members.length > 0);
       updateFollowers(dt, frame);
     }
@@ -909,6 +954,7 @@ export function createBirds(env) {
     drawn: drawnByKind,
     herds: H,
     snagHerd,
+    groups: { eagles: eagleGroups, perches: perchGroups, colonies, rest: restFlocks },
   };
   return api;
 }

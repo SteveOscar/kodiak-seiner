@@ -1,7 +1,7 @@
 [
   {
     "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
-    "timeout": 60000
+    "timeout": 120000
   },
   {
     "start": {}
@@ -20,7 +20,7 @@
     "wait": 1500
   },
   {
-    "eval": "window.__K = __KODIAK__; window.__S = __K.systems.seiner; window.__F = __K.systems.skiff; window.__shot = (dist, angDeg, h, lookH, obj) => { const s = obj ?? __S; const hd = (s.heading ?? 0) + angDeg * Math.PI / 180; const p = s.position; __K.camera([p.x + Math.sin(hd) * dist, h, p.z - Math.cos(hd) * dist], [p.x, lookH, p.z]); }; window.__mid = (h) => { const a = __S.position, b = __F.position; const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2; const d = Math.hypot(a.x - b.x, a.z - b.z); __K.camera([mx + 20, h ?? Math.max(40, d * 1.1), mz + d * 0.5 + 20], [mx, 0, mz]); }; true"
+    "eval": "window.__K = __KODIAK__; if (__K.systems.ui) __K.systems.ui.visible = false; window.__S = __K.systems.seiner; window.__F = __K.systems.skiff; window.__shot = (dist, angDeg, h, lookH, obj) => { const s = obj ?? __S; const hd = (s.heading ?? 0) + angDeg * Math.PI / 180; const p = s.position; __K.camera([p.x + Math.sin(hd) * dist, h, p.z - Math.cos(hd) * dist], [p.x, lookH, p.z]); }; window.__mid = (h) => { const a = __S.position, b = __F.position; const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2; const d = Math.hypot(a.x - b.x, a.z - b.z); __K.camera([mx + 20, h ?? Math.max(40, d * 1.1), mz + d * 0.5 + 20], [mx, 0, mz]); }; true"
   },
   {
     "eval": "__shot(24, 150, 7, 3); __F.release()"

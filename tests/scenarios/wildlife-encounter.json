@@ -1,0 +1,91 @@
+[
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+  "timeout": 120000
+ },
+ {
+  "start": {}
+ },
+ {
+  "time": 19.5
+ },
+ {
+  "weather": "clear"
+ },
+ {
+  "eval": "window.__K = __KODIAK__; window.__W = __K.systems.wildlife; window.__P = __K.systems.player; window.__ev = []; __K.ctx.events.on('bear:encounter', (e) => __ev.push([+__K.ctx.time.elapsed.toFixed(1), e.stage, e.bearId])); __K.ctx.events.on('wildlife:sighted', (e) => __ev.push([+__K.ctx.time.elapsed.toFixed(1), 'sighted', e.kind, e.first])); 'ok'"
+ },
+ {
+  "teleport": [
+   -5358,
+   470,
+   167
+  ]
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "eval": "JSON.stringify(__P.canGoAshore())"
+ },
+ {
+  "eval": "__P.debugAshore()"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "eval": "(() => { const b = __W.bears.filter((b) => b.site && b.site.streamId === 'karluk' && b.age === 'sow')[0]; const s = b.site; const q = s.path[2] ?? s.bank; __W.stageBear(b.id, 'rest', q.x, q.z); return [b.id, q.x, q.z]; })()"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "eval": "(() => { const b = __W.bears.filter((b) => b.site && b.site.streamId === 'karluk' && b.age === 'sow')[0] ?? __W.bears.filter((b) => b.site && b.site.streamId === 'karluk')[0]; window.__B = b; const p = b.position; const hm = __K.ctx.heightmap; let best = null; for (let i = 0; i < 72; i++) { const a = i / 72 * Math.PI * 2; for (const r of [38, 42, 46, 50]) { const x = p.x + Math.sin(a) * r, z = p.z - Math.cos(a) * r; const h = __K.systems.terrain.heightAt(x, z); const n = hm.normalAt(x, z); if (h < 0.4 || h > 6 || n.y < 0.9) continue; let ok = true; for (let t = 0.1; t < 0.95; t += 0.1) { const hh = __K.systems.terrain.heightAt(p.x + (x - p.x) * t, p.z + (z - p.z) * t); if (hh < -0.3) ok = false; } if (ok && (!best || Math.abs(r - 42) < Math.abs(best.r - 42))) best = { x, z, r, a }; } } if (!best) return 'no spot'; const hd = Math.atan2(p.x - best.x, -(p.z - best.z)) * 180 / Math.PI; return [__P.placeAt(best.x, best.z, hd), b.id, b.age, b.state, +best.x.toFixed(1), +best.z.toFixed(1), best.r]; })()"
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "eval": "document.getElementById('ui').style.visibility = 'hidden'; window.__walk = () => { const f = () => { const b = __B.position, p = __P.position; const d = Math.hypot(b.x - p.x, b.z - p.z); if (d < 6 || window.__stopWalk) { __P.debugDrive(null); return; } __P.debugDrive({ mx: (b.x - p.x) / d, mz: (b.z - p.z) / d, amount: 0.45 }); requestAnimationFrame(f); }; f(); }; __walk(); 'walking'"
+ },
+ {
+  "wait": 3500
+ },
+ {
+  "eval": "(() => { const b = __B.position, p = __P.position; return [Math.hypot(b.x - p.x, b.z - p.z).toFixed(1), __B.state, JSON.stringify(__ev)]; })()"
+ },
+ {
+  "eval": "window.__stopWalk = true; (() => { const b = __B.position, p = __P.position; const a = Math.atan2(b.x - p.x, -(b.z - p.z)); __K.camera([p.x - Math.sin(a) * 3 + Math.cos(a) * 1.5, p.y + 1.7, p.z + Math.cos(a) * 3 + Math.sin(a) * 1.5], [b.x, b.y + 1.2, b.z]); return 1; })()"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "shot": "bear-watch"
+ },
+ {
+  "camera": null
+ },
+ {
+  "eval": "window.__stopWalk = false; __walk(); 'closing'"
+ },
+ {
+  "wait": 4000
+ },
+ {
+  "eval": "(() => { const b = __B.position, p = __P.position; return [Math.hypot(b.x - p.x, b.z - p.z).toFixed(1), __B.state, __P.debugState().phase, JSON.stringify(__ev)]; })()"
+ },
+ {
+  "shot": "bear-charge"
+ },
+ {
+  "wait": 5000
+ },
+ {
+  "eval": "(() => JSON.stringify({ ev: __ev, phase: __P.debugState().phase, control: __K.ctx.state.control, bear: __B.state }))()"
+ },
+ {
+  "state": "end"
+ }
+]

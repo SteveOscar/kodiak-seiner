@@ -1,0 +1,21 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 200000 },
+  { "start": {} },
+  { "eval": "document.getElementById('boot')?.remove(); document.querySelectorAll('vite-error-overlay').forEach((e) => e.remove()); const ui = document.getElementById('ui'); if (ui) ui.style.visibility = 'hidden'; 1" },
+  { "weather": "clear" },
+  { "time": 21.4 },
+  { "teleport": [6083, -852, 250] },
+  { "camera": { "pos": [6083, 24, -852], "look": [5300, 0, -1140] } },
+  { "wait": 3500 },
+  { "shot": "low-golden-glitter" },
+  { "time": 13 },
+  { "weather": "partly" },
+  { "camera": { "pos": [6050, 8, -830], "look": [6400, -6, -900] } },
+  { "wait": 2500 },
+  { "shot": "low-noon" },
+  { "camera": null },
+  { "press": "KeyW" }, { "wait": 120 }, { "press": "KeyW" }, { "wait": 120 }, { "press": "KeyW" }, { "wait": 120 },
+  { "press": "KeyW" }, { "wait": 120 }, { "press": "KeyW" }, { "wait": 120 }, { "press": "KeyW" }, { "wait": 120 },
+  { "wait": 12000 },
+  { "shot": "low-chase-wake" }
+]

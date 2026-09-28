@@ -114,7 +114,8 @@ export function createMarine(env) {
     blowholeOf(w, tmp);
     const wy = env.water(tmp.x, tmp.z);
     fx?.blow(tmp.x, wy + 0.2, tmp.z, { height, width: w.kind === 'orca' ? 0.55 : 1, heading: w.heading });
-    env.stamp(tmp.x, tmp.z, w.kind === 'orca' ? 2.5 : 4.5, 0.4, 'foam');
+    env.stamp(tmp.x, tmp.z, w.kind === 'orca' ? 1.5 : 2.5, 0.22, 'foam');
+    env.stamp(tmp.x, tmp.z, w.kind === 'orca' ? 2 : 3.5, 0.5, 'ripple');
     ctx.events.emit('wildlife:blow', { kind: w.kind, id: w.id, x: tmp.x, z: tmp.z });
   }
 
@@ -132,6 +133,7 @@ export function createMarine(env) {
     if (state === 'breach') {
       w.dur = 7.5;
       w.splashed = false;
+      w.exited = false;
       w.rollDir = R.next() < 0.5 ? -1 : 1;
       ctx.events.emit('wildlife:breach', { kind: w.kind, id: w.id, x: w.position.x, z: w.position.z, stage: 'start' });
     }
@@ -176,9 +178,9 @@ export function createMarine(env) {
         const rise = smoothstep(0, 0.14, u);
         const roll = smoothstep(0.18, 0.72, u);
         const sink = smoothstep(0.62, 1, u);
-        w.position.y = lerp(-4.2, -1.05, rise) - 1.0 * roll - 2.2 * sink;
+        w.position.y = lerp(-4.2, -0.9, rise) - 0.9 * roll - 2.2 * sink;
         w.pitch = 0.14 * (1 - smoothstep(0.1, 0.3, u)) - 0.2 * Math.sin(Math.PI * roll) - 0.05 * sink;
-        w.arch = 0.45 * Math.sin(Math.PI * clamp((u - 0.15) / 0.6, 0, 1));
+        w.arch = 0.6 * Math.sin(Math.PI * clamp((u - 0.15) / 0.6, 0, 1));
         w.roll = damp(w.roll, 0.08 * Math.sin(w.seed * 20 + idx), 1, dt);
         w.amp = 0.25;
         w.pec = 0.05 * Math.sin(t * 0.5);
@@ -191,19 +193,25 @@ export function createMarine(env) {
       case 'dive': {
         const u = t / w.dur;
         swim(w, 1.6 * (1 - u * 0.5), dt, false);
-        const a = smoothstep(0, 0.3, u);
-        const b = smoothstep(0.28, 0.72, u);
-        const c = smoothstep(0.7, 1, u);
-        w.arch = 1.15 * a - 0.75 * b;
-        w.pitch = -0.35 * a - 1.0 * b - 0.1 * c;
-        w.position.y = -1.0 - 0.4 * a - 4.6 * b - 7.5 * c;
-        w.amp = 0.2 + 0.4 * b;
+        // Roll the back high, then tip steeply down so the tail stock and flukes rise clear of the water (the tips
+        // ~3 m up), hang there a moment, and slide straight down.
+        const a = smoothstep(0, 0.28, u);
+        const b = smoothstep(0.24, 0.6, u);
+        const c = smoothstep(0.68, 1, u);
+        w.arch = 1.1 * a - 0.9 * b;
+        w.pitch = -0.3 * a - 1.12 * b;
+        w.position.y = -0.8 - 0.3 * a - 2.5 * b - 9 * c;
+        w.amp = 0.15 + 0.2 * b;
         // Flukes clear the water: water streams off the trailing edge.
-        if (near && u > 0.45 && u < 0.82 && Math.random() < 0.6) {
+        if (near && u > 0.4 && u < 0.85 && Math.random() < 0.6) {
           const [fx_, fz] = fwd(w.heading);
           const tipBack = 7.2 * Math.cos(w.pitch);
-          const ty = w.position.y - 7.2 * Math.sin(w.pitch) + 0.6;
-          fx?.shed(w.position.x - fx_ * tipBack + (Math.random() - 0.5) * 3.5, ty, w.position.z - fz * tipBack + (Math.random() - 0.5) * 3.5, 0, -1, 0, 0.8);
+          const ty = w.position.y - 7.2 * Math.sin(w.pitch) - 0.1;
+          // Sheets of water streaming off the trailing edge of the raised flukes.
+          const side = (Math.random() - 0.5) * 4.2;
+          const rx = Math.cos(w.heading);
+          const rz = Math.sin(w.heading);
+          if (ty > 0.3) fx?.shed(w.position.x - fx_ * tipBack + rx * side, ty, w.position.z - fz * tipBack + rz * side, 0, -0.5, 0, 0.7, 2);
         }
         if (!w.fluked && u > 0.8) {
           w.fluked = true;
@@ -226,6 +234,15 @@ export function createMarine(env) {
           w.pitch = damp(w.pitch, 1.18, 4, dt);
           w.roll = 0;
           w.amp = 1.2;
+          // The rostrum breaks the surface: a burst of white water around the rising head.
+          if (!w.exited && t > 0.95) {
+            w.exited = true;
+            const hx = w.position.x + fx_ * 1.5;
+            const hz = w.position.z + fz * 1.5;
+            if (near) fx?.splash(hx, 0, hz, { size: 3.2, up: 1.6 });
+            env.stamp(hx, hz, 9, 0.9, 'foam');
+            env.stamp(hx, hz, 5, 1, 'ripple');
+          }
         } else {
           const tau = t - up;
           y = -5 + 12.2 * tau - 4.9 * tau * tau;
@@ -233,23 +250,29 @@ export function createMarine(env) {
           w.roll = w.rollDir * 2.7 * smoothstep(0.05, 1.9, tau);
           w.pec = 0.9 * Math.sin(Math.min(Math.PI, tau * 1.6));
           w.amp = 0.4;
-          // Water sheets off the body as it clears the surface.
-          if (near && tau < 1.0) {
+          // Water pours off the body as it clears the surface (and off the flippers at the top of the leap).
+          if (near && tau < 1.5) {
+            const vy = 12.2 - 9.8 * tau;
+            const cp = Math.cos(w.pitch);
+            const sp = Math.sin(w.pitch);
             for (let k = 0; k < 2; k++) {
-              const s = Math.random() * 6 - 1;
-              fx?.shed(w.position.x + fx_ * s * Math.cos(w.pitch), y + s * Math.sin(w.pitch), w.position.z + fz * s * Math.cos(w.pitch), fx_ * 2, 7, fz * 2, 2.4);
+              const s = Math.random() * 12 - 6;
+              const py = y + s * sp;
+              if (py < 0.2) continue;
+              fx?.shed(w.position.x + fx_ * s * cp + (Math.random() - 0.5) * 2, py, w.position.z + fz * s * cp + (Math.random() - 0.5) * 2, fx_ * 2.2, vy, fz * 2.2, 1.6, tau < 0.6 ? 4 : 2);
             }
           }
           if (!w.splashed && tau > 1.4 && y < -0.2) {
             w.splashed = true;
             const cx = w.position.x;
             const cz = w.position.z;
-            fx?.splash(cx, 0, cz, { size: 11, count: 110, up: 1.25 });
-            for (const s of [-5, 4]) fx?.splash(cx + fx_ * s, 0, cz + fz * s, { size: 6, count: 40, up: 1.1 });
+            fx?.breach(cx, 0, cz, { heading: w.heading, scale: 1 });
             env.stamp(cx, cz, 22, 1, 'foam');
-            env.stamp(cx + fx_ * 6, cz + fz * 6, 14, 1, 'foam');
+            env.stamp(cx + fx_ * 6, cz + fz * 6, 16, 1, 'foam');
+            env.stamp(cx - fx_ * 6, cz - fz * 6, 14, 1, 'foam');
             env.stamp(cx, cz, 10, 1, 'ripple');
             env.stamp(cx, cz, 18, 1, 'ripple');
+            env.stamp(cx, cz, 28, 1, 'ripple');
             ctx.events.emit('wildlife:breach', { kind: w.kind, id: w.id, x: cx, z: cz, stage: 'splash' });
           }
         }
@@ -526,19 +549,38 @@ export function createMarine(env) {
     if (!h.slots.length) continue;
     const rook = h.kind === 'rookery';
     if (!rook && R.next() < 0.35) continue;
-    const target = rook ? 110 : Math.min(h.slots.length * 2, 5 + Math.floor(R.next() * 14));
-    const ho = { id: h.id, kind: h.kind, x: h.x, z: h.z, closed: h.closed ?? null, members: [], swimmers: [], active: false, alarm: 0, gone: 0, disturbedAt: -1e9 };
+    const target = rook ? 150 : Math.min(h.slots.length * 2.5, 8 + Math.floor(R.next() * 26));
+    const ho = { id: h.id, kind: h.kind, x: h.x, z: h.z, closed: h.closed ?? null, members: [], swimmers: [], active: false, alarm: 0, gone: 0, disturbedAt: -1e9, clusters: [] };
+    // Sea lions pack together on a few low ledges near the water rather than spreading over the whole islet: pick
+    // cluster centres from the lowest rim slots, then place animals around them without overlapping.
+    const low = h.slots.slice().sort((p, q) => p.h + R.next() * 2 - (q.h + R.next() * 2));
+    const nClusters = rook ? 6 : 1 + Math.floor(R.next() * 2.4);
+    for (const c of low) {
+      if (ho.clusters.length >= nClusters) break;
+      if (ho.clusters.some((o) => Math.hypot(o.x - c.x, o.z - c.z) < (rook ? 30 : 22))) continue;
+      const g = { x: 0, z: 0 };
+      hm.shoreGradient(c.x, c.z, g);
+      ho.clusters.push({ x: c.x, z: c.z, gx: g.x, gz: g.z });
+    }
+    if (ho.clusters.length) {
+      ho.x = ho.clusters[0].x;
+      ho.z = ho.clusters[0].z;
+    }
     let tries = 0;
-    while (ho.members.length < target && tries++ < target * 4) {
-      const s = h.slots[Math.floor(R.next() * h.slots.length)];
-      const x = s.x + (R.next() - 0.5) * 9;
-      const z = s.z + (R.next() - 0.5) * 9;
+    while (ho.members.length < target && tries++ < target * 12 && ho.clusters.length) {
+      const c = ho.clusters[Math.floor(R.next() ** 1.6 * ho.clusters.length)];
+      const spread = rook ? 16 : 5 + ho.members.length * 0.25;
+      const x = c.x + (R.next() + R.next() - 1) * spread;
+      const z = c.z + (R.next() + R.next() - 1) * spread;
       const gh = hm.heightAt(x, z);
-      if (gh < 0.25) continue;
+      if (gh < 0.3 || gh > 7) continue;
       if (rook && h.closed && Math.hypot(x - h.closed.x, z - h.closed.z) > h.closed.radius - 15) continue;
       const u = R.next();
       const bull = u < (rook ? 0.1 : 0.14);
+      if (ho.members.some((o) => Math.hypot(o.home.x - x, o.home.z - z) < (bull || o.bull ? 2.8 : 1.9))) continue;
       const juv = !bull && u > 0.82;
+      // Most face the water (ready to go), the rest any way.
+      const seaward = headingOf(c.gx, c.gz);
       const sl = {
         id: `sealion-${others.length}`,
         kind: 'sealion',
@@ -547,7 +589,7 @@ export function createMarine(env) {
         scale: bull ? 1 : juv ? 0.7 : 0.92 + R.next() * 0.16,
         position: new THREE.Vector3(x, gh, z),
         home: { x, z },
-        heading: s.face + Math.PI + (R.next() - 0.5) * 2.4,
+        heading: R.next() < 0.55 ? seaward + (R.next() - 0.5) * 1.6 : R.next() * TAU,
         state: 'lying',
         headPitch: 0,
         headYaw: 0,
@@ -574,7 +616,7 @@ export function createMarine(env) {
         position: new THREE.Vector3(h.x, -0.3, h.z),
         heading: 0,
         state: 'swimming',
-        loop: { a: R.next() * TAU, r: 45 + R.next() * 90, dir: R.next() < 0.5 ? -1 : 1, speed: 1.5 + R.next() * 1.5 },
+        loop: { a: R.next() * TAU, r: 14 + R.next() * 30, dir: R.next() < 0.5 ? -1 : 1, speed: 1.5 + R.next() * 1.5, cx: h.x, cz: h.z },
         headPitch: 0.5,
         headYaw: 0,
         t: 0,
@@ -582,11 +624,19 @@ export function createMarine(env) {
         tint: [1, 1, 1],
         drawn: false,
       };
-      if (rook && h.closed) sl.loop.r = Math.min(sl.loop.r, h.closed.radius * 0.6);
+      // Circle in open water off one of the ledges.
+      const c = ho.clusters[i % Math.max(1, ho.clusters.length)] ?? { x: h.x, z: h.z, gx: 0, gz: 0 };
+      sl.loop.cx = c.x + c.gx * (sl.loop.r + 12);
+      sl.loop.cz = c.z + c.gz * (sl.loop.r + 12);
+      if (hm.heightAt(sl.loop.cx, sl.loop.cz) > -2) continue;
       ho.swimmers.push(sl);
       others.push(sl);
     }
-    if (ho.members.length || ho.swimmers.length) haulouts.push(ho);
+    if (ho.members.length || ho.swimmers.length) {
+      haulouts.push(ho);
+      // Consumers reading the site list (audio's sea-lion chorus) see the live colony.
+      h.members = ho.members;
+    }
   }
   function updateHaulout(ho, dt, frame, near) {
     const t = ctx.time.elapsed;
@@ -660,10 +710,10 @@ export function createMarine(env) {
     for (const sw of ho.swimmers) {
       const L = sw.loop;
       L.a += (L.dir * L.speed * dt) / L.r;
-      const x = ho.x + Math.cos(L.a) * L.r;
-      const z = ho.z + Math.sin(L.a) * L.r;
-      const nx = ho.x + Math.cos(L.a + 0.05 * L.dir) * L.r;
-      const nz = ho.z + Math.sin(L.a + 0.05 * L.dir) * L.r;
+      const x = L.cx + Math.cos(L.a) * L.r;
+      const z = L.cz + Math.sin(L.a) * L.r;
+      const nx = L.cx + Math.cos(L.a + 0.05 * L.dir) * L.r;
+      const nz = L.cz + Math.sin(L.a + 0.05 * L.dir) * L.r;
       sw.heading = headingOf(nx - x, nz - z);
       const bob = Math.sin(t * 0.6 + sw.seed * 20);
       sw.submerged = bob < -0.55;
@@ -879,6 +929,7 @@ export function createMarine(env) {
     render,
     haulouts,
     rafts,
+    sealGroups,
     // Staging helpers for QA shots and events: move a whale (hidden at depth) to (x, z) and start a behaviour.
     stage(kind, x, z, heading = 0) {
       if (kind === 'orcas') {
@@ -887,18 +938,25 @@ export function createMarine(env) {
         pod.surfaceIn = 0;
         return true;
       }
+      if (kind === 'blow') {
+        fx?.blow(x, env.water(x, z) + 0.2, z, { height: 4.6, heading });
+        return true;
+      }
       if (kind === 'bubbleNet') {
         const ws = nearestWhales(x, z, 3);
         startBubbleNet(x, z, ws);
         return true;
       }
-      const w = nearestWhales(x, z, 1)[0];
+      // A whale not staged in the last half minute, so several stagings in a row use different animals.
+      const now = ctx.time.elapsed;
+      const w = nearestWhales(x, z, whales.length).find((c) => !(now - (c.stagedAt ?? -1e9) < 30)) ?? nearestWhales(x, z, 1)[0];
       if (!w) return false;
+      w.stagedAt = now;
       w.position.set(x, -14, z);
       w.heading = heading;
       w.home = { x, z, r: 500 };
       w.range = null;
-      w.target = { x, z };
+      w.target = { x: x + Math.sin(heading) * 400, z: z - Math.cos(heading) * 400 };
       if (kind === 'breach') enter(w, 'breach');
       else if (kind === 'dive') {
         w.position.y = -1;
@@ -906,6 +964,8 @@ export function createMarine(env) {
       } else {
         w.breathsNext = 6;
         enter(w, 'surface');
+        // Surface just before the first blow.
+        w.t = w.breathDur * 0.08;
       }
       return w.id;
     },

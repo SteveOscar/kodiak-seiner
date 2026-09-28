@@ -149,7 +149,9 @@ export async function create(ctx) {
     } else pool.set(0, 0, 0, 0, 0, false);
     pool.commit();
     const m = model.materials;
-    m.lamp.color.setScalar(0.45 + 2.6 * night);
+    // Lenses read as coloured glass by day and go dim at night: the glow sprites show which lights are actually lit,
+    // so an unlit anchor or fishing light does not shine from the mast.
+    m.lamp.color.setScalar(0.9 - 0.72 * night);
     const dark = clamp((0.32 - daylight) / 0.25, 0, 1);
     m.glass.emissiveIntensity = dark * (deckLights ? 0.45 : 0.22);
     m.glassCabin.emissiveIntensity = dark * 1.7;

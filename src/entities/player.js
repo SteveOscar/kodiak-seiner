@@ -16,7 +16,7 @@
 // animation in player/anim.js, the figure in player/model.js.
 
 import * as THREE from 'three';
-import { FOOT_RULES, findLanding, stepOffPoint, perchPoint, onSummit, slopeBand } from './player/rules.js';
+import { FOOT_RULES, findLanding, stepOffPoint, dryPointAhead, perchPoint, onSummit, isHilltop, slopeBand } from './player/rules.js';
 import { FOOT_TUNING, createFootState, placeFoot, stepFoot, standable } from './player/controller.js';
 import { createAnimator, createPose, animate } from './player/anim.js';
 import { buildDeckhand } from './player/model.js';
@@ -37,10 +37,16 @@ const TUNE = Object.freeze({
   cutAfter: 3.2, // seconds of the run shown before the cut
   cutApproach: 30, // metres out from the destination where the run resumes after the cut
   asternOffset: 7, // metres astern of the seiner's stern where the returning skiff lines up with the ramp
-  searchEvery: 0.75, // seconds between landing searches while the boat is stopped
+  searchEvery: 1.2, // seconds between landing searches while the boat drifts (~1 ms each; 4x longer at rest)
   searchMove: 6, // or when the boat has moved this far
   perchEvery: 0.5,
-  watchToastEvery: 15,
+  summitIdle: 2.5, // seconds standing still on a hilltop before the summit framing is suggested
+});
+
+const FRAMING = Object.freeze({
+  ferry: Object.freeze({ kind: 'ferry', dist: 12, pitch: 0.32 }),
+  board: Object.freeze({ kind: 'board', dist: 8, pitch: 0.3 }),
+  summit: Object.freeze({ kind: 'summit', dist: 9, pitch: 0.16 }),
 });
 
 const QUIPS = [
@@ -109,12 +115,13 @@ export async function create(ctx) {
   let snapCamera = false;
   let lastStepCount = 0;
   let watch = null; // { bearId, x, z, until }
-  let lastWatchToast = -1e9;
   let perchTimer = 0;
   const perchDone = new Map(); // placeId -> day
   let summits = null;
   let boundaryToastAt = -1e9;
   let boardOffer = false;
+  let onTop = false; // standing on a local high point (a summit or ridge top with a view)
+  let idleT = 0;
 
   // ---------------------------------------------------------------- landing search (cached)
   const search = { x: NaN, z: NaN, t: -1e9, result: { ok: false, reason: 'none' } };
@@ -593,11 +600,8 @@ export async function create(ctx) {
     if (stage === 'watch') {
       const b = bearById(e.bearId);
       watch = { bearId: e.bearId, x: b?.position?.x ?? e.x, z: b?.position?.z ?? e.z, until: ctx.time.elapsed + 14 };
-      if (phase === 'foot' && ctx.time.elapsed - lastWatchToast > TUNE.watchToastEvery) {
-        lastWatchToast = ctx.time.elapsed;
-        ui()?.toast?.('A brown bear is watching you. Back away slowly — don’t run.', { kind: 'warn', duration: 5 });
-        ui()?.hint?.('bear-watch', 'Kodiak brown bears: stay calm, talk quietly and back away. Never run from a bear.');
-      }
+      // The UI already toasts the encounter itself; the player adds the once-per-save field advice.
+      if (phase === 'foot') ui()?.hint?.('bear-watch', 'Back away slowly. Kodiak brown bears: stay calm, talk quietly, give her room — and never run from a bear.');
     } else if (stage === 'charge') {
       if (phase !== 'foot' || ctx.state.mode !== 'play') return;
       const b = bearById(e.bearId);
@@ -626,11 +630,12 @@ export async function create(ctx) {
           returnAboardNow({ keepFade: true });
           return;
         }
-        // Back at the skiff, a couple of steps up the beach, looking at it.
+        // Back at the skiff on dry beach just above the bow, looking out at it.
         const ux = Math.sin(bp.heading);
         const uz = -Math.cos(bp.heading);
-        let px = bp.x + ux * 1.6;
-        let pz = bp.z + uz * 1.6;
+        const dryP = dryPointAhead(terrainH, bp.x, bp.z, ux, uz);
+        let px = dryP?.x ?? bp.x + ux * 1.6;
+        let pz = dryP?.z ?? bp.z + uz * 1.6;
         if (!standable(terrainH, px, pz)) {
           px = bp.x;
           pz = bp.z;
@@ -890,7 +895,9 @@ export async function create(ctx) {
       if (perchTimer <= 0) {
         perchTimer = TUNE.perchEvery;
         checkPerch();
+        onTop = foot.y > 20 && isHilltop(terrainH, foot.x, foot.z, foot.y);
       }
+      idleT = foot.speed < 0.15 && foot.onGround ? idleT + dt : 0;
     }
 
     // Scripted positions (hops) override; walkTo already moved the controller.
@@ -1023,6 +1030,15 @@ export async function create(ctx) {
     get wading() {
       return !ride && foot.depth > 0.04;
     },
+    // Framing the camera rig may adopt in foot mode (null = its own defaults): wider during the skiff runs, and a
+    // lower, longer look out over the view after a few seconds standing still on a hilltop.
+    get cameraFraming() {
+      if (!active) return null;
+      if (phase === 'launch' || phase === 'ferry' || phase === 'return') return FRAMING.ferry;
+      if (phase === 'disembark' || phase === 'embark') return FRAMING.board;
+      if (phase === 'foot' && onTop && idleT > TUNE.summitIdle) return FRAMING.summit;
+      return null;
+    },
     rules: FOOT_RULES,
     tuning: FOOT_TUNING,
     canGoAshore,
@@ -1101,6 +1117,8 @@ export async function create(ctx) {
         landing: landing ? { x: +landing.x.toFixed(1), z: +landing.z.toFixed(1), placeId: landing.placeId } : null,
         ashore: active ? null : canGoAshore().reason,
         fade: +fader.alpha.toFixed(2),
+        onTop,
+        framing: sys.cameraFraming?.kind ?? null,
       };
     },
     serialize() {
@@ -1110,7 +1128,6 @@ export async function create(ctx) {
     reset() {
       returnAboardNow({ silentMode: true });
       perchDone.clear();
-      lastWatchToast = -1e9;
       exclusions = null;
     },
   };

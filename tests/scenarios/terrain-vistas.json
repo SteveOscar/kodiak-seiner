@@ -49,11 +49,18 @@
   "shot": "peninsula-golden"
  },
  {
-  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"shadow-2130\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(21.5); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([1200, 900, 5200], [-200, 0, 1800]);  window.__tkShot = { name: \"shadow-2130\", t: performance.now() }; } else { K.camera([1200, 900, 5200], [-200, 0, 1800]); } return performance.now() - window.__tkShot.t > 2200; })()",
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"shadow-2130\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(21.5); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([-1500, 900, 4200], [1500, 0, 1000]);  window.__tkShot = { name: \"shadow-2130\", t: performance.now() }; } else { K.camera([-1500, 900, 4200], [1500, 0, 1000]); } return performance.now() - window.__tkShot.t > 3200; })()",
   "timeout": 120000
  },
  {
   "shot": "shadow-2130"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"shadow-2130-kodiak\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(21.5); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([5100, 320, 1700], [4900, 0, -1400]);  window.__tkShot = { name: \"shadow-2130-kodiak\", t: performance.now() }; } else { K.camera([5100, 320, 1700], [4900, 0, -1400]); } return performance.now() - window.__tkShot.t > 3200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "shadow-2130-kodiak"
  },
  {
   "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"hill-onfoot\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(13); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-800, 2400), 0); const ly = Math.max(t.heightAt(-400, 2000), 0); K.camera([-800, hy + 2, 2400], [-400, ly + 2, 2000]); }  window.__tkShot = { name: \"hill-onfoot\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-800, 2400), 0); const ly = Math.max(t.heightAt(-400, 2000), 0); K.camera([-800, hy + 2, 2400], [-400, ly + 2, 2000]); } } return performance.now() - window.__tkShot.t > 2200; })()",

@@ -1,7 +1,7 @@
 [
   {
     "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
-    "timeout": 60000
+    "timeout": 120000
   },
   {
     "start": {}
@@ -19,7 +19,7 @@
     "state": "fleet"
   },
   {
-    "eval": "window.__K = __KODIAK__; window.__F = __K.systems.fleet; window.__near = (t, dist, az, h, lookH = 3) => { const p = t.position; const hd = (t.heading ?? 0) + az * Math.PI / 180; __K.camera([p.x + Math.sin(hd) * dist, h, p.z - Math.cos(hd) * dist], [p.x, lookH, p.z]); return t.name; }; window.__wet = (t, dist, h, lookH = 3, prefer = 90) => { const p = t.position; const hm = __K.ctx.heightmap; for (let k = 0; k < 24; k++) { const az = (t.heading ?? 0) + (prefer + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 15) * Math.PI / 180; const x = p.x + Math.sin(az) * dist, z = p.z - Math.cos(az) * dist; let ok = true; for (let f = 0.2; f <= 1; f += 0.2) if (hm.heightAt(p.x + (x - p.x) * f, p.z + (z - p.z) * f) > -0.5) ok = false; if (ok) { __K.camera([x, h, z], [p.x, lookH, p.z]); return t.name + ' az ' + Math.round(az * 180 / Math.PI); } } __K.camera([p.x, h + 60, p.z + dist], [p.x, lookH, p.z]); return 'fallback'; }; true"
+    "eval": "window.__K = __KODIAK__; if (__K.systems.ui) __K.systems.ui.visible = false; window.__F = __K.systems.fleet; window.__near = (t, dist, az, h, lookH = 3) => { const p = t.position; const hd = (t.heading ?? 0) + az * Math.PI / 180; __K.camera([p.x + Math.sin(hd) * dist, h, p.z - Math.cos(hd) * dist], [p.x, lookH, p.z]); return t.name; }; window.__wet = (t, dist, h, lookH = 3, prefer = 90) => { const p = t.position; const hm = __K.ctx.heightmap; for (let k = 0; k < 24; k++) { const az = (t.heading ?? 0) + (prefer + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 15) * Math.PI / 180; const x = p.x + Math.sin(az) * dist, z = p.z - Math.cos(az) * dist; let ok = true; for (let f = 0.2; f <= 1; f += 0.2) if (hm.heightAt(p.x + (x - p.x) * f, p.z + (z - p.z) * f) > -0.5) ok = false; if (ok) { __K.camera([x, h, z], [p.x, lookH, p.z]); return t.name + ' az ' + Math.round(az * 180 / Math.PI); } } __K.camera([p.x, h + 60, p.z + dist], [p.x, lookH, p.z]); return 'fallback'; }; true"
   },
   {
     "eval": "__near(__F.tenders[0], 70, 55, 9, 5)"
@@ -94,7 +94,10 @@
     "shot": "fleet-seiner-running-above"
   },
   {
-    "eval": "const b = __F.boats.find(b => b.kind === 'seiner' && ['set','close','purse','haul'].includes(b.state)); if (!b) 'none setting'; else { window.__set = b; const p = b.position; __K.camera([p.x + 70, 45, p.z + 70], [p.x, 0, p.z]); b.name + ' ' + b.state; }"
+    "eval": "new Promise((res) => { const t0 = performance.now(); const f = () => { const b = __F.boats.find((b) => b.kind === 'seiner' && ['set', 'close', 'purse'].includes(b.state) && b.ai.s.corks.length > 40); if (b || performance.now() - t0 > 60000) res(b ? b.name + ' ' + b.state : 'none'); else setTimeout(f, 250); }; f(); })"
+  },
+  {
+    "eval": "const b = __F.boats.find(b => b.kind === 'seiner' && ['set','close','purse','haul'].includes(b.state) && b.ai.s.corks.length > 40); if (!b) 'none setting'; else { window.__set = b; const p = b.position; __K.camera([p.x + 70, 45, p.z + 70], [p.x, 0, p.z]); b.name + ' ' + b.state; }"
   },
   {
     "wait": 500

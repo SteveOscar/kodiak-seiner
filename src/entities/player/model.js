@@ -13,17 +13,19 @@ import { SKELETON as S, BONE_NAMES } from './anim.js';
 export const PALETTE = Object.freeze({
   jacket: '#f57a22',
   jacketShade: '#dc6219',
-  bibs: '#df561b',
-  bibsPatch: '#b8411a',
+  bibs: '#e8661f',
+  bibsPatch: '#c24f1b',
   trim: '#26292c',
   reflective: '#cdd2d5',
   boot: '#654330',
   bootTop: '#74503a',
   sole: '#221710',
   welt: '#a57c52',
-  skin: '#d39c77',
-  beard: '#5b3b27',
-  lips: '#b0705a',
+  skin: '#d9a07a',
+  cheek: '#d9866c',
+  beard: '#6d4930',
+  lips: '#b06a58',
+  brow: '#4a3222',
   beanie: '#5c5f63',
   beanieCuff: '#4b4e52',
   eye: '#17120e',
@@ -302,6 +304,13 @@ function buildGeometry() {
   const zipProfile = torsoProfile.filter(([, y]) => y > 0.83 && y < 1.47);
   parts.push(part(frontStrip(zipProfile, { sz: TZ, half: 0.0075, lift: 0.003 }), { color: P.trim, rough: ROUGH.trim, weights: torsoW }));
   parts.push(part(frontStrip(zipProfile, { sz: TZ, half: 0.02, lift: 0.0015, angle: 0.06 }), { color: P.jacketShade, rough: ROUGH.pvc, weights: torsoW }));
+  // Maker's patch on the left chest, following the jacket's curve.
+  parts.push(part(new RoundedBoxGeometry(0.056, 0.03, 0.006, 1, 0.0025), {
+    matrix: M(-0.096, 1.3, -0.133, 0, 0.3, 0),
+    color: P.trim,
+    rough: ROUGH.trim,
+    weights: torsoW,
+  }));
   // Collar: stand-up, dark lining inside the top edge.
   const collarProfile = [
     [0.078, 1.45],
@@ -357,8 +366,8 @@ function buildGeometry() {
       ao: armAO(cx),
     }));
     // Shoulder cap.
-    parts.push(part(new THREE.SphereGeometry(0.078, 16, 10), {
-      matrix: M(sign * (S.shoulderX - 0.01), S.shoulderY - 0.022, 0, 0, 0, sign * 0.35, 1.05, 0.8, 1.02),
+    parts.push(part(new THREE.SphereGeometry(0.074, 16, 10), {
+      matrix: M(sign * (S.shoulderX - 0.018), S.shoulderY - 0.03, 0, 0, 0, sign * 0.5, 1.0, 0.7, 0.98),
       color: P.jacket,
       rough: ROUGH.pvc,
       weights: rigid(up),
@@ -397,19 +406,29 @@ function buildGeometry() {
     color: (x, y, z) => {
       const ly = y - headC[1];
       const lz = z - headC[2];
-      // Short beard on the jaw and chin, a little thinner up the cheeks; lips as a warmer band.
-      const beard = ly < -0.012 + Math.max(0, lz + 0.03) * 0.8 && lz < 0.045;
-      if (beard && ly > -0.052 && ly < -0.036 && lz < -0.085 && Math.abs(x) < 0.03) return P.lips;
-      if (beard) return tint(P.beard, 0.9 + hash(x, y, z) * 0.2);
-      return tint(P.skin, 0.95 + hash(x, y, z) * 0.06 - Math.max(0, ly - 0.05) * 0.8);
+      const ax = Math.abs(x);
+      // A short jaw-line beard: chin and jaw below the mouth, rising to the sideburns at the ears, with a moustache
+      // over the lips. The face above stays clear so it reads at a distance.
+      const front = smoothstep(-0.02, -0.095, lz);
+      const beardTop = mix(-0.004, -0.036, front);
+      const beard = ly < beardTop && lz < 0.04;
+      const moustache = lz < -0.07 && ly < -0.024 && ly > -0.04 && ax < 0.036 - (ly + 0.04) * 0.5;
+      const lips = lz < -0.075 && ly <= -0.04 && ly > -0.05 && ax < 0.022;
+      if (lips) return P.lips;
+      if (beard || moustache) return tint(P.beard, 0.88 + hash(x, y, z) * 0.22);
+      // Wind-burned cheeks and nose bridge; eye sockets a touch darker; forehead paler under the beanie line.
+      const cheek = Math.exp(-(((ax - 0.05) / 0.022) ** 2 + ((ly + 0.012) / 0.02) ** 2)) * smoothstep(-0.03, -0.08, lz);
+      const socket = Math.exp(-(((ax - 0.034) / 0.016) ** 2 + ((ly - 0.016) / 0.011) ** 2)) * smoothstep(-0.05, -0.09, lz);
+      const c = tint(P.skin, 0.95 + hash(x, y, z) * 0.05 - Math.max(0, ly - 0.05) * 0.6).lerp(col.set(P.cheek), cheek * 0.55);
+      return c.multiplyScalar(1 - socket * 0.28);
     },
-    rough: (x, y, z) => (y - headC[1] < -0.012 && z < 0.05 ? ROUGH.hair : ROUGH.skin),
+    rough: (x, y, z) => (y - headC[1] < -0.03 && z < 0.045 ? ROUGH.hair : ROUGH.skin),
     weights: rigid('head'),
   }));
   // Nose, ears, eyes and brows.
-  parts.push(part(new THREE.SphereGeometry(0.019, 10, 8), {
-    matrix: M(0, 1.675, -0.1, 0.35, 0, 0, 0.75, 1.15, 1.0),
-    color: tint(P.skin, 0.96),
+  parts.push(part(new THREE.SphereGeometry(0.017, 10, 8), {
+    matrix: M(0, 1.674, -0.099, 0.35, 0, 0, 0.78, 1.1, 1.0),
+    color: tint(P.skin, 0.9).lerp(col.set(P.cheek), 0.35),
     rough: ROUGH.skin,
     weights: rigid('head'),
   }));
@@ -420,15 +439,15 @@ function buildGeometry() {
       rough: ROUGH.skin,
       weights: rigid('head'),
     }));
-    parts.push(part(new THREE.SphereGeometry(0.0115, 8, 6), {
-      matrix: M(sign * 0.034, 1.699, -0.088),
+    parts.push(part(new THREE.SphereGeometry(0.0125, 10, 8), {
+      matrix: M(sign * 0.034, 1.699, -0.087, 0, 0, 0, 1.05, 0.85, 0.8),
       color: P.eye,
       rough: ROUGH.eye,
       weights: rigid('head'),
     }));
-    parts.push(part(new RoundedBoxGeometry(0.034, 0.009, 0.014, 1, 0.004), {
-      matrix: M(sign * 0.034, 1.716, -0.09, 0, 0, sign * -0.12),
-      color: P.beard,
+    parts.push(part(new RoundedBoxGeometry(0.04, 0.012, 0.016, 1, 0.005), {
+      matrix: M(sign * 0.035, 1.717, -0.091, -0.25, sign * 0.25, sign * -0.14),
+      color: P.brow,
       rough: ROUGH.hair,
       weights: rigid('head'),
     }));
@@ -440,10 +459,11 @@ function buildGeometry() {
     rough: ROUGH.knit,
     weights: rigid('head'),
   }));
-  parts.push(part(lathe([[0.096, 1.72], [0.106, 1.724], [0.109, 1.742], [0.108, 1.766], [0.1, 1.773]], 32, { sx: 0.96, sz: 1.05, cz: 0.008 }), {
+  // 72 segments carry 36 ribs as alternating vertex shades (fewer segments alias into blotches).
+  parts.push(part(lathe([[0.096, 1.72], [0.106, 1.724], [0.109, 1.742], [0.108, 1.766], [0.1, 1.773]], 72, { sx: 0.96, sz: 1.05, cz: 0.008 }), {
     color: (x, y, z) => {
       const a = Math.atan2(x, z - 0.008);
-      return tint(P.beanieCuff, 0.86 + 0.14 * (0.5 + 0.5 * Math.cos(a * 36)));
+      return tint(P.beanieCuff, 0.9 + 0.1 * Math.cos(a * 36));
     },
     rough: ROUGH.knit,
     weights: rigid('head'),

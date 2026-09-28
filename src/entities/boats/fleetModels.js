@@ -9,6 +9,7 @@ import { createBuilder, shapes, addTube, sideProfileExtrude } from './builder.js
 import { createHullForm, buildShell, buildTransom, buildBulwarks, buildDecks, SEINER_FORM } from './hull.js';
 import { makeCanvas, canvasTexture, createNameTexture } from './textures.js';
 import { seinerMaterials, C } from './seinerModel.js';
+import { ARCS } from './fx.js';
 
 const srgb = (hex) => {
   const c = new THREE.Color(hex).convertLinearToSRGB();
@@ -213,14 +214,14 @@ export function buildFleetSeiner(ctx, style) {
     halfLength: form.L / 2 - 3,
     radius: 3.2,
     lights: [
-      { id: 'port', pos: [-2.1, 5.0, -4.1], color: 0xff2a1a, size: 0.55, intensity: 1.6 },
-      { id: 'starboard', pos: [2.1, 5.0, -4.1], color: 0x2aff7a, size: 0.55, intensity: 1.4 },
-      { id: 'masthead', pos: [0, 10.4, -0.1], color: 0xfff2dc, size: 0.6, intensity: 1.5 },
-      { id: 'stern', pos: [2.2, 2.6, 8.8], color: 0xfff2dc, size: 0.45, intensity: 1.4 },
+      { id: 'port', pos: [-2.1, 5.0, -4.1], color: 0xff2a1a, size: 0.55, intensity: 1.6, arc: ARCS.port },
+      { id: 'starboard', pos: [2.1, 5.0, -4.1], color: 0x2aff7a, size: 0.55, intensity: 1.4, arc: ARCS.starboard },
+      { id: 'masthead', pos: [0, 10.4, -0.1], color: 0xfff2dc, size: 0.6, intensity: 1.5, arc: ARCS.masthead },
+      { id: 'stern', pos: [2.2, 2.6, 8.8], color: 0xfff2dc, size: 0.45, intensity: 1.4, arc: ARCS.stern },
       { id: 'anchor', pos: [0, 12.5, 0.1], color: 0xfff2dc, size: 0.6, intensity: 1.5 },
       { id: 'fishRed', pos: [0, 11.6, 0.0], color: 0xff2a1a, size: 0.5, intensity: 1.5 },
       { id: 'fishWhite', pos: [0, 11.05, 0.0], color: 0xfff2dc, size: 0.5, intensity: 1.3 },
-      { id: 'flood', pos: [0, 9.55, 0.3], color: 0xffe2b0, size: 1.6, intensity: 2.0 },
+      { id: 'flood', pos: [0, 9.55, 0.3], color: 0xffe2b0, size: 1.6, intensity: 2.0, arc: ARCS.floodAft },
     ],
     skiffMount: { pos: [0, 3.2, 5.95], rotX: 0.2 },
     points: { stern: [0, 2.3, 9.0], bow: [0, form.sheer(0), -form.L / 2] },
@@ -386,12 +387,12 @@ export function buildTender(ctx, spec) {
     lights: [
       { id: 'anchorFwd', pos: [0, mastTop + 0.2, mastZ], color: 0xfff2dc, size: 0.8, intensity: 1.6 },
       { id: 'anchorAft', pos: [0, form.sheer(0.98) + 2.4, L / 2 - 0.4], color: 0xfff2dc, size: 0.6, intensity: 1.4 },
-      { id: 'flood1', pos: [-1.35, topY + 4.85, mastZ + 0.3], color: 0xffe2b0, size: 3.4, intensity: 2.6 },
-      { id: 'flood2', pos: [1.35, topY + 4.85, mastZ + 0.3], color: 0xffe2b0, size: 3.4, intensity: 2.6 },
+      { id: 'flood1', pos: [-1.35, topY + 4.85, mastZ + 0.3], color: 0xffe2b0, size: 3.4, intensity: 2.6, arc: ARCS.floodAft },
+      { id: 'flood2', pos: [1.35, topY + 4.85, mastZ + 0.3], color: 0xffe2b0, size: 3.4, intensity: 2.6, arc: ARCS.floodAft },
       { id: 'flood3', pos: [0, wy1 + 0.05, wz1 + 0.3], color: 0xffe2b0, size: 2.6, intensity: 2.3 },
       { id: 'crane', pos: [cx - 2.4, deckY + 7.9, cz + 4.5], color: 0xffe2b0, size: 2.2, intensity: 2.2 },
-      { id: 'port', pos: [-(hw - 0.2), wy0 + 1.9, wz0 + 0.7], color: 0xff2a1a, size: 0.6, intensity: 1.4 },
-      { id: 'starboard', pos: [hw - 0.2, wy0 + 1.9, wz0 + 0.7], color: 0x2aff7a, size: 0.6, intensity: 1.3 },
+      { id: 'port', pos: [-(hw - 0.2), wy0 + 1.9, wz0 + 0.7], color: 0xff2a1a, size: 0.6, intensity: 1.4, arc: ARCS.port },
+      { id: 'starboard', pos: [hw - 0.2, wy0 + 1.9, wz0 + 0.7], color: 0x2aff7a, size: 0.6, intensity: 1.3, arc: ARCS.starboard },
     ],
   };
 }
@@ -492,11 +493,11 @@ export function buildFerry(ctx) {
   const far = new THREE.Mesh(f.build('far'), mats.far);
 
   const lights = [
-    { id: 'masthead', pos: [0, 23.2, -21], color: 0xfff2dc, size: 1.2, intensity: 1.8 },
-    { id: 'masthead2', pos: [0, 18.2, 20], color: 0xfff2dc, size: 1.2, intensity: 1.8 },
-    { id: 'port', pos: [-8.7, 15.6, -25.8], color: 0xff2a1a, size: 1.0, intensity: 1.8 },
-    { id: 'starboard', pos: [8.7, 15.6, -25.8], color: 0x2aff7a, size: 1.0, intensity: 1.6 },
-    { id: 'stern', pos: [0, 10, L / 2 + 0.6], color: 0xfff2dc, size: 0.9, intensity: 1.6 },
+    { id: 'masthead', pos: [0, 23.2, -21], color: 0xfff2dc, size: 1.2, intensity: 1.8, arc: ARCS.masthead },
+    { id: 'masthead2', pos: [0, 18.2, 20], color: 0xfff2dc, size: 1.2, intensity: 1.8, arc: ARCS.masthead },
+    { id: 'port', pos: [-8.7, 15.6, -25.8], color: 0xff2a1a, size: 1.0, intensity: 1.8, arc: ARCS.port },
+    { id: 'starboard', pos: [8.7, 15.6, -25.8], color: 0x2aff7a, size: 1.0, intensity: 1.6, arc: ARCS.starboard },
+    { id: 'stern', pos: [0, 10, L / 2 + 0.6], color: 0xfff2dc, size: 0.9, intensity: 1.6, arc: ARCS.stern },
   ];
   // Rows of lit cabin windows at night.
   for (const s of [-1, 1]) {
@@ -609,10 +610,10 @@ export function buildCutter(ctx) {
     halfLength: L / 2 - 7.5,
     radius: 7.5,
     lights: [
-      { id: 'masthead', pos: [0, 26.3, -10], color: 0xfff2dc, size: 1.2, intensity: 1.8 },
-      { id: 'port', pos: [-6.8, 12.5, -18.5], color: 0xff2a1a, size: 1.0, intensity: 1.8 },
-      { id: 'starboard', pos: [6.8, 12.5, -18.5], color: 0x2aff7a, size: 1.0, intensity: 1.6 },
-      { id: 'stern', pos: [0, 6.5, L / 2 + 0.4], color: 0xfff2dc, size: 0.9, intensity: 1.6 },
+      { id: 'masthead', pos: [0, 26.3, -10], color: 0xfff2dc, size: 1.2, intensity: 1.8, arc: ARCS.masthead },
+      { id: 'port', pos: [-6.8, 12.5, -18.5], color: 0xff2a1a, size: 1.0, intensity: 1.8, arc: ARCS.port },
+      { id: 'starboard', pos: [6.8, 12.5, -18.5], color: 0x2aff7a, size: 1.0, intensity: 1.6, arc: ARCS.starboard },
+      { id: 'stern', pos: [0, 6.5, L / 2 + 0.4], color: 0xfff2dc, size: 0.9, intensity: 1.6, arc: ARCS.stern },
       { id: 'deck', pos: [0, 10, 18], color: 0xffe6b8, size: 1.8, intensity: 1.4 },
     ],
   };

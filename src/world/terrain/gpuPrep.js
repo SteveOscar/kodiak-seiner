@@ -323,8 +323,9 @@ export function createDetailTextures(renderer, runner, size = 512, anisotropy = 
 // Static land-cover weights baked per DEM texel (same formulas as landcover.js / glsl.js TK_COVER), so the terrain
 // fragment shader reads three textures instead of evaluating ~20 noises per pixel.
 //   A: R forest density, G alder, B rock score (0.9..1.9 -> 0..1), A snow
-//   B: R lake, G fireweed, B lupine, A 131 m macro variation
-//   C: R drainage wetness, G 470 m macro variation, B 29 m variation, A scree
+//   B: R lake, G wildflowers (0.5 + fireweed / 2 - lupine / 2), B developed ground, A Alaska Peninsula
+//   C: R drainage wetness, G 131 m macro variation, B 29 m variation, A scree
+// (the 470 m macro variation is one lattice-noise lookup in the terrain shader)
 const COVER_FRAG = /* glsl */ `
 ${TK_NOISE_ALU}
 ${TK_COVER}
@@ -361,15 +362,15 @@ void main() {
     float meadow = ( 1.0 - alpine ) * ( 1.0 - smoothstep( 0.35, 0.7, s ) ) * smoothstep( 2.5, 5.0, h ) * ( 1.0 - forest ) * ( 1.0 - reg.g );
     float fire = smoothstep( 0.62, 0.8, tkNoise( p / 64.0 + vec2( 12.1, 5.3 ) ) ) * meadow;
     float lup = smoothstep( 0.7, 0.84, tkNoise( p / 48.0 + vec2( -3.7, 22.9 ) ) ) * meadow * ( 1.0 - smoothstep( 12.0, 40.0, h ) );
-    float m2 = tkNoise( p / 131.0 + vec2( -8.3, 2.2 ) );
-    gl_FragColor = vec4( lake, fire, lup, m2 );
+    // Fireweed and lupine share a channel (0.5 = neither); their masks come from independent noise and rarely meet.
+    gl_FragColor = vec4( lake, clamp( 0.5 + 0.5 * fire - 0.5 * lup, 0.0, 1.0 ), reg.g, reg.b );
   } else {
     float rock = smoothstep( ${COVER.rock0.toFixed(3)}, ${COVER.rock1.toFixed(3)}, score );
     float scree = h > 0.0 ? tkScree( p, h, s, rock, wet ) : 0.0;
-    float m1 = tkNoise( p / 470.0 + vec2( 3.1, 9.7 ) );
+    float m2 = tkNoise( p / 131.0 + vec2( -8.3, 2.2 ) );
     // Wavelengths stay >= ~3.5 texels (7.8 m) so the bake does not alias into a texel checker.
     float m3 = tkNoise( p / 29.0 + vec2( 1.7, -4.4 ) ) * 0.6 + tkNoise( p / 53.0 + vec2( -6.2, 3.3 ) ) * 0.4;
-    gl_FragColor = vec4( wet, m1, m3, scree );
+    gl_FragColor = vec4( wet, m2, m3, scree );
   }
 }`;
 

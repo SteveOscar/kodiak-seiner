@@ -425,17 +425,30 @@ test('heightAt is fast enough for hundreds of calls per frame', () => {
   const model = makeModel(STORM, { fadeAt: [OPEN.x, OPEN.z] });
   let s = 0;
   for (let i = 0; i < 2000; i++) s += model.heightAt(OPEN.x + i * 0.3, OPEN.z);
-  // Best of several batches: the machine may be shared with other work.
-  let us = Infinity;
+  // The machine may be shared with other work, so the cost is judged against a reference kernel timed alongside it
+  // (one plain sum of the storm's components, the least any exact query must do), best of several interleaved batches.
   const n = 4000;
-  for (let batch = 0; batch < 8; batch++) {
-    const t0 = performance.now();
+  const comps = model.act.count;
+  let us = Infinity;
+  let refUs = Infinity;
+  for (let batch = 0; batch < 12; batch++) {
+    let t0 = performance.now();
     for (let i = 0; i < n; i++) s += model.heightAt(OPEN.x + ((i + batch * 7) % 400) * 0.37, OPEN.z + (i % 97) * 0.51);
     us = Math.min(us, ((performance.now() - t0) * 1000) / n);
+    t0 = performance.now();
+    for (let i = 0; i < n; i++) {
+      const x = OPEN.x + (i % 400) * 0.37;
+      for (let c = 0; c < comps; c++) s += model.act.amp[c] * Math.sin(model.act.kx[c] * x + model.act.kz[c] * i - model.act.phase[c]);
+    }
+    refUs = Math.min(refUs, ((performance.now() - t0) * 1000) / n);
   }
   assert.ok(Number.isFinite(s));
-  console.log(`heightAt: ${us.toFixed(2)} µs/call (${model.act.count} components, storm)`);
-  assert.ok(us < 8, `heightAt ${us.toFixed(2)} µs/call`);
+  console.log(`heightAt: ${us.toFixed(2)} µs/call (${comps} components, storm), ${(us / refUs).toFixed(1)}x one component sum`);
+  // Each Newton step evaluates four sines per component (wave and group envelope) plus the environment lookups, and
+  // one or two steps are usual: ~15 component sums. 500 calls stay under a millisecond on an idle M-series core
+  // (~1.4 µs/call); the bounds catch a regression to exact mode or extra iterations, not load.
+  assert.ok(us / refUs < 30, `heightAt costs ${(us / refUs).toFixed(1)} component sums`);
+  assert.ok(us < 60, `heightAt ${us.toFixed(2)} µs/call even under load`);
 });
 
 test('water system constructs under Node with the full API and occluder handling', async () => {

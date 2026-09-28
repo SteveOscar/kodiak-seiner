@@ -101,7 +101,8 @@ void kwDeform( inout vec3 p, inout vec3 n ) {
     vec3 pk = p; vec3 nk = n;
     kwPitch( pk, nk, jz, ky, kn );
     p = mix( p, pk, wk ); n = mix( n, nk, wk );
-    kwPitch( p, n, jz, jy, sw );
+    // The upper leg is buried in shoulder and thigh muscle: it swings less than the forearm and shank.
+    kwPitch( p, n, jz, jy, sw * mix( 0.45, 1.0, smoothstep( 0.0, 0.35, aRig.y ) ) );
     // Lying down: legs fold under the body and splay a little.
     p.y = jy + ( p.y - jy ) * ( 1.0 - 0.72 * lie );
     p.x += sign( p.x ) * lie * 0.12 * aRig.y * jy;
@@ -187,8 +188,12 @@ function injectVertex(shader, rig, withNormal) {
 }
 
 // rig: 'bird' | 'quad' | 'marine' | null (static). opts: roughness, metalness, envMapIntensity, hip [y, z] (quad).
-export function createRigMaterial(ctx, rig, { roughness = 0.8, metalness = 0, envMapIntensity = 1, hip = [1, 0.8], name = 'wildlife' } = {}) {
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness, metalness, envMapIntensity });
+// sheen: { amount, color (sRGB hex), roughness } switches to MeshPhysicalMaterial's sheen lobe, a soft grazing-angle
+// glow that reads as fur (bears, otters, deer) where a plain standard material looks like painted plastic.
+export function createRigMaterial(ctx, rig, { roughness = 0.8, metalness = 0, envMapIntensity = 1, hip = [1, 0.8], name = 'wildlife', sheen = null } = {}) {
+  const mat = sheen
+    ? new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness, metalness, envMapIntensity, sheen: sheen.amount ?? 1, sheenColor: new THREE.Color(sheen.color ?? '#c9a878'), sheenRoughness: sheen.roughness ?? 0.6 })
+    : new THREE.MeshStandardMaterial({ vertexColors: true, roughness, metalness, envMapIntensity });
   mat.name = name;
   const hipU = { value: new THREE.Vector2(hip[0], hip[1]) };
   if (rig) {
@@ -197,7 +202,7 @@ export function createRigMaterial(ctx, rig, { roughness = 0.8, metalness = 0, en
       shader.uniforms.uHip = hipU;
       injectVertex(shader, rig, true);
     };
-    mat.customProgramCacheKey = () => `kw-${rig}`;
+    mat.customProgramCacheKey = () => `kw-${rig}${sheen ? '-sheen' : ''}`;
   }
   patchUnderwater(mat, ctx.uniforms);
   mat.userData.hip = hipU;

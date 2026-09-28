@@ -1,37 +1,51 @@
 [
  {
-  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"sweep-20h5\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(20.5); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([-2600, 650, -1400], [600, 20, 2200]);  window.__tkShot = { name: \"sweep-20h5\", t: performance.now() }; } else { K.camera([-2600, 650, -1400], [600, 20, 2200]); } return performance.now() - window.__tkShot.t > 3200; })()",
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"sweep-ne-20h8\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(20.8); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([-1500, 900, 4200], [1500, 0, 1000]);  window.__tkShot = { name: \"sweep-ne-20h8\", t: performance.now() }; } else { K.camera([-1500, 900, 4200], [1500, 0, 1000]); } return performance.now() - window.__tkShot.t > 3200; })()",
   "timeout": 120000
  },
  {
-  "shot": "sweep-20h5"
+  "shot": "sweep-ne-20h8"
  },
  {
-  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"sweep-21h0\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(21.0); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([-2600, 650, -1400], [600, 20, 2200]);  window.__tkShot = { name: \"sweep-21h0\", t: performance.now() }; } else { K.camera([-2600, 650, -1400], [600, 20, 2200]); } return performance.now() - window.__tkShot.t > 3200; })()",
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"sweep-ne-21h3\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(21.3); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([-1500, 900, 4200], [1500, 0, 1000]);  window.__tkShot = { name: \"sweep-ne-21h3\", t: performance.now() }; } else { K.camera([-1500, 900, 4200], [1500, 0, 1000]); } return performance.now() - window.__tkShot.t > 3200; })()",
   "timeout": 120000
  },
  {
-  "shot": "sweep-21h0"
+  "shot": "sweep-ne-21h3"
  },
  {
-  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"sweep-21h5\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(21.5); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([-2600, 650, -1400], [600, 20, 2200]);  window.__tkShot = { name: \"sweep-21h5\", t: performance.now() }; } else { K.camera([-2600, 650, -1400], [600, 20, 2200]); } return performance.now() - window.__tkShot.t > 3200; })()",
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"sweep-ne-21h7\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(21.7); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([-1500, 900, 4200], [1500, 0, 1000]);  window.__tkShot = { name: \"sweep-ne-21h7\", t: performance.now() }; } else { K.camera([-1500, 900, 4200], [1500, 0, 1000]); } return performance.now() - window.__tkShot.t > 3200; })()",
   "timeout": 120000
  },
  {
-  "shot": "sweep-21h5"
+  "shot": "sweep-ne-21h7"
  },
  {
-  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"sweep-22h0\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(22.0); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([-2600, 650, -1400], [600, 20, 2200]);  window.__tkShot = { name: \"sweep-22h0\", t: performance.now() }; } else { K.camera([-2600, 650, -1400], [600, 20, 2200]); } return performance.now() - window.__tkShot.t > 3200; })()",
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"kodiak-21h0\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(21.0); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([5100, 320, 1700], [4900, 0, -1400]);  window.__tkShot = { name: \"kodiak-21h0\", t: performance.now() }; } else { K.camera([5100, 320, 1700], [4900, 0, -1400]); } return performance.now() - window.__tkShot.t > 3200; })()",
   "timeout": 120000
  },
  {
-  "shot": "sweep-22h0"
+  "shot": "kodiak-21h0"
  },
  {
-  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"sweep-bay-21h5\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(21.5); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([2400, 420, 700], [4200, 0, -600]);  window.__tkShot = { name: \"sweep-bay-21h5\", t: performance.now() }; } else { K.camera([2400, 420, 700], [4200, 0, -600]); } return performance.now() - window.__tkShot.t > 3200; })()",
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"valley-21h0\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(21.0); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([-2900, 260, 3400], [-600, 30, 1600]);  window.__tkShot = { name: \"valley-21h0\", t: performance.now() }; } else { K.camera([-2900, 260, 3400], [-600, 30, 1600]); } return performance.now() - window.__tkShot.t > 3200; })()",
   "timeout": 120000
  },
  {
-  "shot": "sweep-bay-21h5"
+  "shot": "valley-21h0"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"kodiak-21h5\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(21.5); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([5100, 320, 1700], [4900, 0, -1400]);  window.__tkShot = { name: \"kodiak-21h5\", t: performance.now() }; } else { K.camera([5100, 320, 1700], [4900, 0, -1400]); } return performance.now() - window.__tkShot.t > 3200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "kodiak-21h5"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"valley-21h5\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(21.5); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([-2900, 260, 3400], [-600, 30, 1600]);  window.__tkShot = { name: \"valley-21h5\", t: performance.now() }; } else { K.camera([-2900, 260, 3400], [-600, 30, 1600]); } return performance.now() - window.__tkShot.t > 3200; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "valley-21h5"
  }
 ]

@@ -1,6 +1,6 @@
 // The chart (M, mode 'map'): a nautical chart rendered once from the heightmap (land tint, hillshade and contours,
 // depth tints and contours, coastline), with vector layers drawn on view changes (graticule, districts, closed
-// waters, soundings, compass rose, cartouche, place names) and live overlays at 10 Hz (boat, tenders, fleet,
+// waters, soundings, compass rose, place names) and live overlays at 10 Hz (boat, tenders, fleet,
 // waypoint, intel notes, fish sightings, tidal current, fast-travel route). Pan with drag, zoom with the wheel,
 // click to set a waypoint or pick a fast-travel destination.
 
@@ -32,7 +32,9 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
   ]);
   zoomBox.querySelector('.map-zboat .btn-label').append(svgFrom(GLYPHS.pin));
   zoomBox.querySelector('.map-zall .btn-label').textContent = '⤢';
+  // The chart's title block sits with the legend in the corner of the sheet, so it never lands on the island.
   const legend = h('div.map-legend', null, [
+    h('div.lg-title', null, [h('div.lg-name', { text: 'Kodiak Island' }), h('div.lg-sub', { text: 'and approaches · soundings in metres' })]),
     legendRow('lg-shallow', 'Under 6 m — too shallow to set'),
     legendRow('lg-lead', '6–16 m — leads touch bottom'),
     legendRow('lg-closed', 'Closed waters'),
@@ -59,7 +61,7 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
   const hint = h('div.map-hint', null, [
     hintItem('Drag', 'pan'),
     hintItem('Wheel', 'zoom'),
-    hintItem('Click', 'set waypoint · pick a harbour or tender'),
+    hintItem('Click', 'set waypoint · pick a harbor or tender'),
     hintItem('Right-click', 'clear waypoint'),
     hintItem('M', 'close'),
   ]);
@@ -141,12 +143,18 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
       c.style.height = `${hh}px`;
     }
     view.resize(w, hh);
+    measureUi();
+    sized = true;
+    dirtyBase = dirtyLive = true;
+  }
+
+  // Chart-space rects of the overlaid legend, zoom buttons and scale bar (the scale bar changes width with zoom).
+  function measureUi() {
+    const r = frame.getBoundingClientRect();
     uiRects = [legend, zoomBox, scaleBar].map((node) => {
       const q = node.getBoundingClientRect();
       return { x: q.left - r.left - 4, y: q.top - r.top - 4, w: q.width + 8, h: q.height + 8 };
     });
-    sized = true;
-    dirtyBase = dirtyLive = true;
   }
 
   // Places a live label (tender, fleet boat) beside its marker, avoiding charted names and other live labels.
@@ -165,6 +173,7 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
     ];
     for (const [ox, oy] of cands) {
       const rect = { x: x + ox, y: y + oy, w, h: hgt };
+      if (rect.x < 3 || rect.y < 3 || rect.x + w > view.width - 3 || rect.y + hgt > view.height - 3) continue;
       const hit = [...labelRects, ...taken].some((q) => rect.x < q.x + q.w && q.x < rect.x + rect.w && rect.y < q.y + q.h && q.y < rect.y + rect.h);
       if (hit) continue;
       taken.push(rect);
@@ -301,6 +310,8 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
     g.fillStyle = PAPER;
     g.fillRect(0, 0, W, H);
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    updateScale();
+    measureUi();
     const r = finishRaster();
     const a = view.toScreen(-half, -half);
     const b = view.toScreen(half, half);
@@ -332,7 +343,6 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
     drawClosed(g);
     drawSoundings(g);
     drawRose(g);
-    drawCartouche(g);
     drawLabels(g);
     g.restore();
     // Neatline: a double rule round the chart with lat/lon ticks in the margin.
@@ -342,7 +352,6 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
     g.lineWidth = 0.7;
     g.strokeRect(a.x - 0.5, a.y - 0.5, b.x - a.x + 1, b.y - a.y + 1);
     drawMarginTicks(g, a, b);
-    updateScale();
   }
 
   function drawGraticule(g, a, b) {
@@ -437,7 +446,9 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
       const sp = 2.2;
       const w = g.measureText(text).width + sp * (text.length - 1);
       const hgt = size + 2;
-      const cands = [0, 34, -34, 68, -68, 102].map((dy) => [-w / 2, dy - hgt / 2]);
+      // Centred on the district's label point, then nudged up/down, then sideways (near the chart edge).
+      const cands = [];
+      for (const dx of [0, 0.35, -0.35]) for (const dy of [0, 34, -34, 68, -68, 102]) cands.push([-w / 2 + dx * w, dy - hgt / 2]);
       out.push({ id: `d:${d.id}`, x: s.x, y: s.y, w, h: hgt, priority: 12, cands, text, font, spacing: sp, district: true });
     }
     return out;
@@ -493,18 +504,26 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
     g.font = `italic ${view.zoom > 3 ? 11 : 10}px 'Iowan Old Style', 'Palatino Linotype', Georgia, serif`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
+    // Soundings stay clear of the compass rose.
+    const rose = roseGeom();
+    const clear2 = (rose.R * 1.32) ** 2;
     for (const s of soundings) {
       if (s.level > maxLevel) continue;
       const p = view.toScreen(s.x, s.z);
       if (p.x < -10 || p.y < -10 || p.x > view.width + 10 || p.y > view.height + 10) continue;
+      if ((p.x - rose.c.x) ** 2 + (p.y - rose.c.y) ** 2 < clear2) continue;
       g.fillText(String(s.depth), p.x, p.y);
     }
     g.restore();
   }
 
+  // The compass rose sits in open water south-east of the island; its size follows the zoom within limits.
+  function roseGeom() {
+    return { c: view.toScreen(6150, 3650), R: Math.max(46, Math.min(150, 850 * view.scale)) };
+  }
+
   function drawRose(g) {
-    const c = view.toScreen(6150, 3650);
-    const R = Math.max(46, Math.min(150, 850 * view.scale));
+    const { c, R } = roseGeom();
     if (c.x < -R || c.y < -R || c.x > view.width + R || c.y > view.height + R) return;
     g.save();
     g.translate(c.x, c.y);
@@ -589,31 +608,6 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
     g.restore();
   }
 
-  function drawCartouche(g) {
-    const c = view.toScreen(3900, 6250);
-    const k = Math.max(0.75, Math.min(1.6, view.zoom * 0.55 + 0.45));
-    if (c.x < -300 || c.y < -120 || c.x > view.width + 300 || c.y > view.height + 120) return;
-    g.save();
-    g.textAlign = 'center';
-    g.textBaseline = 'alphabetic';
-    g.fillStyle = INK;
-    g.font = `600 ${Math.round(17 * k)}px 'Iowan Old Style', 'Palatino Linotype', Georgia, serif`;
-    spaced(g, 'KODIAK ISLAND', c.x, c.y, 3.4 * k);
-    g.font = `${Math.round(10.5 * k)}px 'Iowan Old Style', 'Palatino Linotype', Georgia, serif`;
-    spaced(g, 'AND APPROACHES', c.x, c.y + 15 * k, 2.4 * k);
-    g.strokeStyle = INK;
-    g.lineWidth = 0.7;
-    g.beginPath();
-    g.moveTo(c.x - 70 * k, c.y + 23 * k);
-    g.lineTo(c.x + 70 * k, c.y + 23 * k);
-    g.stroke();
-    g.font = `italic ${Math.round(9.5 * k)}px 'Iowan Old Style', 'Palatino Linotype', Georgia, serif`;
-    g.fillText('Kodiak Management Area · Gulf of Alaska', c.x, c.y + 36 * k);
-    g.font = `${Math.round(8 * k)}px -apple-system, 'Segoe UI', sans-serif`;
-    spaced(g, 'SOUNDINGS IN METRES · NOT FOR NAVIGATION', c.x, c.y + 50 * k, 1.1 * k);
-    g.restore();
-  }
-
   function drawLabels(g) {
     const places = ctx.systems.places?.list ?? [];
     const disc = ctx.systems.discovery;
@@ -656,11 +650,23 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
     const boat = ctx.systems.seiner?.position;
     const bs = boat ? view.toScreen(boat.x, boat.z) : null;
     items.push(...districtLabelItems(g));
-    const blocked = [...uiRects];
+    // Names keep off the overlaid legend/buttons and the compass rose (both sliced off labelRects below).
+    const rose = roseGeom();
+    const blocked = [...uiRects, { x: rose.c.x - rose.R * 1.15, y: rose.c.y - rose.R * 1.35, w: rose.R * 2.3, h: rose.R * 2.5 }];
+    const fixed = blocked.length;
     if (bs) blocked.push({ x: bs.x - 12, y: bs.y - 12, w: 24, h: 24 });
+    // Anchored tenders keep their spot on the chart: names are placed clear of their hull symbols.
+    for (const t of ctx.systems.fleet?.tenders ?? []) {
+      if (!t?.position) continue;
+      const q = view.toScreen(t.position.x, t.position.z);
+      blocked.push({ x: q.x - 10, y: q.y - 10, w: 20, h: 20 });
+    }
     const occ = {};
-    const placed = placeLabels(items, { width: view.width, height: view.height, blocked, out: occ });
-    labelRects = (occ.rects ?? []).slice(uiRects.length);
+    // Inside the neatline (the chart is clipped to it) as well as the frame.
+    const na = view.toScreen(-half, -half);
+    const nb = view.toScreen(half, half);
+    const placed = placeLabels(items, { left: Math.max(0, na.x + 2), top: Math.max(0, na.y + 2), width: Math.min(view.width, nb.x - 2), height: Math.min(view.height, nb.y - 2), blocked, out: occ });
+    labelRects = (occ.rects ?? []).slice(fixed);
     for (const it of placed) {
       if (it.district) {
         g.font = it.font;
@@ -814,7 +820,7 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
     const intel = ctx.systems.discovery?.intel ?? [];
     for (const n of intel) {
       if (!Number.isFinite(n?.x)) continue;
-      const q = view.toScreen(n.x, n.z);
+      const q = clearOfLabels(view.toScreen(n.x, n.z), view.zoom < 2.3 ? 4 : 7);
       if (q.x < -10 || q.y < -10 || q.x > view.width + 10 || q.y > view.height + 10) continue;
       const hot = n.kind === 'hotspot';
       hitList.push({ key: `n:${n.id}`, sx: q.x, sy: q.y, title: n.title ?? 'Chart note', text: n.text });
@@ -1011,6 +1017,14 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
     }
   }
 
+  // A note icon that would sit on a charted name is tucked just past the end of that name.
+  function clearOfLabels(p, r) {
+    for (const q of labelRects) {
+      if (p.x + r > q.x && p.x - r < q.x + q.w && p.y + r > q.y && p.y - r < q.y + q.h) return { x: q.x + q.w + r + 3, y: q.y + q.h / 2 };
+    }
+    return p;
+  }
+
   function hull(g, x, y, heading, fill, len, stroke = 'rgba(244, 236, 214, 0.9)') {
     g.save();
     g.translate(x, y);
@@ -1190,7 +1204,7 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint }) {
 
     clear(travelList);
     const can = ctx.systems.season?.travel?.canTravel?.() ?? { ok: false, reason: 'Fast travel is not available' };
-    setText(travelNote, can.ok ? 'Pay in time and fuel to run to a harbour or tender.' : can.reason ?? '');
+    setText(travelNote, can.ok ? 'Pay in time and fuel to run to a harbor or tender.' : can.reason ?? '');
     toggle(travelNote, 'warn', !can.ok);
     const bp = s?.position ?? { x: 0, z: 0 };
     const list = travelTargets()

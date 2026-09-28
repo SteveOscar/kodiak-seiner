@@ -101,6 +101,62 @@ test('compass layout clamps off-strip markers to the edges', () => {
   assert.equal(L.unwrapDeg(1, 359), -1);
 });
 
+test('compass labels never overlap: priority keeps its label, colliding neighbours go quiet', () => {
+  const pxPerDeg = 440 / 136;
+  const laid = [
+    { id: 'wp', label: '11 nm', offsetDeg: 10, edge: 0, prio: 3 },
+    { id: 'tender', label: 'Sea Venture · 6.3 nm', offsetDeg: 18, edge: 0, prio: 2 },
+    { id: 'harbor', label: 'City of Kodiak', offsetDeg: -40, edge: 0, prio: 1 },
+    { id: 'far', label: 'Ouzinkie', offsetDeg: 68, edge: 1, prio: 1 },
+  ];
+  L.dedupeCompassLabels(laid, pxPerDeg);
+  assert.equal(laid[0].label, '11 nm');
+  assert.equal(laid[1].label, '', 'the tender label would run into the waypoint label');
+  assert.equal(laid[2].label, 'City of Kodiak', 'far enough away to keep its label');
+  assert.equal(laid[3].label, 'Ouzinkie', 'edge markers are left alone (their labels are hidden by CSS)');
+  // A long label 25° away still collides; the same label 60° away does not.
+  const a = L.dedupeCompassLabels([{ label: 'Sea Venture · 6.3 nm', offsetDeg: 0, prio: 2 }, { label: 'City of Kodiak', offsetDeg: 25, prio: 1 }], pxPerDeg);
+  assert.equal(a[1].label, '');
+  const b = L.dedupeCompassLabels([{ label: 'Sea Venture · 6.3 nm', offsetDeg: 0, prio: 2 }, { label: 'City of Kodiak', offsetDeg: 60, prio: 1 }], pxPerDeg);
+  assert.equal(b[1].label, 'City of Kodiak');
+});
+
+test('skiff-pull advice names the key that swings the pull onto the line', () => {
+  const r = (deg) => (deg * Math.PI) / 180;
+  assert.deepEqual(L.pullAdvice(r(90), null), { off: 0, key: null, state: 'none' });
+  assert.equal(L.pullAdvice(r(90), r(100)).state, 'on');
+  const cw = L.pullAdvice(r(90), r(130)); // ideal is clockwise of the pull: D
+  assert.equal(cw.key, 'D');
+  assert.equal(cw.state, 'near');
+  const ccw = L.pullAdvice(r(10), r(-80)); // across north, counter-clockwise: A
+  assert.equal(ccw.key, 'A');
+  assert.equal(ccw.state, 'off');
+  assert.equal(Math.round(ccw.off), 90);
+});
+
+test('next-step line says what to do, and stays quiet when a prompt or the set already does', () => {
+  const base = { control: 'boat', fishing: 'idle', freeExplore: false, open: true, holdLbs: 0, capacityLbs: 60000, fuelFrac: 1, fuelEmpty: false, hours: 10, moored: null, tender: { name: 'Sea Venture', nm: 1.8 }, opensToday: null, interactId: null };
+  assert.match(L.nextStep(base), /jumpers/);
+  assert.equal(L.nextStep({ ...base, fishing: 'pursing' }), null);
+  assert.equal(L.nextStep({ ...base, control: 'foot' }), null);
+  assert.match(L.nextStep({ ...base, holdLbs: 40000 }), /Deliver to the Sea Venture · 1\.8 nm/);
+  assert.match(L.nextStep({ ...base, holdLbs: 59000 }), /Hold’s full/);
+  assert.equal(L.nextStep({ ...base, holdLbs: 59000, interactId: 'deliver' }), null);
+  assert.match(L.nextStep({ ...base, fuelFrac: 0.15 }), /Fuel/);
+  assert.match(L.nextStep({ ...base, fuelFrac: 0.15, freeExplore: true }), /jumpers/, 'no fuel nagging in Free Explore');
+  assert.match(L.nextStep({ ...base, fuelEmpty: true, fuelFrac: 0 }), /tow/);
+  assert.match(L.nextStep({ ...base, open: false, holdLbs: 1000 }), /Closed — deliver/);
+  assert.match(L.nextStep({ ...base, open: false, hours: 23 }), /anchor/);
+  assert.match(L.nextStep({ ...base, open: false, hours: 23, moored: 'anchor', interactId: 'sleep' }), /sleep/);
+  assert.match(L.nextStep({ ...base, open: false, hours: 5.5, opensToday: '6:00 AM' }), /6:00 AM/);
+  assert.match(L.nextStep({ ...base, open: false, hours: 14 }), /wait at anchor/);
+  assert.match(L.nextStep({ ...base, open: false, hours: 14, interactId: 'waitOpener' }), /wait here/);
+  assert.match(L.nextStep({ ...base, tender: null, holdLbs: 59000 }), /a tender/);
+  assert.match(L.nextStep({ ...base, moored: 'dock' }), /Cast off/, 'tied up during a period: go fishing');
+  assert.match(L.nextStep({ ...base, moored: 'anchor' }), /anchor/);
+  assert.match(L.nextStep({ ...base, moored: 'dock', holdLbs: 40000 }), /Deliver/);
+});
+
 test('sonar projection is heading-up with starboard to the right', () => {
   const r = L.sonarProject(0, 0, 0, [{ x: 0, z: -75, depth: 4, strength: 0.8 }, { x: 75, z: 0 }, { x: 0, z: -400 }], 150);
   assert.equal(r.length, 2);
@@ -274,15 +330,30 @@ test('soundings sit in open water and label placement avoids overlaps', () => {
   }
   assert.ok(placed.find((p) => p.id === 'a'));
   assert.equal(placed.find((p) => p.id === 'd').lx, 370);
+  // Labels stay inside the chart's neatline (left/top bounds) and off blocked rects (legend, rose).
+  const edge = C.placeLabels([{ id: 'e', x: 205, y: 100, w: 60, h: 12, priority: 1 }], { left: 200, width: 800, height: 600 });
+  assert.ok(edge[0].lx >= 200, 'placed right of its anchor, inside the left bound');
+  const none = C.placeLabels([{ id: 'f', x: 100, y: 100, w: 60, h: 12, anchor: 'center' }], { width: 800, height: 600, blocked: [{ x: 50, y: 80, w: 120, h: 40 }] });
+  assert.equal(none.length, 0);
   assert.equal(C.WATER_KINDS.has('bay'), true);
   assert.ok(C.labelPriority('town') > C.labelPriority('cape'));
 });
 
-test('salmon mark is well-formed SVG', () => {
+test('salmon mark is well-formed SVG with an outline that can draw itself', () => {
   const s = salmonMarkSVG();
   assert.match(s, /^<svg[^>]+viewBox="0 0 120 92"/);
-  assert.ok(!/NaN|undefined/.test(s));
+  assert.ok(!/NaN|undefined|Infinity/.test(s));
   assert.equal((s.match(/<path/g) ?? []).length >= 9, true);
+  assert.match(s, /class="salmon-body"[^>]+pathLength="100"/);
+  for (const cls of ['salmon-lines', 'salmon-spots', 'salmon-eye', 'salmon-waves']) assert.ok(s.includes(`class="${cls}"`), cls);
+  // The fish stays on the sheet: every coordinate inside the viewBox (with a little room for the stroke).
+  for (const m of s.matchAll(/(-?\d+\.\d+),(-?\d+\.\d+)/g)) {
+    const x = Number(m[1]);
+    const y = Number(m[2]);
+    assert.ok(x > -2 && x < 122 && y > -2 && y < 94, `point ${x},${y} off the mark`);
+  }
+  // Other poses stay well-formed too.
+  assert.ok(!/NaN/.test(salmonMarkSVG({ R: 40, rotDeg: -2, waves: false })));
 });
 
 test('ui system under Node: required API, events only, serialize/restore/reset', async () => {

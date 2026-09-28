@@ -44,14 +44,16 @@ let alloyMat = null;
 export const skiffSea = createSeaPlane();
 function alloy(ctx) {
   if (alloyMat) return alloyMat;
-  // Bare welded aluminium: brushed plate with seams, scuffs and oxide blooms.
+  // Bare welded aluminium: brushed plate with seams, scuffs and oxide blooms. Weathered marine alloy is mostly a
+  // matte oxide, so it keeps a diffuse base: a fully metallic hull would mirror the dark lower sky and read as a black
+  // tub from the side.
   alloyMat = new THREE.MeshStandardMaterial({
     map: createAluminiumTexture(),
-    color: 0xeef1f2,
+    color: 0xf6f8f9,
     vertexColors: true,
-    metalness: 0.62,
-    roughness: 0.4,
-    envMapIntensity: 1.25,
+    metalness: 0.32,
+    roughness: 0.46,
+    envMapIntensity: 1.1,
     side: THREE.DoubleSide,
   });
   patchWaterline(patchUnderwater(alloyMat, ctx.uniforms), skiffSea);
@@ -178,7 +180,7 @@ export function buildSkiffModel(ctx, { detail = 'full', stripe = '#b3342a' } = {
 let lowMat = null;
 export function alloyVertexMaterial(ctx) {
   if (lowMat) return lowMat;
-  lowMat = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.55, roughness: 0.45, side: THREE.DoubleSide });
+  lowMat = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.3, roughness: 0.5, side: THREE.DoubleSide });
   patchUnderwater(lowMat, ctx.uniforms);
   return lowMat;
 }

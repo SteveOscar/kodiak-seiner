@@ -196,12 +196,29 @@ export function createParticlePool(ctx, { max = 256, renderOrder = 200, blending
   return pool;
 }
 
+// COLREGS light sectors in a boat's local frame (bow toward -z): sidelights from dead ahead to 22.5 degrees abaft the
+// beam on their own side, the masthead light over the forward 225 degrees, the stern light over the after 135.
+// Each sector is widened by a few degrees so both sidelights show solidly from dead ahead (the real lights overlap
+// slightly across the bow) instead of both sitting on their soft cut-off.
+const DEG = Math.PI / 180;
+const SIDE = (112.5 / 2) * DEG;
+const OVERLAP = 5 * DEG;
+export const ARCS = Object.freeze({
+  port: { dir: [-Math.sin(SIDE), 0, -Math.cos(SIDE)], half: SIDE + OVERLAP },
+  starboard: { dir: [Math.sin(SIDE), 0, -Math.cos(SIDE)], half: SIDE + OVERLAP },
+  masthead: { dir: [0, 0, -1], half: 112.5 * DEG + OVERLAP },
+  stern: { dir: [0, 0, 1], half: 67.5 * DEG + OVERLAP },
+  // Deck floods shine down and aft onto the working deck; from ahead and below only the dark housing shows.
+  floodAft: { dir: [0, -0.85, 0.53], half: 1.4 },
+});
+
 const GLOW_VS = /* glsl */ `
 uniform float uScale;
 uniform float uNight;
 attribute float aSize;
 attribute float aOn;
 attribute vec3 aColor;
+attribute vec4 aArc; // xyz: axis the light shines along (zero = all-round), w: cosine of the half-arc
 varying vec3 vColor;
 varying float vFade;
 varying float vGlowDepth;
@@ -215,6 +232,20 @@ void main() {
   float minPx = 3.0 * uNight;
   gl_PointSize = clamp(max(px, minPx), 0.0, 180.0);
   vFade = aOn * uNight * clamp(px / 0.6 + 0.35, 0.0, 1.0);
+  // Sectored lights (COLREGS arcs for sidelights, masthead and stern lights; floods facing their deck) fade out
+  // beyond their arc. Horizontal axes compare bearings only, so a sidelight still shows from the crow's nest.
+  if (dot(aArc.xyz, aArc.xyz) > 0.0) {
+    vec3 wp = (modelMatrix * vec4(position, 1.0)).xyz;
+    vec3 axis = normalize(mat3(modelMatrix) * aArc.xyz);
+    vec3 toCam = cameraPosition - wp;
+    if (abs(aArc.y) < 0.01) {
+      axis.y = 0.0;
+      toCam.y = 0.0;
+      axis = normalize(axis);
+    }
+    float c = dot(normalize(toCam + vec3(1e-4, 0.0, 0.0)), axis);
+    vFade *= smoothstep(aArc.w - 0.06, aArc.w + 0.06, c);
+  }
   vColor = aColor;
 }`;
 
@@ -239,13 +270,15 @@ void main() {
   gl_FragColor.rgb *= 1.0 - kFog * uFogKeep;
 }`;
 
-// Glow sprites. lights: [{ pos: [x,y,z] (local to `parent`), color: hex, size: m, on: bool }].
+// Glow sprites. lights: [{ pos: [x,y,z] (local to `parent`), color: hex, size: m, on: bool,
+//   arc?: { dir: [x,y,z] (local axis), half: radians } }]. Without `arc` a light shows all round.
 export function createGlowSet(ctx, lights, { parent = null, renderOrder = 400, name = 'glows' } = {}) {
   const n = lights.length;
   const pos = new Float32Array(n * 3);
   const col = new Float32Array(n * 3);
   const size = new Float32Array(n);
   const on = new Float32Array(n);
+  const arc = new Float32Array(n * 4);
   const c = new THREE.Color();
   lights.forEach((l, i) => {
     pos.set(l.pos, i * 3);
@@ -253,14 +286,17 @@ export function createGlowSet(ctx, lights, { parent = null, renderOrder = 400, n
     col.set([c.r, c.g, c.b], i * 3);
     size[i] = l.size ?? 0.8;
     on[i] = l.on === false ? 0 : 1;
+    if (l.arc) arc.set([...l.arc.dir, Math.cos(l.arc.half)], i * 4);
   });
   const geo = new THREE.BufferGeometry();
   const aPos = new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage);
   const aOn = new THREE.BufferAttribute(on, 1).setUsage(THREE.DynamicDrawUsage);
+  const aArc = new THREE.BufferAttribute(arc, 4).setUsage(THREE.DynamicDrawUsage);
   geo.setAttribute('position', aPos);
   geo.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
   geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
   geo.setAttribute('aOn', aOn);
+  geo.setAttribute('aArc', aArc);
   const mat = new THREE.ShaderMaterial({
     uniforms: THREE.UniformsUtils.merge([
       THREE.UniformsLib.fog,
@@ -295,6 +331,14 @@ export function createGlowSet(ctx, lights, { parent = null, renderOrder = 400, n
       pos[i * 3 + 1] = y;
       pos[i * 3 + 2] = z;
       aPos.needsUpdate = true;
+    },
+    // Arc axis in the set's space (world space for an unparented set); cosine of the half-arc is kept.
+    setArcDir(i, x, y, z) {
+      if (arc[i * 4] === x && arc[i * 4 + 1] === y && arc[i * 4 + 2] === z) return;
+      arc[i * 4] = x;
+      arc[i * 4 + 1] = y;
+      arc[i * 4 + 2] = z;
+      aArc.needsUpdate = true;
     },
     set night(v) {
       mat.uniforms.uNight.value = v;

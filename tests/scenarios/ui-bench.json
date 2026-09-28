@@ -3,10 +3,13 @@
   { "perf": "title", "ms": 4000 },
   { "start": {} },
   { "time": 12 },
+  { "teleport": [5850, -520, 90] },
+  { "eval": "__KODIAK__.systems.fish.spawnSchool({ x: 5900, z: -560, species: 'pink', count: 6000, milling: true }); __KODIAK__.systems.fish.spawnSchool({ x: 5790, z: -470, species: 'chum', count: 3000, milling: true }); 'ok'" },
   { "key": "KeyW", "down": true },
   { "wait": 2000 },
   { "perf": "play-underway", "ms": 5000 },
   { "key": "KeyW", "up": true },
+  { "eval": "const U=__KODIAK__.systems.ui; const t0=performance.now(); for (let i=0;i<200;i++) U.frame(0.1); const full=(performance.now()-t0)/200; const t1=performance.now(); for (let i=0;i<400;i++) U.frame(1/60); const avg60=(performance.now()-t1)/400; JSON.stringify({ refreshMs: +full.toFixed(3), avgFrameMsAt60: +avg60.toFixed(4) })" },
   { "eval": "__KODIAK__.systems.ui?.openMap?.(); 'ok'" },
   { "perf": "map", "ms": 4000 },
   { "shot": "map" }

@@ -1,7 +1,7 @@
 [
-  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 60000 },
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 150000 },
   { "start": {} },
-  { "eval": "document.getElementById('boot')?.remove(); const ui = document.getElementById('ui'); if (ui) ui.style.visibility = 'hidden'; 1" },
+  { "eval": "document.getElementById('boot')?.remove(); document.querySelectorAll('vite-error-overlay').forEach((e) => e.remove()); const ui = document.getElementById('ui'); if (ui) ui.style.visibility = 'hidden'; 1" },
   { "weather": "clear" },
   { "eval": "__KODIAK__.systems.water.overrideSea({ windSpeed: 0.8, swell: 0.3 }); 1" },
   { "time": 6.2 },

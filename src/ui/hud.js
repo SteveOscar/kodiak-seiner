@@ -6,7 +6,7 @@
 import { h, setText, setStyle, toggle, clear, keycap, svgFrom } from './dom.js';
 import { createSonar } from './sonar.js';
 import { createSetPanel } from './setPanel.js';
-import { compassLayout, bearingDistance, holdSegments, fuelLevel, tideLabel, keyLabel } from './lib/logic.js';
+import { compassLayout, bearingDistance, holdSegments, fuelLevel, tideLabel, keyLabel, dedupeCompassLabels, nextStep } from './lib/logic.js';
 import { money, int, clockTime, calendar, headingDeg, cardinal, nmLabel } from './lib/format.js';
 import { GLYPHS } from './lib/art.js';
 
@@ -14,6 +14,7 @@ const HALF_SPAN = 68; // degrees either side of the heading on the compass strip
 const STRIP_W = 440; // CSS px
 const PX_PER_DEG = STRIP_W / (2 * HALF_SPAN);
 const MARKER_POOL = 12;
+const LABEL_CHAR_PX = 6.1; // average advance of the 10 px compass label font, for collision tests
 
 export function createHud(ctx, root) {
   const el = h('div.ui-hud');
@@ -28,11 +29,14 @@ export function createHud(ctx, root) {
   const tideArrow = h('span.st-tide-arrow');
   const tideEl = h('span.st-tide-text');
   const whereEl = h('div.st-where');
+  const nextEl = h('span.st-next-text');
+  const nextRow = h('div.st-row.st-next.hidden', null, [h('span.st-next-mark'), nextEl]);
   const status = h('div.hud-status.hud-panel', null, [
     h('div.st-row.st-clock', null, [timeEl, dateEl, skyGlyph]),
     h('div.st-row.st-open', null, [openDot, openEl]),
     h('div.st-row.st-tide', null, [tideArrow, tideEl]),
     h('div.st-row.st-foot', null, [whereEl]),
+    nextRow,
   ]);
 
   // ---------------------------------------------------------------- top-right: cash, hold, fuel
@@ -80,6 +84,13 @@ export function createHud(ctx, root) {
   const rudderDot = h('div.helm-rud-dot');
   const helmState = h('div.helm-state');
   const camEl = h('span.helm-cam');
+  // Ashore the helm gauges give way to an elevation readout (real metres) and the walking heading.
+  const elevEl = h('span.helm-speed');
+  const walkHdg = h('span.helm-hdg');
+  const walk = h('div.helm-walk', null, [
+    h('div.helm-speed-row', null, [elevEl, h('span.helm-unit', { text: 'm elev' })]),
+    h('div.helm-hdg-row', null, [walkHdg]),
+  ]);
   const helm = h('div.hud-helm.hud-panel', null, [
     h('div.helm-main', null, [
       h('div.helm-thr', null, [h('div.helm-thr-track', null, [h('div.helm-thr-zero'), throttleFill])]),
@@ -89,6 +100,7 @@ export function createHud(ctx, root) {
       ]),
     ]),
     h('div.helm-rud', null, [h('div.helm-rud-track', null, [h('div.helm-rud-mid'), rudderDot])]),
+    walk,
     h('div.helm-foot', null, [helmState, camEl]),
   ]);
 
@@ -210,14 +222,8 @@ export function createHud(ctx, root) {
     setText(cpHeading, `${String(hd).padStart(3, '0')}°`);
     setText(cpCard, cardinal(hd, 16));
     const laid = compassLayout(heading, compassMarkers(p), HALF_SPAN - 2);
-    // One label per neighbourhood: the highest-priority marker keeps its label, close neighbours go quiet.
-    const labelled = [];
-    for (const m of [...laid].sort((a, b) => b.prio - a.prio)) {
-      if (!m.label || m.edge) continue;
-      const x = m.offsetDeg * PX_PER_DEG;
-      if (labelled.some((q) => Math.abs(q - x) < 78)) m.label = '';
-      else labelled.push(x);
-    }
+    // Labels never overlap: the highest-priority marker keeps its label, neighbours whose text would collide go quiet.
+    dedupeCompassLabels(laid, PX_PER_DEG, LABEL_CHAR_PX);
     for (let i = 0; i < pool.length; i++) {
       const slot = pool[i];
       const m = laid[i];
@@ -295,6 +301,39 @@ export function createHud(ctx, root) {
       where = '';
     }
     setText(whereEl, where);
+    updateNext(p, st);
+  }
+
+  // The quiet "what next" line under the status block.
+  function updateNext(p, st) {
+    const eco = ctx.systems.economy;
+    const s = ctx.systems.seiner;
+    let tender = null;
+    try {
+      const n = ctx.systems.fleet?.nearestTender?.(p.x, p.z);
+      if (n?.tender) tender = { name: n.tender.name, nm: ctx.geo?.toNauticalMiles ? ctx.geo.toNauticalMiles(n.distance) : n.distance / 1852 };
+    } catch {
+      tender = null;
+    }
+    const cur = ctx.interact?.current ?? {};
+    const today = st?.next && st.next.day === ctx.clock.day ? clockTime(st.next.hours ?? 6) : null;
+    const line = nextStep({
+      control: ctx.state.control,
+      fishing: ctx.systems.fishing?.state ?? 'idle',
+      freeExplore: !!ctx.state.freeExplore,
+      open: !!st?.open,
+      holdLbs: typeof eco?.holdLbs === 'function' ? eco.holdLbs() : 0,
+      capacityLbs: Number(eco?.capacityLbs) || ctx.config.economy.holdCapacityLbs,
+      fuelFrac: fuelLevel(eco?.fuel, eco?.fuelCapacity).frac,
+      fuelEmpty: !!eco?.fuelEmpty,
+      hours: ctx.clock.hours,
+      moored: s?.mooring?.kind ?? null,
+      tender,
+      opensToday: today,
+      interactId: cur.interact?.id ?? null,
+    });
+    toggle(nextRow, 'hidden', !line);
+    if (line) setText(nextEl, line);
   }
 
   function updatePurse() {
@@ -333,6 +372,18 @@ export function createHud(ctx, root) {
     toggle(purse, 'explore', !!ctx.state.freeExplore);
   }
 
+  function updateWalk(a, heading) {
+    let elev = 0;
+    try {
+      elev = Number(ctx.heightmap?.realAt?.(a.x, a.z)) || 0;
+    } catch {
+      elev = 0;
+    }
+    setText(elevEl, int(Math.max(0, elev)));
+    const hd = headingDeg(heading);
+    setText(walkHdg, `${String(hd).padStart(3, '0')}° ${cardinal(hd, 16)}`);
+  }
+
   function updateHelm() {
     const s = ctx.systems.seiner;
     if (!s) return;
@@ -349,7 +400,7 @@ export function createHud(ctx, root) {
     let state = '';
     const m = s.mooring;
     if (s.grounded) state = 'Aground!';
-    else if (m?.kind === 'dock') state = `Tied up · ${ctx.systems.places?.get?.(m.placeId)?.name ?? 'harbour'}`;
+    else if (m?.kind === 'dock') state = `Tied up · ${ctx.systems.places?.get?.(m.placeId)?.name ?? 'harbor'}`;
     else if (m?.kind === 'anchor') state = 'At anchor';
     else if (ctx.systems.economy?.fuelEmpty && !ctx.state.freeExplore) state = 'Out of fuel';
     else if (s.speedLimit !== null && s.speedLimit !== undefined && s.speedLimit < (s.maxSpeed ?? 12) - 0.1) state = `Limited · ${ctx.geo?.toKnots ? ctx.geo.toKnots(s.speedLimit).toFixed(1) : s.speedLimit} kn`;
@@ -413,10 +464,15 @@ export function createHud(ctx, root) {
       toggle(el, 'on-foot', onFoot);
       updateStatus(p);
       updatePurse();
-      updateCompass(p, onFoot ? ctx.camera ? cameraHeading(ctx.camera) : a.heading ?? 0 : s?.heading ?? 0);
+      const hd = onFoot ? (ctx.camera ? cameraHeading(ctx.camera) : a.heading ?? 0) : s?.heading ?? 0;
+      updateCompass(p, hd);
       updateHelm();
-      if (!onFoot) sonar.update(time);
+      if (onFoot) updateWalk(p, hd);
       setPanel.update();
+    },
+    // The sonar redraws on its own 10 Hz beat, interleaved with update() so no frame carries both.
+    updateSonar(time) {
+      if (ctx.state.control !== 'foot') sonar.update(time);
     },
     // Every frame (prompts only).
     frame() {

@@ -4,8 +4,26 @@
 import { h, setText } from './dom.js';
 import { sonarProject } from './lib/logic.js';
 
-const ANGLES = 56;
-const RINGS = 12;
+const ANGLES = 96; // shore sampling: bearings around the boat
+const STEPS = 30; // shore sampling: range steps per bearing
+const SLICES = 3; // the ring is resampled a third at a time
+
+// Echo colour scale, weak to strong (the classic searchlight-sonar palette).
+const SCALE = [
+  [0, [70, 170, 205]],
+  [0.35, [92, 222, 150]],
+  [0.62, [255, 214, 92]],
+  [0.85, [255, 104, 64]],
+];
+function echoColor(s, a) {
+  let i = 0;
+  while (i < SCALE.length - 2 && s > SCALE[i + 1][0]) i++;
+  const [s0, c0] = SCALE[i];
+  const [s1, c1] = SCALE[i + 1];
+  const t = Math.max(0, Math.min(1, (s - s0) / (s1 - s0)));
+  const c = c0.map((v, k) => Math.round(v + (c1[k] - v) * t));
+  return `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${a.toFixed(3)})`;
+}
 
 export function createSonar(ctx) {
   const size = 172;
@@ -23,36 +41,33 @@ export function createSonar(ctx) {
     h('div.sonar-label.sonar-label-bottom', null, [h('span.sonar-depth', null, [h('span.sonar-depth-cap', { text: 'DEPTH ' }), depthEl]), marksEl]),
   ]);
 
-  const land = new Uint8Array(ANGLES * RINGS); // 2 = dry land, 1 = drying shallows
-  // Soft blip sprites: weak (blue-green), medium (yellow), strong (red) returns.
-  const SPRITES = [[90, 230, 200], [255, 214, 90], [255, 92, 60]].map(([r, gg, b]) => {
-    const cv = document.createElement('canvas');
-    cv.width = cv.height = 32;
-    const x = cv.getContext('2d');
-    const gr = x.createRadialGradient(16, 16, 0, 16, 16, 16);
-    gr.addColorStop(0, `rgba(${r}, ${gg}, ${b}, 0.95)`);
-    gr.addColorStop(0.45, `rgba(${r}, ${gg}, ${b}, 0.45)`);
-    gr.addColorStop(1, `rgba(${r}, ${gg}, ${b}, 0)`);
-    x.fillStyle = gr;
-    x.fillRect(0, 0, 32, 32);
-    return cv;
-  });
-  const trail = []; // recent marks, faded over time for persistence
+  // Per bearing: range fraction of the first drying shallows and of the first dry land (1 = nothing in range).
+  const shoalAt = new Float32Array(ANGLES).fill(1);
+  const landAt = new Float32Array(ANGLES).fill(1);
   let lastRange = 0;
 
-  function sampleLand(x, z, heading, range) {
+  // The sonar cannot see past the shore: each bearing stops at the first land it meets. Bearings are world bearings
+  // (0 = north) so the ring can be refreshed a slice at a time; the layer is drawn rotated to heading-up.
+  function sampleLand(x, z, range, from, to) {
     const hm = ctx.heightmap;
-    for (let a = 0; a < ANGLES; a++) {
-      const th = heading + (a / ANGLES) * Math.PI * 2;
+    for (let a = from; a < to; a++) {
+      const th = (a / ANGLES) * Math.PI * 2;
       const sx = Math.sin(th);
       const cz = -Math.cos(th);
-      for (let r = 0; r < RINGS; r++) {
-        const d = ((r + 0.5) / RINGS) * range;
-        const px = x + sx * d;
-        const pz = z + cz * d;
-        const depth = hm?.depthAt ? hm.depthAt(px, pz) : 50;
-        land[a * RINGS + r] = depth <= 0.3 ? 2 : depth < 3 ? 1 : 0;
+      let shoal = 1;
+      let land = 1;
+      for (let r = 1; r <= STEPS; r++) {
+        const f = r / STEPS;
+        const d = f * range;
+        const depth = hm?.depthAt ? hm.depthAt(x + sx * d, z + cz * d) : 50;
+        if (shoal === 1 && depth < 3) shoal = f - 0.5 / STEPS;
+        if (depth <= 0.3) {
+          land = f - 0.5 / STEPS;
+          break;
+        }
       }
+      shoalAt[a] = Math.min(shoal, land);
+      landAt[a] = land;
     }
   }
 
@@ -92,6 +107,16 @@ export function createSonar(ctx) {
     f.moveTo(C - RR, C);
     f.lineTo(C + RR, C);
     f.stroke();
+    // Bearing ticks every 30° around the rim.
+    f.strokeStyle = 'rgba(160, 225, 215, 0.35)';
+    for (let i = 0; i < 36; i++) {
+      const t = (i / 36) * Math.PI * 2;
+      const r0 = RR - (i % 3 === 0 ? 7 : 4) * dpr;
+      f.beginPath();
+      f.moveTo(C + Math.cos(t) * r0, C + Math.sin(t) * r0);
+      f.lineTo(C + Math.cos(t) * RR, C + Math.sin(t) * RR);
+      f.stroke();
+    }
     f.strokeStyle = 'rgba(255, 170, 90, 0.4)';
     f.setLineDash([3 * dpr, 4 * dpr]);
     f.beginPath();
@@ -100,85 +125,150 @@ export function createSonar(ctx) {
     f.stroke();
   }
 
-  // Shore returns as annular sectors, merging runs of equal cells along each ring (dry land, drying shallows).
+  // Shore returns: a smooth outline through the per-bearing ranges, drying shallows as a faint band, dry land beyond
+  // with a bright echo line along the shore.
+  function outline(s, radii, close) {
+    for (let a = 0; a <= ANGLES; a++) {
+      const i = a % ANGLES;
+      const t = (i / ANGLES) * Math.PI * 2 - Math.PI / 2;
+      const r = radii[i] * RR;
+      const px = C + Math.cos(t) * r;
+      const py = C + Math.sin(t) * r;
+      if (a === 0) s.moveTo(px, py);
+      else s.lineTo(px, py);
+    }
+    if (close) s.closePath();
+  }
   function drawShore() {
     const s = shore.getContext('2d');
     s.clearRect(0, 0, W, W);
-    s.fillStyle = 'rgb(214, 178, 92)';
-    for (const [level, alpha] of [[2, 0.55], [1, 0.3]]) {
-      s.beginPath();
-      let any = false;
-      for (let r = 0; r < RINGS; r++) {
-        const r0 = (r / RINGS) * RR;
-        const r1 = ((r + 1) / RINGS) * RR;
-        let a = 0;
-        while (a < ANGLES) {
-          if (land[a * RINGS + r] !== level) {
-            a++;
-            continue;
-          }
-          let b = a;
-          while (b + 1 < ANGLES && land[(b + 1) * RINGS + r] === level) b++;
-          const a0 = (a / ANGLES) * Math.PI * 2 - Math.PI / 2;
-          const a1 = ((b + 1) / ANGLES) * Math.PI * 2 - Math.PI / 2 + 0.01;
-          s.moveTo(C + Math.cos(a0) * r0, C + Math.sin(a0) * r0);
-          s.arc(C, C, r1, a0, a1);
-          s.arc(C, C, r0, a1, a0, true);
-          s.closePath();
-          any = true;
-          a = b + 1;
-        }
-      }
-      if (any) {
-        s.globalAlpha = alpha;
-        s.fill();
-      }
+    let anyLand = false;
+    let anyShoal = false;
+    for (let a = 0; a < ANGLES; a++) {
+      if (landAt[a] < 1) anyLand = true;
+      if (shoalAt[a] < landAt[a]) anyShoal = true;
     }
-    s.globalAlpha = 1;
+    if (!anyLand && !anyShoal) return;
+    s.save();
+    s.beginPath();
+    s.arc(C, C, RR, 0, Math.PI * 2);
+    s.clip();
+    // Everything outside the shallows outline, minus the open water inside it (even-odd).
+    if (anyShoal) {
+      s.beginPath();
+      s.rect(0, 0, W, W);
+      outline(s, shoalAt, true);
+      s.fillStyle = 'rgba(214, 178, 92, 0.16)';
+      s.fill('evenodd');
+    }
+    if (anyLand) {
+      s.beginPath();
+      s.rect(0, 0, W, W);
+      outline(s, landAt, true);
+      s.fillStyle = 'rgba(196, 160, 84, 0.42)';
+      s.fill('evenodd');
+      // The shore echo: stroke only the stretches where land lies inside the range.
+      s.strokeStyle = 'rgba(255, 196, 96, 0.85)';
+      s.lineWidth = 1.6 * dpr;
+      s.lineJoin = 'round';
+      s.beginPath();
+      let pen = false;
+      for (let a = 0; a <= ANGLES; a++) {
+        const i = a % ANGLES;
+        if (landAt[i] >= 1) {
+          pen = false;
+          continue;
+        }
+        const t = (i / ANGLES) * Math.PI * 2 - Math.PI / 2;
+        const px = C + Math.cos(t) * landAt[i] * RR;
+        const py = C + Math.sin(t) * landAt[i] * RR;
+        if (pen) s.lineTo(px, py);
+        else s.moveTo(px, py);
+        pen = true;
+      }
+      s.stroke();
+    }
+    s.restore();
   }
 
-  function draw(marks, range, t) {
-    const c = C;
-    const R = RR;
+  // Echoes: short arc segments across the beam, thicker and warmer for stronger returns. Marks are bucketed by
+  // strength so each bucket is one path and one stroke.
+  const LEVELS = 6;
+  const buckets = Array.from({ length: LEVELS }, () => []);
+  const colors = Array.from({ length: LEVELS }, (_, i) => ({
+    core: echoColor(i / (LEVELS - 1), 0.95),
+    glow: echoColor(i / (LEVELS - 1), 0.3),
+    trail: echoColor(i / (LEVELS - 1), 0.5),
+  }));
+  function strokeEchoes(target, marks, pass) {
+    for (const b of buckets) b.length = 0;
+    for (const m of marks) buckets[Math.max(0, Math.min(LEVELS - 1, Math.round(m.strength * (LEVELS - 1))))].push(m);
+    target.lineCap = 'round';
+    for (let i = 0; i < LEVELS; i++) {
+      const list = buckets[i];
+      if (!list.length) continue;
+      const str = i / (LEVELS - 1);
+      const thick = (2 + 3.2 * str) * dpr;
+      const widen = pass === 'glow' ? 1.15 : 1;
+      target.beginPath();
+      for (const m of list) {
+        const r = Math.max(1, Math.hypot(m.u, m.v) * RR);
+        const th = Math.atan2(-m.v, m.u);
+        const half = (((3 + 4 * str) * Math.PI) / 180 + (2.2 * dpr) / Math.max(8 * dpr, r)) * widen;
+        target.moveTo(C + Math.cos(th - half) * r, C + Math.sin(th - half) * r);
+        target.arc(C, C, r, th - half, th + half);
+      }
+      target.strokeStyle = colors[i][pass];
+      target.lineWidth = pass === 'glow' ? thick + 3.5 * dpr : thick;
+      target.stroke();
+    }
+  }
+
+  // Persistence, like a phosphor screen: fresh echoes are laid into a layer that fades a little on every update.
+  const phos = layer();
+  const pg = phos.getContext('2d');
+  let lastDrawAt = null;
+
+  function draw(marks, heading, t) {
+    const dt = lastDrawAt === null ? 0.1 : Math.max(0, Math.min(1, t - lastDrawAt));
+    lastDrawAt = t;
+    pg.globalCompositeOperation = 'destination-out';
+    pg.fillStyle = `rgba(0, 0, 0, ${(1 - Math.exp(-dt / 0.8)).toFixed(3)})`;
+    pg.fillRect(0, 0, W, W);
+    pg.globalCompositeOperation = 'source-over';
+    strokeEchoes(pg, marks, 'trail');
+
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, W, W);
     g.drawImage(face, 0, 0);
+    g.save();
+    g.translate(C, C);
+    g.rotate(-heading);
+    g.translate(-C, -C);
     g.drawImage(shore, 0, 0);
+    g.restore();
     g.save();
     g.beginPath();
-    g.arc(c, c, R, 0, Math.PI * 2);
+    g.arc(C, C, RR, 0, Math.PI * 2);
     g.clip();
-
-    // Marks: persistent trail (fading) then fresh returns, coloured weak→strong (blue-green, yellow, red).
-    // Normal blending keeps the classic colours (additive stacking would wash a school out to white).
-    for (const m of trail) {
-      const age = t - m.t;
-      const a = Math.max(0, 1 - age / 2.4);
-      if (a <= 0) continue;
-      blip(m.u, m.v, m.strength, a * 0.28);
-    }
-    for (const m of marks) blip(m.u, m.v, m.strength, 0.85);
+    g.globalAlpha = 0.55;
+    g.drawImage(phos, 0, 0);
+    g.globalAlpha = 1;
+    strokeEchoes(g, marks, 'glow');
+    strokeEchoes(g, marks, 'core');
     g.restore();
 
     // Own ship.
     g.fillStyle = 'rgba(255, 240, 220, 0.95)';
     g.beginPath();
-    g.moveTo(c, c - 5 * dpr);
-    g.lineTo(c + 3.4 * dpr, c + 4 * dpr);
-    g.lineTo(c - 3.4 * dpr, c + 4 * dpr);
+    g.moveTo(C, C - 5 * dpr);
+    g.lineTo(C + 3.4 * dpr, C + 4 * dpr);
+    g.lineTo(C - 3.4 * dpr, C + 4 * dpr);
     g.closePath();
     g.fill();
-
-    function blip(u, v, s, alpha) {
-      const sprite = SPRITES[s > 0.66 ? 2 : s > 0.33 ? 1 : 0];
-      const rad = (2.2 + s * 4.2) * dpr * 1.8;
-      g.globalAlpha = alpha;
-      g.drawImage(sprite, c + u * R - rad, c - v * R - rad, rad * 2, rad * 2);
-      g.globalAlpha = 1;
-    }
   }
 
-  let lastLandAt = -1;
+  let slice = 0;
   const api = {
     el,
     update(time) {
@@ -193,16 +283,21 @@ export function createSonar(ctx) {
       } catch {
         returns = [];
       }
-      const marks = sonarProject(p.x, p.z, heading, returns, range);
-      if (time - lastLandAt > 0.25 || range !== lastRange) {
-        lastLandAt = time;
-        sampleLand(p.x, p.z, heading, range);
-        drawShore();
+      // Nothing shows beyond the shore on its bearing (land shadows the beam).
+      const marks = sonarProject(p.x, p.z, heading, returns, range).filter((m) => {
+        const b = heading + Math.atan2(m.u, m.v);
+        const i = ((Math.round((b / (Math.PI * 2)) * ANGLES) % ANGLES) + ANGLES) % ANGLES;
+        return m.r <= landAt[i] + 0.02;
+      });
+      // A third of the ring per refresh (the whole ring every 0.3 s); all of it when the range changes.
+      if (range !== lastRange) sampleLand(p.x, p.z, range, 0, ANGLES);
+      else {
+        const n = ANGLES / SLICES;
+        sampleLand(p.x, p.z, range, slice * n, (slice + 1) * n);
+        slice = (slice + 1) % SLICES;
       }
-      for (const m of marks) trail.push({ ...m, t: time });
-      while (trail.length && time - trail[0].t > 2.4) trail.shift();
-      if (trail.length > 240) trail.splice(0, trail.length - 240);
-      draw(marks, range, time);
+      drawShore();
+      draw(marks, heading, time);
       if (range !== lastRange) {
         lastRange = range;
         setText(rangeEl, `${range} m`);

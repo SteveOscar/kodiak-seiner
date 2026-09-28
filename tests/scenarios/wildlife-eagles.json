@@ -1,0 +1,54 @@
+[
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+  "timeout": 120000
+ },
+ {
+  "start": {}
+ },
+ {
+  "time": 19.6
+ },
+ {
+  "weather": "clear"
+ },
+ {
+  "eval": "document.getElementById('ui').style.visibility = 'hidden'; window.__K = __KODIAK__; window.__W = __K.systems.wildlife; window.__H = __K.ctx.heightmap; const g = __W.qa.eagles.map(e => { const gg = { x: 0, z: 0 }; __H.shoreGradient(e.x, e.z, gg); return { e, gg, top: e.members[0].soar.top, n: e.members.length, sea: __H.heightAt(e.x + gg.x * 300, e.z + gg.z * 300) }; }).filter(o => o.sea < -8).sort((a, b) => b.n - a.n || b.top - a.top); window.__E = g[0].e; window.__EG = g[0].gg; const gg = __EG; const bx = __E.x + gg.x * 420, bz = __E.z + gg.z * 420; __K.teleport(bx, bz, 0); [g.length, __E.x, __E.z, g[0].top, __E.members.length, bx, bz, __H.heightAt(bx, bz)]"
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "eval": "(() => { const e = __E.members[0]; const gg = __EG; const s = e.soar; const cx = s.cx + gg.x * 90 + gg.z * 30, cz = s.cz + gg.z * 90 - gg.x * 30; __K.camera([cx, 4, cz], [s.cx, s.alt * 0.85, s.cz]); return __E.members.map(m => [m.state, +m.position.x.toFixed(0), +m.position.y.toFixed(0), +m.position.z.toFixed(0), +m.soar.alt.toFixed(0), +m.soar.top.toFixed(0)]); })()"
+ },
+ {
+  "wait": 700
+ },
+ {
+  "shot": "eagles-cliff"
+ },
+ {
+  "eval": "(() => { const e = __E.members[0]; const gg = __EG; const p = e.position; const cx = p.x + gg.x * 30 + gg.z * 10, cz = p.z + gg.z * 30 - gg.x * 10; const cy = Math.max(__K.systems.terrain.heightAt(cx, cz) + 2, p.y - 12); __K.camera([cx, cy, cz], [p.x - gg.x * 6, p.y - 2, p.z - gg.z * 6]); return [p.x, p.y, p.z, cy]; })()"
+ },
+ {
+  "wait": 60
+ },
+ {
+  "shot": "eagle-over-cliff"
+ },
+ {
+  "eval": "(() => { const p = __W.qa.perches.map(g => g.members[0]).filter(e => e.perch && e.perch.onSnag)[0]; if (!p) return 'no snag eagle'; window.__PE = p; const gg = { x: 0, z: 0 }; __H.shoreGradient(p.perch.x, p.perch.z, gg); const bx = p.perch.x + gg.x * 300, bz = p.perch.z + gg.z * 300; __K.teleport(bx, bz, 0); return [p.perch.x, p.perch.y, p.perch.z]; })()"
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "eval": "(() => { const p = window.__PE; const gg = { x: 0, z: 0 }; __H.shoreGradient(p.perch.x, p.perch.z, gg); const cx = p.perch.x + gg.x * 14 + gg.z * 5, cz = p.perch.z + gg.z * 14 - gg.x * 5; const cy = Math.max(__K.systems.terrain.heightAt(cx, cz) + 1.7, p.perch.y - 4); __K.camera([cx, cy, cz], [p.position.x, p.position.y + 0.4, p.position.z]); return [p.state, cy]; })()"
+ },
+ {
+  "wait": 700
+ },
+ {
+  "shot": "eagle-snag"
+ }
+]

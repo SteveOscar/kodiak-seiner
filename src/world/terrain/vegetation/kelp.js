@@ -12,26 +12,21 @@ function drawKelpTexture(size = 256) {
   g.clearRect(0, 0, size, size);
   let seed = 7;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  // Blades stream toward +u from the bulb near u = 0.18.
-  const bx = size * 0.18;
+  // Blades stream toward +u from the bulb near u = 0.1 as a narrow, wavy comet tail (the card is 4x longer than wide,
+  // so v is stretched: blade widths here are drawn narrow).
+  const bx = size * 0.1;
   const by = size * 0.5;
-  for (let k = 0; k < 16; k++) {
-    const len = size * (0.5 + rnd() * 0.3);
-    const spread = (rnd() - 0.5) * size * 0.34;
-    const w = size * (0.018 + rnd() * 0.02);
-    const hue = rnd();
-    const col = hue < 0.5 ? `rgba(${120 + rnd() * 30},${95 + rnd() * 25},${38 + rnd() * 12},0.95)` : `rgba(${95 + rnd() * 20},${78 + rnd() * 20},${30 + rnd() * 10},0.95)`;
+  const blade = (len, endOff, w, phase, col) => {
     g.fillStyle = col;
     g.beginPath();
-    const steps = 18;
+    const steps = 24;
     const top = [];
     const bot = [];
-    const phase = rnd() * 6;
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
       const x = bx + t * len;
-      const y = by + spread * Math.pow(t, 0.8) + Math.sin(t * 7 + phase) * size * 0.012 * t;
-      const ww = w * (0.3 + 0.9 * Math.sin(Math.min(1, t * 1.3) * Math.PI * 0.9));
+      const y = by + endOff * Math.pow(t, 0.7) + Math.sin(t * 9 + phase) * size * 0.035 * t;
+      const ww = w * (0.25 + 0.95 * Math.sin(Math.min(1, t * 1.15) * Math.PI * 0.92)) * (1 + 0.25 * Math.sin(t * 23 + phase));
       top.push([x, y - ww]);
       bot.push([x, y + ww]);
     }
@@ -40,21 +35,30 @@ function drawKelpTexture(size = 256) {
     for (let i = bot.length - 1; i >= 0; i--) g.lineTo(bot[i][0], bot[i][1]);
     g.closePath();
     g.fill();
+  };
+  // Darker blades underneath, olive-amber ones on top.
+  for (let k = 0; k < 26; k++) {
+    const top = k >= 12;
+    const len = size * (0.55 + rnd() * 0.37);
+    const endOff = (rnd() - 0.5) * size * 0.8;
+    const w = size * (0.012 + rnd() * 0.018);
+    const col = top ? `rgba(${80 + rnd() * 18},${68 + rnd() * 12},${28 + rnd() * 8},0.9)` : `rgba(${50 + rnd() * 12},${44 + rnd() * 10},${20 + rnd() * 6},0.92)`;
+    blade(len, endOff, w, rnd() * 6, col);
   }
-  // Stipe trailing back under the surface, then the bulb.
-  g.strokeStyle = 'rgba(70,55,25,0.7)';
-  g.lineWidth = size * 0.012;
+  // Stipe trailing back from the bulb, then the bulb itself.
+  g.strokeStyle = 'rgba(64,50,22,0.75)';
+  g.lineWidth = size * 0.03;
   g.beginPath();
   g.moveTo(bx, by);
-  g.quadraticCurveTo(bx - size * 0.1, by + size * 0.03, bx - size * 0.16, by - size * 0.02);
+  g.quadraticCurveTo(bx - size * 0.05, by + size * 0.08, 0, by - size * 0.04);
   g.stroke();
-  const grad = g.createRadialGradient(bx - size * 0.01, by - size * 0.012, size * 0.004, bx, by, size * 0.035);
-  grad.addColorStop(0, 'rgba(178,150,80,1)');
-  grad.addColorStop(0.6, 'rgba(110,88,38,1)');
-  grad.addColorStop(1, 'rgba(70,55,22,1)');
+  const grad = g.createRadialGradient(bx - size * 0.01, by - size * 0.03, size * 0.006, bx, by, size * 0.07);
+  grad.addColorStop(0, 'rgba(150,126,70,1)');
+  grad.addColorStop(0.5, 'rgba(84,66,30,1)');
+  grad.addColorStop(1, 'rgba(48,38,18,1)');
   g.fillStyle = grad;
   g.beginPath();
-  g.arc(bx, by, size * 0.034, 0, Math.PI * 2);
+  g.ellipse(bx, by, size * 0.04, size * 0.1, 0, 0, Math.PI * 2);
   g.fill();
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -100,14 +104,24 @@ varying float kpShadow;`,
       .replace('#include <begin_vertex>', 'vec3 transformed = kpW;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\nuniform vec3 uSunDir;\nuniform vec3 uSunColor;\nuniform float tkSunScale;\nvarying float kpShadow;`)
+      .replace(
+        '#include <map_fragment>',
+        `#include <map_fragment>
+  // Blades trail off just under the surface: thinner and tinted by the water column toward their tips.
+  {
+    float kpTip = smoothstep( 0.3, 1.0, vMapUv.x );
+    diffuseColor.a *= 1.0 - 0.45 * kpTip;
+    diffuseColor.rgb = mix( diffuseColor.rgb, uWaterScatter * 1.6, kpTip * 0.4 );
+  }`,
+      )
       .replace('#include <lights_fragment_begin>', SUN_LIGHT_PATCH('kpShadow'));
   };
-  mat.customProgramCacheKey = () => 'kelp-v1';
+  mat.customProgramCacheKey = () => 'kelp-v4';
   patchUnderwater(mat, uniforms);
 
   const quad = new THREE.BufferGeometry();
   // Card lying on the water, bulb near the local origin, blades toward +x.
-  quad.setAttribute('position', new THREE.Float32BufferAttribute([-0.18, 0, -0.5, 0.82, 0, -0.5, 0.82, 0, 0.5, -0.18, 0, 0.5], 3));
+  quad.setAttribute('position', new THREE.Float32BufferAttribute([-0.1, 0, -0.16, 0.9, 0, -0.16, 0.9, 0, 0.16, -0.1, 0, 0.16], 3));
   quad.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
   quad.setAttribute('uv', new THREE.Float32BufferAttribute([0, 1, 1, 1, 1, 0, 0, 0], 2));
   quad.setIndex([0, 2, 1, 0, 3, 2]);
@@ -170,11 +184,11 @@ varying float kpShadow;`,
       }
     },
     // Ride the swell and turn with the tide. Nearest plants every frame, the rest round-robin.
-    update(dt, budget = 180) {
+    update(dt, budget = 110) {
       if (!n) return;
       const water = ctx.systems.water;
       const hAt = water?.heightAt;
-      const near = Math.min(n, 60);
+      const near = Math.min(n, 40);
       let done = 0;
       const doOne = (k) => {
         const x = base[k * 4];
@@ -185,7 +199,7 @@ varying float kpShadow;`,
         } catch {
           y = 0;
         }
-        P.array[k * 4 + 1] = (Number.isFinite(y) ? y : 0) + 0.03;
+        P.array[k * 4 + 1] = (Number.isFinite(y) ? y : 0) + 0.05;
         if ((k + ctx.time.frame) % 16 === 0) {
           ctx.tide?.currentAt?.(x, z, cur);
           const sp = Math.hypot(cur.x, cur.z);

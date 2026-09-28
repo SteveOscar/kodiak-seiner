@@ -332,9 +332,10 @@ export async function create(ctx) {
 
   const glows = createGlowSet(
     ctx,
-    lightRefs.map((r) => ({ pos: [0, -1000, 0], color: r.def.color, size: r.def.size, intensity: r.def.intensity, on: false })),
+    lightRefs.map((r) => ({ pos: [0, -1000, 0], color: r.def.color, size: r.def.size, intensity: r.def.intensity, on: false, arc: r.def.arc })),
     { name: 'fleet-lights' },
   );
+  const arcDir = new THREE.Vector3();
 
   // Deck floods pooling on the water at night: one slot per tender and fleet seiner.
   const pools = createLightPools(ctx, tenders.length + seiners.length, { name: 'fleet-light-pools' });
@@ -476,6 +477,11 @@ export async function create(ctx) {
       if (on) {
         tmp.fromArray(ref.def.pos).applyMatrix4(v.object3d.matrixWorld);
         glows.setPos(v.lightStart + i, tmp.x, tmp.y, tmp.z);
+        // The set is in world space, so sector axes turn with the hull.
+        if (ref.def.arc) {
+          arcDir.fromArray(ref.def.arc.dir).transformDirection(v.object3d.matrixWorld);
+          glows.setArcDir(v.lightStart + i, arcDir.x, Math.abs(ref.def.arc.dir[1]) < 0.01 ? 0 : arcDir.y, arcDir.z);
+        }
       }
     }
   }
@@ -563,7 +569,7 @@ export async function create(ctx) {
       const daylight = ctx.systems.sky?.daylight ?? ctx.uniforms.uDaylight.value ?? 1;
       const target = clamp((0.5 - daylight) / 0.35, 0, 1);
       night += (target - night) * Math.min(1, dt * 2);
-      mats.glass.emissiveIntensity = clamp((0.32 - daylight) / 0.25, 0, 1) * 1.2;
+      mats.glass.emissiveIntensity = clamp((0.32 - daylight) / 0.25, 0, 1) * 0.55;
       glows.night = night;
       pools.night = night;
       const poolOn = night > 0.02;

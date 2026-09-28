@@ -258,8 +258,11 @@ export class ModelBuilder {
   constructor() {
     this.parts = [];
   }
-  add(part, { color, rig = () => [0, 0, 0, 0], pivot = () => [0, 0, 0, 0], noise = 0.06, noiseScale = 9 } = {}) {
-    this.parts.push({ part, color, rig, pivot, noise, noiseScale });
+  // shag: { amp, freq, dir? } pushes vertices along their smooth normal by amp * noise (fur, lumpy hide) while
+  // keeping the smooth normal, so the silhouette breaks up without faceted lighting. `dir` scales the push per
+  // vertex (e.g. more on the back than the belly).
+  add(part, { color, rig = () => [0, 0, 0, 0], pivot = () => [0, 0, 0, 0], noise = 0.06, noiseScale = 9, shag = null } = {}) {
+    this.parts.push({ part, color, rig, pivot, noise, noiseScale, shag });
     return this;
   }
   build() {
@@ -269,7 +272,7 @@ export class ModelBuilder {
     const rig = [];
     const piv = [];
     const idx = [];
-    for (const { part, color, rig: rigFn, pivot: pivFn, noise, noiseScale } of this.parts) {
+    for (const { part, color, rig: rigFn, pivot: pivFn, noise, noiseScale, shag } of this.parts) {
       const base = pos.length / 3;
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(part.pos, 3));
@@ -283,7 +286,11 @@ export class ModelBuilder {
         const meta = { ...part.meta[v], x, y, z, nx: n[v * 3], ny: n[v * 3 + 1], nz: n[v * 3 + 2] };
         const c = typeof color === 'function' ? color(meta) : color;
         const k = noise > 0 ? 1 + noise * (vnoise(x * noiseScale, y * noiseScale, z * noiseScale) * 2 - 1) : 1;
-        pos.push(x, y, z);
+        if (shag) {
+          const f = shag.freq ?? 20;
+          const d = shag.amp * (vnoise(x * f + 17.3, y * f * (shag.stretch ?? 1), z * f) * 2 - 0.7) * (shag.dir ? shag.dir(meta) : 1);
+          pos.push(x + meta.nx * d, y + meta.ny * d, z + meta.nz * d);
+        } else pos.push(x, y, z);
         nrm.push(n[v * 3], n[v * 3 + 1], n[v * 3 + 2]);
         col.push(c[0] * k, c[1] * k, c[2] * k);
         rig.push(...rigFn(meta));

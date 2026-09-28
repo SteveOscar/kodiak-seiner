@@ -1,0 +1,18 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 120000 },
+  { "start": {} },
+  { "time": 20.4 },
+  { "weather": "clear" },
+  { "teleport": [-3950, -2900, 270] },
+  { "eval": "document.getElementById('ui').style.visibility = 'hidden'; window.__W = __KODIAK__.systems.wildlife; 'ok'" },
+  { "wait": 2000 },
+  { "eval": "__W.stage('dive', -4100, -2800, 0.2); __KODIAK__.camera([-4070, 3.5, -2850], [-4100, 2, -2808]); 'ok'" },
+  { "wait": 2500 },
+  { "shot": "fluke-a" },
+  { "wait": 900 },
+  { "shot": "fluke-b" },
+  { "wait": 900 },
+  { "shot": "fluke-c" },
+  { "wait": 1200 },
+  { "shot": "fluke-d" }
+]

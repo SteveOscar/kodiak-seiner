@@ -1,139 +1,49 @@
 [
- {
-  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
-  "timeout": 60000
- },
- {
-  "start": {}
- },
- {
-  "time": 19.2
- },
- {
-  "weather": "clear"
- },
- {
-  "teleport": [
-   -340,
-   5540,
-   250
-  ]
- },
- {
-  "wait": 1500
- },
- {
-  "eval": "window.__K = __KODIAK__; window.__P = __K.systems.player; __P.debugAshore()"
- },
- {
-  "wait": 800
- },
- {
-  "eval": "window.__trk = (dist, angDeg, h, lookH) => { cancelAnimationFrame(window.__trkId); const f = () => { const p = __P.position; const a = __P.heading + angDeg * Math.PI / 180; __K.camera([p.x + Math.sin(a) * dist, p.y + h, p.z - Math.cos(a) * dist], [p.x, p.y + lookH, p.z]); window.__trkId = requestAnimationFrame(f); }; f(); }; window.__stop = () => { cancelAnimationFrame(window.__trkId); __K.camera(null); }; true"
- },
- {
-  "eval": "document.getElementById('ui').style.visibility = 'hidden'; __P.placeAt(-414, 5512, 30); __trk(3.2, 0, 1.3, 1.0)"
- },
- {
-  "wait": 1200
- },
- {
-  "shot": "m01-front"
- },
- {
-  "eval": "__trk(3.2, 50, 1.2, 0.95)"
- },
- {
-  "wait": 500
- },
- {
-  "shot": "m02-three-quarter"
- },
- {
-  "eval": "__trk(3.4, 180, 1.4, 0.95)"
- },
- {
-  "wait": 500
- },
- {
-  "shot": "m03-back"
- },
- {
-  "eval": "__trk(1.3, 10, 1.65, 1.62)"
- },
- {
-  "wait": 500
- },
- {
-  "shot": "m04-face"
- },
- {
-  "eval": "__trk(4.5, 90, 1.0, 0.9); __P.debugDrive({ headingDeg: 203 })"
- },
- {
-  "wait": 1400
- },
- {
-  "shot": "m05-walk-a"
- },
- {
-  "wait": 180
- },
- {
-  "shot": "m06-walk-b"
- },
- {
-  "wait": 180
- },
- {
-  "shot": "m07-walk-c"
- },
- {
-  "eval": "__P.debugDrive({ headingDeg: 203, run: true })"
- },
- {
-  "wait": 1500
- },
- {
-  "shot": "m08-run-a"
- },
- {
-  "wait": 120
- },
- {
-  "shot": "m09-run-b"
- },
- {
-  "wait": 120
- },
- {
-  "shot": "m10-run-c"
- },
- {
-  "eval": "__P.debugDrive({ headingDeg: 203, jump: true })"
- },
- {
-  "wait": 200
- },
- {
-  "shot": "m11-jump"
- },
- {
-  "eval": "__P.debugDrive(null); __P.placeAt(-418, 5522, 30)"
- },
- {
-  "wait": 1500
- },
- {
-  "eval": "__trk(4.0, 35, 1.3, 0.95)"
- },
- {
-  "wait": 600
- },
- {
-  "shot": "m12-idle"
- },
- {
-  "state": "end"
- }
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 60000 },
+  { "start": {} },
+  { "time": 19.2 },
+  { "weather": "clear" },
+  { "teleport": [-340, 5540, 250] },
+  { "wait": 1500 },
+  { "eval": "window.__K = __KODIAK__; window.__P = __K.systems.player; __P.debugAshore()" },
+  { "wait": 800 },
+  { "eval": "window.__trk = (dist, angDeg, h, lookH) => { cancelAnimationFrame(window.__trkId); const f = () => { const p = __P.position; const a = __P.heading + angDeg * Math.PI / 180; __K.camera([p.x + Math.sin(a) * dist, p.y + h, p.z - Math.cos(a) * dist], [p.x, p.y + lookH, p.z]); window.__trkId = requestAnimationFrame(f); }; f(); }; window.__stop = () => { cancelAnimationFrame(window.__trkId); __K.camera(null); }; window.__away = () => { const s = __K.systems.seiner.position, p = __P.position; return (Math.atan2(s.x - p.x, -(s.z - p.z)) * 180 / Math.PI) + 180; }; true" },
+  { "eval": "document.getElementById('ui').style.visibility = 'hidden'; __P.placeAt(-414, 5512, 30); __P.placeAt(-414, 5512, __away()); __trk(3.2, 0, 1.3, 1.0)" },
+  { "wait": 1200 },
+  { "shot": "m01-front" },
+  { "eval": "__trk(3.2, 50, 1.2, 0.95)" },
+  { "wait": 500 },
+  { "shot": "m02-three-quarter" },
+  { "eval": "__trk(3.4, 180, 1.4, 0.95)" },
+  { "wait": 500 },
+  { "shot": "m03-back" },
+  { "eval": "__trk(1.2, 0, 1.7, 1.66)" },
+  { "wait": 500 },
+  { "shot": "m04-face" },
+  { "eval": "__trk(1.3, 35, 1.7, 1.64)" },
+  { "wait": 300 },
+  { "shot": "m04b-face-34" },
+  { "eval": "__trk(4.5, 90, 1.0, 0.9); __P.debugDrive({ headingDeg: 203 })" },
+  { "wait": 1400 },
+  { "shot": "m05-walk-a" },
+  { "wait": 180 },
+  { "shot": "m06-walk-b" },
+  { "wait": 180 },
+  { "shot": "m07-walk-c" },
+  { "eval": "__P.debugDrive({ headingDeg: 203, run: true })" },
+  { "wait": 1500 },
+  { "shot": "m08-run-a" },
+  { "wait": 120 },
+  { "shot": "m09-run-b" },
+  { "wait": 120 },
+  { "shot": "m10-run-c" },
+  { "eval": "__P.debugDrive({ headingDeg: 203, jump: true })" },
+  { "wait": 200 },
+  { "shot": "m11-jump" },
+  { "eval": "__P.debugDrive(null); __P.placeAt(-418, 5522, 30)" },
+  { "wait": 1500 },
+  { "eval": "__trk(4.0, 35, 1.3, 0.95)" },
+  { "wait": 600 },
+  { "shot": "m12-idle" },
+  { "state": "end" }
 ]

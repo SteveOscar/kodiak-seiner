@@ -1,59 +1,110 @@
 [
  {
-  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"lod-0\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1400, 3300), 0); const ly = Math.max(t.heightAt(-800, 2900), 0); K.camera([-1400, hy + 45, 3300], [-800, ly + 20, 2900]); }  window.__tkShot = { name: \"lod-0\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1400, 3300), 0); const ly = Math.max(t.heightAt(-800, 2900), 0); K.camera([-1400, hy + 45, 3300], [-800, ly + 20, 2900]); } } return performance.now() - window.__tkShot.t > 1800; })()",
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"seq-0\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1500.0, 3350.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1500.0, hy + 60, 3350.0], [-700, ly + 30, 2850]); }  window.__tkShot = { name: \"seq-0\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1500.0, 3350.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1500.0, hy + 60, 3350.0], [-700, ly + 30, 2850]); } } return performance.now() - window.__tkShot.t > 900; })()",
   "timeout": 120000
  },
  {
-  "shot": "lod-0"
+  "shot": "seq-0"
  },
  {
-  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"lod-1\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1360, 3275), 0); const ly = Math.max(t.heightAt(-760, 2875), 0); K.camera([-1360, hy + 45, 3275], [-760, ly + 20, 2875]); }  window.__tkShot = { name: \"lod-1\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1360, 3275), 0); const ly = Math.max(t.heightAt(-760, 2875), 0); K.camera([-1360, hy + 45, 3275], [-760, ly + 20, 2875]); } } return performance.now() - window.__tkShot.t > 1800; })()",
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"seq-1\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1495.0, 3347.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1495.0, hy + 60, 3347.0], [-700, ly + 30, 2850]); }  window.__tkShot = { name: \"seq-1\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1495.0, 3347.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1495.0, hy + 60, 3347.0], [-700, ly + 30, 2850]); } } return performance.now() - window.__tkShot.t > 900; })()",
   "timeout": 120000
  },
  {
-  "shot": "lod-1"
+  "shot": "seq-1"
  },
  {
-  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"lod-2\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1320, 3250), 0); const ly = Math.max(t.heightAt(-720, 2850), 0); K.camera([-1320, hy + 45, 3250], [-720, ly + 20, 2850]); }  window.__tkShot = { name: \"lod-2\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1320, 3250), 0); const ly = Math.max(t.heightAt(-720, 2850), 0); K.camera([-1320, hy + 45, 3250], [-720, ly + 20, 2850]); } } return performance.now() - window.__tkShot.t > 1800; })()",
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"seq-2\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1490.0, 3344.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1490.0, hy + 60, 3344.0], [-700, ly + 30, 2850]); }  window.__tkShot = { name: \"seq-2\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1490.0, 3344.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1490.0, hy + 60, 3344.0], [-700, ly + 30, 2850]); } } return performance.now() - window.__tkShot.t > 900; })()",
   "timeout": 120000
  },
  {
-  "shot": "lod-2"
+  "shot": "seq-2"
  },
  {
-  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"lod-3\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1280, 3225), 0); const ly = Math.max(t.heightAt(-680, 2825), 0); K.camera([-1280, hy + 45, 3225], [-680, ly + 20, 2825]); }  window.__tkShot = { name: \"lod-3\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1280, 3225), 0); const ly = Math.max(t.heightAt(-680, 2825), 0); K.camera([-1280, hy + 45, 3225], [-680, ly + 20, 2825]); } } return performance.now() - window.__tkShot.t > 1800; })()",
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"seq-3\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1485.0, 3341.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1485.0, hy + 60, 3341.0], [-700, ly + 30, 2850]); }  window.__tkShot = { name: \"seq-3\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1485.0, 3341.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1485.0, hy + 60, 3341.0], [-700, ly + 30, 2850]); } } return performance.now() - window.__tkShot.t > 900; })()",
   "timeout": 120000
  },
  {
-  "shot": "lod-3"
+  "shot": "seq-3"
  },
  {
-  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"lod-4\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1240, 3200), 0); const ly = Math.max(t.heightAt(-640, 2800), 0); K.camera([-1240, hy + 45, 3200], [-640, ly + 20, 2800]); }  window.__tkShot = { name: \"lod-4\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1240, 3200), 0); const ly = Math.max(t.heightAt(-640, 2800), 0); K.camera([-1240, hy + 45, 3200], [-640, ly + 20, 2800]); } } return performance.now() - window.__tkShot.t > 1800; })()",
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"seq-4\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1480.0, 3338.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1480.0, hy + 60, 3338.0], [-700, ly + 30, 2850]); }  window.__tkShot = { name: \"seq-4\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1480.0, 3338.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1480.0, hy + 60, 3338.0], [-700, ly + 30, 2850]); } } return performance.now() - window.__tkShot.t > 900; })()",
   "timeout": 120000
  },
  {
-  "shot": "lod-4"
+  "shot": "seq-4"
  },
  {
-  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"lod-5\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1200, 3175), 0); const ly = Math.max(t.heightAt(-600, 2775), 0); K.camera([-1200, hy + 45, 3175], [-600, ly + 20, 2775]); }  window.__tkShot = { name: \"lod-5\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1200, 3175), 0); const ly = Math.max(t.heightAt(-600, 2775), 0); K.camera([-1200, hy + 45, 3175], [-600, ly + 20, 2775]); } } return performance.now() - window.__tkShot.t > 1800; })()",
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"seq-5\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1475.0, 3335.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1475.0, hy + 60, 3335.0], [-700, ly + 30, 2850]); }  window.__tkShot = { name: \"seq-5\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1475.0, 3335.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1475.0, hy + 60, 3335.0], [-700, ly + 30, 2850]); } } return performance.now() - window.__tkShot.t > 900; })()",
   "timeout": 120000
  },
  {
-  "shot": "lod-5"
+  "shot": "seq-5"
  },
  {
-  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"lod-6\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1160, 3150), 0); const ly = Math.max(t.heightAt(-560, 2750), 0); K.camera([-1160, hy + 45, 3150], [-560, ly + 20, 2750]); }  window.__tkShot = { name: \"lod-6\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1160, 3150), 0); const ly = Math.max(t.heightAt(-560, 2750), 0); K.camera([-1160, hy + 45, 3150], [-560, ly + 20, 2750]); } } return performance.now() - window.__tkShot.t > 1800; })()",
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"seq-6\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1470.0, 3332.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1470.0, hy + 60, 3332.0], [-700, ly + 30, 2850]); }  window.__tkShot = { name: \"seq-6\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1470.0, 3332.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1470.0, hy + 60, 3332.0], [-700, ly + 30, 2850]); } } return performance.now() - window.__tkShot.t > 900; })()",
   "timeout": 120000
  },
  {
-  "shot": "lod-6"
+  "shot": "seq-6"
  },
  {
-  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"lod-7\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1120, 3125), 0); const ly = Math.max(t.heightAt(-520, 2725), 0); K.camera([-1120, hy + 45, 3125], [-520, ly + 20, 2725]); }  window.__tkShot = { name: \"lod-7\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1120, 3125), 0); const ly = Math.max(t.heightAt(-520, 2725), 0); K.camera([-1120, hy + 45, 3125], [-520, ly + 20, 2725]); } } return performance.now() - window.__tkShot.t > 1800; })()",
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"seq-7\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1465.0, 3329.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1465.0, hy + 60, 3329.0], [-700, ly + 30, 2850]); }  window.__tkShot = { name: \"seq-7\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1465.0, 3329.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1465.0, hy + 60, 3329.0], [-700, ly + 30, 2850]); } } return performance.now() - window.__tkShot.t > 900; })()",
   "timeout": 120000
  },
  {
-  "shot": "lod-7"
+  "shot": "seq-7"
+ },
+ {
+  "eval": "__KODIAK__.systems.terrain.setDebug({ defines: { TK_DBG_LEVELS: true } }); 1"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"lvl-0\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1500.0, 3350.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1500.0, hy + 60, 3350.0], [-700, ly + 30, 2850]); }  window.__tkShot = { name: \"lvl-0\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1500.0, 3350.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1500.0, hy + 60, 3350.0], [-700, ly + 30, 2850]); } } return performance.now() - window.__tkShot.t > 900; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "lvl-0"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"lvl-2\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1490.0, 3344.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1490.0, hy + 60, 3344.0], [-700, ly + 30, 2850]); }  window.__tkShot = { name: \"lvl-2\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1490.0, 3344.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1490.0, hy + 60, 3344.0], [-700, ly + 30, 2850]); } } return performance.now() - window.__tkShot.t > 900; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "lvl-2"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"lvl-4\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1480.0, 3338.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1480.0, hy + 60, 3338.0], [-700, ly + 30, 2850]); }  window.__tkShot = { name: \"lvl-4\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1480.0, 3338.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1480.0, hy + 60, 3338.0], [-700, ly + 30, 2850]); } } return performance.now() - window.__tkShot.t > 900; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "lvl-4"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"lvl-6\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1470.0, 3332.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1470.0, hy + 60, 3332.0], [-700, ly + 30, 2850]); }  window.__tkShot = { name: \"lvl-6\", t: performance.now() }; } else { { const t = K.systems.terrain; const hy = Math.max(t.heightAt(-1470.0, 3332.0), 0); const ly = Math.max(t.heightAt(-700, 2850), 0); K.camera([-1470.0, hy + 60, 3332.0], [-700, ly + 30, 2850]); } } return performance.now() - window.__tkShot.t > 900; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "lvl-6"
+ },
+ {
+  "eval": "__KODIAK__.systems.terrain.setDebug({ defines: { TK_DBG_LEVELS: false } }); 1"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"lvl-boat\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([5900, 22, -500], [4950, 45, -1350]);  window.__tkShot = { name: \"lvl-boat\", t: performance.now() }; } else { K.camera([5900, 22, -500], [4950, 45, -1350]); } return performance.now() - window.__tkShot.t > 900; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "lvl-boat"
+ },
+ {
+  "eval": "__KODIAK__.systems.terrain.setDebug({ defines: { TK_DBG_LEVELS: true } }); 1"
+ },
+ {
+  "until": "(() => { const K = window.__KODIAK__; if (!K || !['title','play'].includes(K.ctx.state.mode)) return false; if (!window.__tkShot || window.__tkShot.name !== \"lvl-boat-tint\") { if (K.ctx.state.mode === 'title') K.start({}); K.ctx.clock.scale = 0; K.setTime(14); if (K.systems.ui) K.systems.ui.visible = false;  K.camera([5900, 22, -500], [4950, 45, -1350]);  window.__tkShot = { name: \"lvl-boat-tint\", t: performance.now() }; } else { K.camera([5900, 22, -500], [4950, 45, -1350]); } return performance.now() - window.__tkShot.t > 1500; })()",
+  "timeout": 120000
+ },
+ {
+  "shot": "lvl-boat-tint"
  },
  {
   "state": "end"

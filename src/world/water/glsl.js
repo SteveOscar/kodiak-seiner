@@ -225,9 +225,10 @@ uniform vec3 uWaterAbsorb;
 
 uniform sampler2D uDetail;     // tileable slope texture (textures.js encoding): rg slope, b mean squared slope
 uniform sampler2D uFoamNoise;  // r bubbly foam cells, g fbm, b streaks
-uniform sampler2D uFoamField;  // r foam level, g lingering wake
+uniform sampler2D uFoamField;  // r foam level, g aerated trail, b wake height (m), a its velocity (repeat-wrapped)
 uniform sampler2D uRippleField; // rg ripple slope, b ring froth
 uniform vec4 uFieldInfo;       // foam field size, centre x, centre z, 1 if valid
+uniform vec4 uFieldTexel;      // texel (m), 1 / resolution, wake slope gain, unused
 uniform vec4 uRippleInfo;      // ripple field size, centre x, centre z, 1 if valid
 
 uniform vec3 uShelfColor;
@@ -455,18 +456,30 @@ void main() {
   gl_FragColor = vec4( slope + dslope, jac + crestness + variance + steepRes + dvar, 1.0 ); return;
 #endif
 
-  // Foam field (stamps) and ripples.
+  // Stamp fields: foam, the aerated trail, wake waves (slopes from central differences), and ripples.
   float stampFoam = 0.0;
-  float wake = 0.0;
+  float trail = 0.0;
+  float wakeH = 0.0;
+  float wakeSteep = 0.0;
+  vec2 wslope = vec2( 0.0 );
   vec2 rslope = vec2( 0.0 );
   float froth = 0.0;
   // Beyond ~700 m stamps are sub-pixel, and the field has no mips: sampling it there would only thrash the cache.
   if ( uFieldInfo.w > 0.5 && dist < 700.0 ) {
     vec2 rel = abs( P.xz - uFieldInfo.yz ) / uFieldInfo.x;
     float inWin = 1.0 - smoothstep( 0.42, 0.5, max( rel.x, rel.y ) );
-    vec4 ff = textureGrad( uFoamField, fract( P.xz / uFieldInfo.x ), ldx / uFieldInfo.x, ldy / uFieldInfo.x );
+    vec2 fuv = P.xz / uFieldInfo.x;
+    float e = uFieldTexel.y;
+    vec4 ff = texture( uFoamField, fuv );
+    float hr = texture( uFoamField, fuv + vec2( e, 0.0 ) ).b;
+    float hu = texture( uFoamField, fuv + vec2( 0.0, e ) ).b;
     stampFoam = ff.r * inWin;
-    wake = ff.g * inWin;
+    trail = ff.g * inWin;
+    wakeH = ff.b * inWin;
+    vec2 gh = vec2( hr - ff.b, hu - ff.b ) / uFieldTexel.x * inWin;
+    wakeSteep = length( gh );
+    // Wake waves are a few texels wide: fade their slopes once a pixel covers a couple of metres (no sparkle).
+    wslope = gh * uFieldTexel.z * ( 1.0 - smoothstep( 1.2, 3.5, fp ) );
     vec2 ruv = ( P.xz - uRippleInfo.yz ) / uRippleInfo.x + 0.5;
     if ( uRippleInfo.w > 0.5 && all( greaterThan( ruv, vec2( 0.0 ) ) ) && all( lessThan( ruv, vec2( 1.0 ) ) ) ) {
       vec4 rf = textureGrad( uRippleField, ruv, ldx / uRippleInfo.x, ldy / uRippleInfo.x );
@@ -475,8 +488,8 @@ void main() {
       froth = rf.b * rfade;
     }
   }
-  // A lingering wake is a smoother slick with a faint foam trail.
-  dslope *= 1.0 - 0.55 * clamp( wake * 1.4, 0.0, 1.0 );
+  // The trail is a slick: churned water flattens the capillary detail for a long time after the foam has gone.
+  dslope *= 1.0 - 0.6 * smoothstep( 0.02, 0.3, trail );
 
   // Rain beats down the short waves, dimples the surface with rings and fizzes with tiny splashes.
   vec2 rain = vec2( 0.0 );
@@ -491,7 +504,7 @@ void main() {
     rainSplash = max( max( r1.z, r2.z ), r3.z ) * rf * ( 1.0 - smoothstep( 3.0, 16.0, dist ) );
   }
 
-  vec2 totalSlope = slope + dslope + rslope + rain;
+  vec2 totalSlope = slope + dslope + rslope + rain + wslope;
   vec3 N = normalize( vec3( - totalSlope.x, 1.0, - totalSlope.y ) );
   variance += dvar + uRain * 0.007;
 
@@ -621,10 +634,18 @@ void main() {
     }
   }
 
-  float stampF = kFoamAt( clamp( stampFoam * 1.1, 0.0, 1.0 ), cells );
-  // The lingering wake trail: faint streaky foam along the slick.
-  float wakeF = kFoamAt( clamp( wake, 0.0, 1.0 ) * ( 0.35 + 0.4 * fn.g ), cells ) * 0.7;
-  aer = max( aer, max( smoothstep( 0.0, 0.55, stampFoam ), wake * 0.5 ) );
+  // Stamp foam has a noise floor: weak levels (corkline lace, the thin edges of a wash) are sparse fine flecks, 0.4 is
+  // an open lace, 0.6 and up reads as solid white. Finer bubble structure than whitecaps, without the large-scale
+  // modulation that made wakes blotchy.
+  float cellsF = clamp( fn.r * 0.72 + fnB.r * 0.28 + ( fn.g - 0.5 ) * 0.12, 0.0, 1.0 );
+  float stampF = kFoamAt( smoothstep( 0.08, 0.85, stampFoam ) * 0.95, cellsF );
+  // Young trail: the last of the wash foam thinning out along the slick into flecks; older trail is aerated water only.
+  float wakeF = kFoamAt( clamp( ( trail - 0.25 ) * 0.8, 0.0, 0.55 ) * ( 0.5 + 0.5 * fn.g ), cellsF ) * 0.75;
+  // Breaking crests of the V close to the boat: a thin broken line where the wake wave is steep.
+  float vCrest = smoothstep( 0.06, 0.12, wakeSteep ) * smoothstep( 0.01, 0.04, wakeH ) * smoothstep( 0.3, 0.75, fn.g + 0.25 * fnB.g );
+  wakeF = max( wakeF, kFoamAt( vCrest * 0.42, cellsF ) );
+  // Bubble clouds under a wash fill the gaps between foam patches with milky aquamarine instead of dark water.
+  aer = max( aer, max( smoothstep( 0.0, 0.4, stampFoam ), smoothstep( 0.0, 0.5, trail ) * 0.7 ) );
 
   float shoreF = 0.0;
   if ( dist < 3200.0 && shore < 40.0 ) {
@@ -663,6 +684,11 @@ void main() {
   vec3 premult = F * refl + ( alpha - F ) * mix( body, aerCol, aerA ) + spec + sss;
   alpha = mix( alpha, 1.0, foam );
   premult = mix( premult, foamLit, foam ) + spec * foam * 0.15;
+#ifdef TONE_MAPPING
+  // Canvas path (no HDR target, quality 'low'): tone mapping runs before blending, so a bright glint divided by the thin
+  // layer's alpha would be clipped and then scaled back down by that alpha. Glints make the layer opaque instead.
+  alpha = mix( alpha, 1.0, smoothstep( 0.35, 2.5, dot( premult, vec3( 0.2126, 0.7152, 0.0722 ) ) ) );
+#endif
   vec3 col = premult / alpha;
 #ifdef KX_E4
   gl_FragColor = vec4( col, alpha ); return;
@@ -684,6 +710,8 @@ void main() {
     else if ( DEBUG_VIEW == 10 ) d = premult;
     else if ( DEBUG_VIEW == 11 ) d = col;
     else if ( DEBUG_VIEW == 12 ) d = vec3( spacing / 16.0, fp / 16.0, 0.0 );
+    else if ( DEBUG_VIEW == 13 ) d = vec3( stampFoam, clamp( 0.5 + wakeH * 8.0, 0.0, 1.0 ), trail );
+    else if ( DEBUG_VIEW == 14 ) d = vec3( wakeSteep * 5.0, wakeSteep > 0.1 ? 1.0 : 0.0, wakeSteep > 0.2 ? 1.0 : 0.0 );
     if ( any( isnan( d ) ) ) d = vec3( 1.0, 0.0, 1.0 );
     if ( any( isinf( d ) ) ) d = vec3( 0.0, 1.0, 0.0 );
     gl_FragColor = vec4( d, 1.0 );

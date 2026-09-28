@@ -35,7 +35,13 @@ export async function create(ctx) {
     fur: createRigMaterial(ctx, 'marine', { roughness: 0.92, name: 'wildlife-otter' }),
     pinniped: createRigMaterial(ctx, 'marine', { roughness: 0.6, name: 'wildlife-pinniped' }),
     static: createRigMaterial(ctx, null, { roughness: 0.92, name: 'wildlife-static' }),
-    quad: (kind, hip) => createRigMaterial(ctx, 'quad', { roughness: kind === 'goat' ? 0.96 : 0.9, hip, name: `wildlife-${kind}` }),
+    quad: (kind, hip) =>
+      createRigMaterial(ctx, 'quad', {
+        roughness: kind === 'goat' ? 0.96 : 0.9,
+        hip,
+        name: `wildlife-${kind}`,
+        sheen: kind === 'boar' || kind === 'sow' || kind === 'cub' ? { amount: 0.55, color: '#9c8568', roughness: 0.5 } : kind === 'goat' ? null : { amount: 0.45, color: '#a08a70', roughness: 0.55 },
+      }),
     quadDepth: (kind, hip) => createRigDepthMaterial(ctx, 'quad', { hip }),
   };
   const fx = createFx(ctx);
@@ -154,6 +160,25 @@ export async function create(ctx) {
     cand.clear();
   }
 
+  // ---- QA studio: pinned static instances of any herd (model review shots; empty in play)
+  const herdByName = new Map();
+  for (const h of [...Object.values(birds.herds), birds.snagHerd, ...Object.values(marine.herds), ...Object.values(land.herds)]) herdByName.set(h.name, h);
+  const studio = [];
+  function renderStudio() {
+    const touched = new Set();
+    for (const it of studio) {
+      const h = herdByName.get(it.herd);
+      if (!h) continue;
+      const mul = h.test(it.x, it.y, it.z, it.radius ?? 3);
+      if (!mul) continue;
+      const a = it.a ?? [];
+      const b = it.b ?? [];
+      h.write(it.x, it.y, it.z, it.heading ?? 0, it.pitch ?? 0, it.roll ?? 0, (it.scale ?? 1) * mul, a[0] ?? 0, a[1] ?? 0, a[2] ?? 0, a[3] ?? 0, b[0] ?? 0, b[1] ?? 0, b[2] ?? 0, b[3] ?? 0, it.tint ?? null);
+      touched.add(h);
+    }
+    for (const h of touched) h.end();
+  }
+
   // ---- render hook: culling, LOD, instance fill (after the camera is final this frame)
   let renderMs = 0;
   let lastKey = '';
@@ -165,13 +190,14 @@ export async function create(ctx) {
         const cam = ctx.camera;
         const e = cam.matrixWorld.elements;
         const key = `${e[12].toFixed(2)},${e[13].toFixed(2)},${e[14].toFixed(2)},${e[8].toFixed(4)},${e[9].toFixed(4)},${cam.fov.toFixed(2)}`;
-        const still = ctx.time.dt === 0 && key === lastKey;
+        const still = ctx.time.dt === 0 && key === lastKey && !studio.length;
         lastKey = key;
         if (!still) {
           view.update(cam, ctx.renderer.domElement?.clientHeight || ctx.renderer.domElement?.height || 720);
           birds.render(view, sight);
           marine.render(view, sight);
           land.render(view, sight);
+          if (studio.length) renderStudio();
           resolveSightings(realDt);
         }
         fx.update();
@@ -231,13 +257,24 @@ export async function create(ctx) {
       return land.encounter;
     },
     sites,
+    // Internal groups for QA framing (read-only use).
+    get qa() {
+      return { rafts: marine.rafts, haulouts: marine.haulouts, seals: marine.sealGroups, ...birds.groups, flocks: birds.flocks };
+    },
     nearestBear: (x, z) => land.nearestBear(x, z),
 
     // QA / staging (debug API; not used by gameplay):
     //   stage('breach' | 'surface' | 'dive' | 'bubbleNet' | 'orcas', x, z, headingRad)
-    //   stageBear(bearId, 'fishing' | 'walk' | 'graze' | 'rest')
+    //   stageBear(bearId, 'fishing' | 'walk' | 'graze' | 'rest', x?, z?)
     stage: (kind, x, z, heading = 0) => marine.stage(kind, x, z, heading),
-    stageBear: (id, state) => land.stage(id, state),
+    stageBear: (id, state, x, z) => land.stage(id, state, x, z),
+    //   studio([{ herd, x, y, z, heading, pitch, roll, scale, a: [4], b: [4], tint }]) pins static model instances;
+    //   studio() clears them and returns the herd names.
+    studio(items = []) {
+      studio.length = 0;
+      for (const it of items) studio.push(it);
+      return [...herdByName.keys()];
+    },
 
     update(dt) {
       if (!(dt > 0)) return;
@@ -269,6 +306,17 @@ export async function create(ctx) {
         encounter: land.encounter,
         sighted: [...seen],
         fx: { active: fx.active, spawned: fx.spawned },
+        tris: (() => {
+          const out = {};
+          let total = 0;
+          for (const [name, h] of herdByName) {
+            const t = h.triangles();
+            if (t) out[name] = t;
+            total += t;
+          }
+          out.total = total;
+          return out;
+        })(),
         ms: { update: +updateMs.toFixed(3), render: +renderMs.toFixed(3) },
       };
     },

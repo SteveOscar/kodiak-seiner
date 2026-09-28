@@ -1,14 +1,21 @@
 // Stamp bookkeeping for the foam/ripple field (pure; preallocated, no per-call allocation).
 //
 // 'foam' stamps are levels: each frame's calls are queued and max-blended into the foam field by the GPU pass, which
-// also decays the field with a ~4 s half-life, so stamping every frame is frame-rate independent.
-// 'ripple' stamps are events: each call spawns one expanding ring kept in a ring buffer of 128 (oldest dropped).
+// also decays the field with a ~4 s half-life, so stamping every frame is frame-rate independent. How a level reads:
+//   < 0.12      faint lace only (corklines, the thin edge of a wash); no trail, no waves
+//   0.15 - 0.55 foam, plus an aerated trail that lingers and spreads (WAKE_HALF_LIFE) and a push on the wake waves
+//   >= 0.6      reads as solid white
+// Wake waves come from changes in stamp pressure (a moving hull, a splash, a brailer dip), so stamping a hull's prop
+// wash and bow wave where they are is enough: the V and its crests follow. Callers need not (and should not) stamp the
+// V arms themselves; steady stamps (a boat idling at anchor, a drifting corkline) make no waves.
+// 'ripple' stamps are events: each call spawns one expanding ring kept in a ring buffer of 128 (oldest dropped). Rings
+// below strength 0.3 are slope only (small jumps); stronger ones start with a brief splash of froth.
 // At most 512 calls per frame are accepted across all callers; stamps outside the field window are ignored.
 
 export const MAX_STAMPS_PER_FRAME = 512;
 export const MAX_RIPPLES = 128;
 export const FOAM_HALF_LIFE = 4; // s
-export const WAKE_HALF_LIFE = 18; // s, lingering wake trail channel
+export const WAKE_HALF_LIFE = 18; // s, lingering aerated trail
 export const RIPPLE_LIFE = 5.5; // s (plus a little for big rings)
 
 export function createStampQueue({ fieldSize = 1024 } = {}) {

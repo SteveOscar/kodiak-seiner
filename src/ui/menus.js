@@ -18,10 +18,17 @@ export function createPausePanel(ctx, { open, close, saves, toTitle, resume }) {
   const note = h('div.panel-note');
   const el = card('panel-pause', [kicker, title, sub, h('div.panel-rule'), list, note]);
 
+  // Keyboard: ↑/↓ (or W/S) move a highlight from Resume, Enter/Space picks it (Resume when the keys were not used).
+  let items = [];
+  let sel = 0;
+  let kbd = false;
+  const mark = () => items.forEach((b, i) => b.classList.toggle('kbd', kbd && i === sel));
+
   function item(label, key, fn, cls = '') {
     const b = button(label, fn, { cls: `menu-item ${cls}`.trim() });
     if (key) b.append(keycap(key, 'menu-key'));
     list.append(b);
+    items.push(b);
     return b;
   }
 
@@ -36,6 +43,9 @@ export function createPausePanel(ctx, { open, close, saves, toTitle, resume }) {
       const bits = [`${clockTime(c.hours)}`, s?.boatName ? `F/V ${s.boatName}` : null, ctx.state.freeExplore ? 'Free explore' : money(ctx.systems.economy?.cash ?? 0)];
       setText(sub, bits.filter(Boolean).join(' · '));
       clear(list);
+      items = [];
+      sel = 0;
+      kbd = false;
       item('Resume', 'Esc', () => resume(), 'primary');
       item('Chart', 'M', () => open('map'));
       item('Logbook', 'L', () => open('logbook'));
@@ -64,8 +74,18 @@ export function createPausePanel(ctx, { open, close, saves, toTitle, resume }) {
       if (explore) setText(note, 'Free Explore keeps your discoveries between visits.');
       else if (!snap) setText(note, `Can’t save ${f?.state && f.state !== 'idle' ? 'mid-set' : ctx.state.control === 'foot' ? 'while ashore' : 'right now'}${info?.savedAt ? ` — last save ${calendar(info.day ?? 0, ctx.config.time.seasonStart).label}, ${clockTime(info.hours ?? 0)}` : ''}.`);
       else setText(note, info?.savedAt ? `Last save ${calendar(info.day ?? 0, ctx.config.time.seasonStart).label}, ${clockTime(info.hours ?? 0)} · autosaves on deliveries, sleep and tie-ups` : 'Autosaves on deliveries, sleep and tie-ups.');
+      mark();
     },
     hide() {},
+    nav(d) {
+      if (!items.length) return;
+      sel = (sel + d + items.length) % items.length;
+      kbd = true;
+      mark();
+    },
+    activate() {
+      items[sel]?.click();
+    },
   };
 }
 
@@ -205,6 +225,12 @@ const KEYS = [
   ]],
 ];
 
+const MOUSE = ['Mouse', [
+  [['Drag'], 'Look around'],
+  [['Wheel'], 'Zoom'],
+  [['R-btn'], 'Binoculars'],
+]];
+
 const STEPS = [
   ['Find the fish', 'Watch for jumpers and working gulls. Binoculars read a school’s species by its jumps; sonar shows marks under the boat.'],
   ['Let ’er go', 'Stop short of the school — not on top of it — and hit Space. The skiff holds the end.'],
@@ -221,14 +247,14 @@ export function createHelpPanel(ctx, { close }) {
     for (const [keys, text] of rows) sec.append(h('div.help-row', null, [h('span.help-keys', null, keys.map((k) => keycap(k))), h('span.help-text', { text })]));
     return sec;
   };
-  const helm = h('div.help-cols', null, [section(KEYS[0])]);
-  const rest = h('div.help-cols', null, [section(KEYS[1]), section(KEYS[2])]);
+  const helm = h('div.help-cols', null, [section(KEYS[0]), section(MOUSE)]);
+  const pad = h('div.help-sec', null, [
+    h('div.help-h', { text: 'Gamepad' }),
+    h('p.help-pad', { text: 'Left stick drive · right stick look · A action · X interact · Y camera · LB binoculars · B horn · Start pause' }),
+  ]);
+  const rest = h('div.help-cols', null, [section(KEYS[1]), section(KEYS[2]), pad]);
   const steps = h('ol.help-steps');
   for (const [t, d] of STEPS) steps.append(h('li', null, [h('span.step-t', { text: t }), h('span.step-d', { text: d })]));
-  const mouse = h('div.help-mouse', null, [
-    h('span', null, [h('b', { text: 'Mouse ' }), 'drag to look around · wheel to zoom · right button for binoculars']),
-    h('span', null, [h('b', { text: 'Gamepad ' }), 'left stick drive · right stick look · A action · X interact · Y camera · LB binoculars · Start pause']),
-  ]);
   const el = card('panel-help', [
     h('div.help-top', null, [
       h('div', null, [h('div.panel-kicker', { text: 'Controls' }), h('h2.panel-title', { text: 'How to work a seine' })]),
@@ -236,7 +262,6 @@ export function createHelpPanel(ctx, { close }) {
     ]),
     h('div.panel-rule'),
     h('div.help-grid', null, [h('div.help-left', null, [steps]), helm, rest]),
-    mouse,
   ]);
   return { id: 'help', el, show() {}, hide() {} };
 }

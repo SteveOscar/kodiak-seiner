@@ -2,28 +2,32 @@
 // photo-mode card that shows the free-camera keys for a few seconds.
 
 import { h, setText, toggle, keycap } from './dom.js';
-import { headingDeg, cardinal } from './lib/format.js';
+import { headingDeg, cardinal, SPECIES_INFO, nmLabel } from './lib/format.js';
+
+const PLURAL = { pink: 'humpies', chum: 'dogs', sockeye: 'reds', coho: 'silvers', king: 'kings' };
 
 export function createOverlays(ctx, root) {
-  // Binoculars: an SVG mask cuts two overlapping circles out of a dark field.
+  // Binoculars: a blurred union of two overlapping circles is cut out of a dark field, so the soft edge follows the
+  // outline of the pair and the overlap in the middle stays clear.
   const bino = h('div.ui-bino');
   bino.innerHTML = `
     <svg class="bino-mask" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
       <defs>
-        <radialGradient id="binoEdge" cx="50%" cy="50%" r="50%">
-          <stop offset="0.80" stop-color="#000" stop-opacity="0"/>
-          <stop offset="0.93" stop-color="#000" stop-opacity="0.55"/>
-          <stop offset="1" stop-color="#000" stop-opacity="1"/>
-        </radialGradient>
-        <mask id="binoHoles">
+        <filter id="binoSoft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="15"/></filter>
+        <mask id="binoHoles" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="900">
           <rect width="1600" height="900" fill="#fff"/>
-          <circle cx="585" cy="450" r="395" fill="#000"/>
-          <circle cx="1015" cy="450" r="395" fill="#000"/>
+          <g filter="url(#binoSoft)">
+            <circle cx="578" cy="450" r="378" fill="#000"/>
+            <circle cx="1022" cy="450" r="378" fill="#000"/>
+          </g>
         </mask>
+        <radialGradient id="binoTint" cx="50%" cy="50%" r="50%">
+          <stop offset="0.55" stop-color="#000" stop-opacity="0"/>
+          <stop offset="1" stop-color="#000" stop-opacity="0.28"/>
+        </radialGradient>
       </defs>
+      <rect width="1600" height="900" fill="url(#binoTint)"/>
       <rect width="1600" height="900" fill="#03080b" mask="url(#binoHoles)"/>
-      <circle cx="585" cy="450" r="395" fill="url(#binoEdge)"/>
-      <circle cx="1015" cy="450" r="395" fill="url(#binoEdge)"/>
     </svg>
     <svg class="bino-reticle" viewBox="-200 -120 400 240" aria-hidden="true">
       <g fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="0.9">
@@ -41,7 +45,16 @@ export function createOverlays(ctx, root) {
     </svg>`;
   const binoBearing = h('div.bino-bearing');
   const binoHint = h('div.bino-hint', { text: 'Hold steady on jumpers to log the school on your chart' });
-  bino.append(binoBearing, binoHint);
+  const loggedTitle = h('div.bl-title');
+  const loggedSub = h('div.bl-sub');
+  const logged = h('div.bino-logged', null, [h('div.bl-kicker', { text: 'Logged on your chart' }), loggedTitle, loggedSub]);
+  bino.append(binoBearing, binoHint, logged);
+  // A school held in the glasses for a second becomes a charted sighting (cameraRig emits camera:sighting).
+  let sighted = null;
+  let loggedT = 0;
+  ctx.events?.on?.('camera:sighting', (e) => {
+    sighted = e ?? null;
+  });
 
   const photo = h('div.ui-photo', null, [
     h('div.photo-card', null, [
@@ -78,7 +91,29 @@ export function createOverlays(ctx, root) {
       }
       if (on) {
         binoTime += realDt;
-        toggle(binoHint, 'show', binoTime < 5);
+        toggle(binoHint, 'show', binoTime < 5 && loggedT <= 0);
+        if (sighted) {
+          const info = SPECIES_INFO[sighted.species];
+          setText(loggedTitle, info ? `${info.name} school — ${PLURAL[sighted.species] ?? info.nick}` : 'A school of salmon');
+          const p = ctx.systems.seiner?.position;
+          const bits = [];
+          if (Number.isFinite(sighted.heading)) bits.push(`heading ${cardinal(headingDeg(sighted.heading), 8)}`);
+          if (p && Number.isFinite(sighted.x)) bits.push(`${nmLabel(Math.hypot(sighted.x - p.x, sighted.z - p.z), ctx.geo)} off`);
+          setText(loggedSub, bits.join(' · '));
+          loggedT = 3.4;
+          toggle(logged, 'show', true);
+          bino.classList.remove('hit');
+          void bino.offsetWidth;
+          bino.classList.add('hit');
+        }
+      }
+      sighted = null;
+      if (loggedT > 0) {
+        loggedT -= realDt;
+        if (loggedT <= 0 || !on) {
+          loggedT = 0;
+          toggle(logged, 'show', false);
+        }
       }
       if (mode === 'photo') {
         photoT += realDt;

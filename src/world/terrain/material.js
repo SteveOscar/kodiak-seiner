@@ -32,22 +32,25 @@ export const PALETTE = {
   alderLight: '#336128',
   spruce: '#1b3822',
   forestFloor: '#2a3a20',
-  rock: '#6c6861',
-  rockDark: '#45433e',
+  rock: '#5f5b55',
+  rockDark: '#3a3834',
   rockWarm: '#7a6e5f',
   lichen: '#8e9270',
+  lichenOrange: '#a8783a',
   scree: '#827c71',
   snow: '#eef2f6',
   gravel: '#77756f',
   gravelWarm: '#857d70',
   sand: '#a79a7c',
-  wrack: '#3b3524',
+  wrack: '#4a4230',
   seabedSand: '#a9996f',
   seabedGravel: '#7b7263',
   seabedRock: '#4d4a40',
   kelpBed: '#3d3a1e',
   mud: '#5b5443',
   lake: '#16303a',
+  fern: '#2c5a2c',
+  seedhead: '#768f4a',
   fireweed: '#c43a86',
   lupine: '#6a5bd0',
   developed: '#86866a',
@@ -62,6 +65,9 @@ attribute vec4 tkNode;
 uniform vec4 tkLod[ 9 ];
 uniform vec3 uCameraPos;
 varying vec3 vTkEnvIrr;
+#ifdef TK_DBG_LEVELS
+varying vec2 vTkLevel;
+#endif
 #if defined( USE_ENVMAP ) && defined( TK_ENV_VS )
   // Diffuse IBL varies slowly with the normal, so it is sampled per vertex from the sky's PMREM (CubeUV) map.
   #define ENVMAP_TYPE_CUBE_UV
@@ -70,13 +76,13 @@ varying vec3 vTkEnvIrr;
   uniform mat3 envMapRotation;
   #include <cube_uv_reflection_fragment>
 #endif
+// Height for the morph distance: one fetch from the 4x-downsampled DEM mip. Any deterministic function of (x, z)
+// keeps shared edge vertices identical between neighbouring quadrants; the error is metres against morph bands of
+// hundreds of metres.
 float tkApproxH( vec2 p ) {
-  float invT = tkSize / ( 2.0 * tkHalf );
-  vec2 fp = clamp( ( p + tkHalf ) * invT - 0.5, vec2( 0.0 ), vec2( tkSize - 1.001 ) );
-  ivec2 i = ivec2( floor( fp ) );
-  vec2 t = fp - vec2( i );
-  float a = tkTexel( i.x, i.y ), b = tkTexel( i.x + 1, i.y ), c = tkTexel( i.x, i.y + 1 ), d = tkTexel( i.x + 1, i.y + 1 );
-  return mix( mix( a, b, t.x ), mix( c, d, t.x ), t.y );
+  float n = tkSize * 0.25;
+  ivec2 i = ivec2( clamp( ( p + tkHalf ) * ( n / ( 2.0 * tkHalf ) ), vec2( 0.0 ), vec2( n - 1.0 ) ) );
+  return texelFetch( tkHeight, i, 2 ).r;
 }
 `;
 
@@ -89,10 +95,14 @@ const VERT_MAIN = /* glsl */ `
   float tkD = distance( vec3( tkXZ.x, tkApproxH( tkXZ ), tkXZ.y ), uCameraPos );
   float tkK = clamp( ( tkD - tkP.x ) * tkP.y, 0.0, 1.0 );
   tkXZ -= mod( position.xz, 2.0 ) * tkS * tkK;
+#ifdef TK_PROF_CHEAPVS
+  vec3 tkSm = vec3( tkApproxH( tkXZ ), 0.0, 0.0 );
+#else
   vec3 tkSm = tkSmooth( tkXZ );
-  // Detail is resolved by levels 0-2; it fades out across level 2's morph band so level 3+ stays smooth.
-  float tkDw = tkL < 2 ? 1.0 : ( tkL == 2 ? 1.0 - tkK : 0.0 );
-#ifdef TK_DEBUG_NODETAIL
+#endif
+  // Detail displacement lives on levels 0-1 and fades out across level 1's morph band (quadtree.js DETAIL_LEVEL).
+  float tkDw = tkL < 1 ? 1.0 : ( tkL == 1 ? 1.0 - tkK : 0.0 );
+#if defined( TK_DEBUG_NODETAIL ) || defined( TK_CHEAP )
   vec3 tkDt = vec3( 0.0 );
 #else
   vec3 tkDt = tkDw > 0.0 ? tkDetail( tkXZ, tkSm.x, tkSm.yz ) * tkDw : vec3( 0.0 );
@@ -100,7 +110,10 @@ const VERT_MAIN = /* glsl */ `
   float tkY = tkSm.x + tkDt.z - position.y * tkP.w;
   vec3 objectNormal = normalize( vec3( -tkSm.y - tkDt.x, 1.0, -tkSm.z - tkDt.y ) );
   vec3 tkWorldPos = vec3( tkXZ.x, tkY, tkXZ.y );
-#if defined( USE_ENVMAP ) && defined( TK_ENV_VS )
+#ifdef TK_DBG_LEVELS
+  vTkLevel = vec2( float( tkL ), tkK );
+#endif
+#if defined( USE_ENVMAP ) && defined( TK_ENV_VS ) && !defined( TK_PROF_NOENV )
   vTkEnvIrr = PI * textureCubeUV( envMap, envMapRotation * objectNormal, 1.0 ).rgb * envMapIntensity;
 #else
   vTkEnvIrr = vec3( 0.0 );
@@ -108,14 +121,17 @@ const VERT_MAIN = /* glsl */ `
 `;
 
 const FRAG_PARS = /* glsl */ `
+#ifdef TK_FRAG_ALU
 ${TK_NOISE_ALU}
+#else
+${TK_NOISE}
+#endif
 ${TK_DETAIL}
 uniform float tkHalf;
 uniform sampler2D tkInfo;
 uniform sampler2D tkCoverA;
 uniform sampler2D tkCoverB;
 uniform sampler2D tkCoverC;
-uniform sampler2D tkRegion;
 uniform sampler2D tkRockTex;
 uniform sampler2D tkCliffTex;
 uniform sampler2D tkGroundTex;
@@ -129,18 +145,36 @@ uniform float uTime;
 uniform float uRain;
 uniform vec2 uWindDir;
 varying vec3 vTkEnvIrr;
+#ifdef TK_DBG_LEVELS
+varying vec2 vTkLevel;
+#endif
 
 // Triplanar sample of a detail texture: .xyz = world-space normal perturbation, .w = albedo variation; hgt = height.
+// Projections with negligible weight (the pow-4 blend leaves one or two on most facets) are skipped.
 vec4 tkTri( sampler2D t, vec3 p, vec3 w, float scale, out float hgt ) {
-  vec4 a = texture( t, p.zy / scale );
-  vec4 b = texture( t, p.xz / scale );
-  vec4 c = texture( t, p.xy / scale );
-  hgt = a.a * w.x + b.a * w.y + c.a * w.z;
-  vec2 na = a.rg * 2.0 - 1.0;
-  vec2 nb = b.rg * 2.0 - 1.0;
-  vec2 nc = c.rg * 2.0 - 1.0;
-  vec3 n = vec3( 0.0, na.y, na.x ) * w.x + vec3( nb.x, 0.0, nb.y ) * w.y + vec3( nc.x, nc.y, 0.0 ) * w.z;
-  return vec4( n, a.b * w.x + b.b * w.y + c.b * w.z );
+  vec4 n = vec4( 0.0 );
+  hgt = 0.0;
+  if ( w.x > 0.03 ) {
+    vec4 a = texture( t, p.zy / scale );
+    vec2 na = a.rg * 2.0 - 1.0;
+    n += vec4( 0.0, na.y, na.x, a.b ) * w.x;
+    hgt += a.a * w.x;
+  }
+  if ( w.y > 0.03 ) {
+    vec4 b = texture( t, p.xz / scale );
+    vec2 nb = b.rg * 2.0 - 1.0;
+    n += vec4( nb.x, 0.0, nb.y, b.b ) * w.y;
+    hgt += b.a * w.y;
+  }
+  if ( w.z > 0.03 ) {
+    vec4 c = texture( t, p.xy / scale );
+    vec2 nc = c.rg * 2.0 - 1.0;
+    n += vec4( nc.x, nc.y, 0.0, c.b ) * w.z;
+    hgt += c.a * w.z;
+  }
+  float ws = ( w.x > 0.03 ? w.x : 0.0 ) + ( w.y > 0.03 ? w.y : 0.0 ) + ( w.z > 0.03 ? w.z : 0.0 );
+  hgt /= ws;
+  return n / ws;
 }
 `;
 
@@ -179,9 +213,13 @@ const LIGHTS_MAIN = /* glsl */ `
     if ( dot( directLight.direction, tkSunView ) > 0.9995 ) directLight.color = uSunColor * tkSunScale * tkSh * ( 1.0 + tkCaustic );
     #if defined( USE_SHADOWMAP ) && ( UNROLLED_LOOP_INDEX < NUM_DIR_LIGHT_SHADOWS )
     directionalLightShadow = directionalLightShadows[ i ];
+    #ifndef TK_PROF_NOSHADOW
     directLight.color *= receiveShadow ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;
     #endif
+    #endif
     tkDirect( directLight, geometryNormal, geometryViewDir, tkDiffuse, tkShin, tkSpec, reflectedLight );
+    // Sun through grass blades and leaves: slopes seen against a low sun glow.
+    reflectedLight.directDiffuse += directLight.color * tkDiffuse * ( tkTransW * pow( saturate( dot( -geometryViewDir, directLight.direction ) ), 5.0 ) );
   }
   #pragma unroll_loop_end
 #endif
@@ -226,7 +264,25 @@ const LIGHTS_MAIN = /* glsl */ `
 // Computes tkAlbedo, tkRough, tkSpec, tkN (world normal), tkSh (terrain sun visibility), tkAO, tkUnder, tkLakeW,
 // tkCaustic, tkSunView. Static cover weights come from the baked cover textures; per-pixel work is limited to what
 // depends on the exact height, detail textures near the camera, and lighting.
+// Seabed under more than ~4.6 optical depths of water in every channel is invisible once kodiak_underwater has
+// attenuated it: such fragments write the water-column colour directly and skip the surface and lighting work.
+const DEEP_SEABED_EXIT = /* glsl */ `
+  if ( vKWorldPos.y < -1.5 ) {
+    float kDepth = -vKWorldPos.y;
+    float kLen = length( cameraPosition - vKWorldPos );
+    float kPath = cameraPosition.y > 0.0 ? kDepth * kLen / max( cameraPosition.y - vKWorldPos.y, 1e-3 ) : kLen;
+    if ( kPath * min( uWaterAbsorb.x, min( uWaterAbsorb.y, uWaterAbsorb.z ) ) > 4.6 ) {
+      gl_FragColor = vec4( uWaterScatter, 1.0 );
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+      #include <fog_fragment>
+      return;
+    }
+  }
+`;
+
 const FRAG_SURFACE = /* glsl */ `
+${DEEP_SEABED_EXIT}
   vec3 tkPw = vKWorldPos;
   float tkDist = length( cameraPosition - tkPw );
   vec2 tkUV = ( tkPw.xz + tkHalf ) / ( 2.0 * tkHalf );
@@ -242,7 +298,7 @@ const FRAG_SURFACE = /* glsl */ `
   float tkS = length( tkG );
   float tkCurv = tkI.z;
   float tkAO = mix( tkI.w, 1.0, tkOutF );
-  float tkSd = texture( uHeightMap, tkUVc ).g;
+  float tkSd = tkH < 6.0 ? textureLod( uHeightMap, tkUVc, 0.0 ).g : -500.0;
   float tkSh = texture( uTerrainShadow, tkUVc ).r;
   float tkNearTex = 1.0 - smoothstep( 0.5, 3.0, tkFw );
 
@@ -253,12 +309,13 @@ const FRAG_SURFACE = /* glsl */ `
   float tkLakeW = 0.0;
   float tkCaustic = 0.0;
   float tkSpec = 0.0;
+  float tkTransW = 0.0;
   vec2 tkGd = tkG;
 
   if ( tkH < -0.6 ) {
     // ---- seabed: seen only through the water column (kodiak_underwater), so a cheap path.
     tkUnder = 1.0;
-    float m2 = texture( tkCoverB, tkUV ).a;
+    float m2 = texture( tkCoverC, tkUV ).g;
     float rocky = smoothstep( 0.25, 0.55, tkS );
     vec4 gv = texture( tkGravelTex, tkPw.xz / 5.3 );
     vec3 bed = mix( ${col(PALETTE.seabedGravel)} * ( 0.7 + 0.6 * gv.b ), ${col(PALETTE.seabedSand)}, smoothstep( 20.0, 90.0, tkSd + ( m2 - 0.5 ) * 60.0 ) );
@@ -281,12 +338,12 @@ const FRAG_SURFACE = /* glsl */ `
     // ---- land, beaches and the waterline. Layers are mixed in sequence so few values stay live at once (the
     // shader is register-bound on Apple GPUs).
     vec4 cA = texture( tkCoverA, tkUV ); // forest, alder, rock score, snow
-    vec4 cB = texture( tkCoverB, tkUV ); // lake, fireweed, lupine, m2 (131 m)
-    vec4 cC = texture( tkCoverC, tkUV ); // wetness, m1 (470 m), m3 (29 m), scree
-    vec3 reg = texture( tkRegion, tkUVc ).rgb; // spruce potential, developed, peninsula
-    float tkPen = reg.b;
-    float m1 = cC.g;
-    float m2 = cB.a;
+    vec4 cB = texture( tkCoverB, tkUV ); // lake, wildflowers, developed, peninsula
+    vec4 cC = texture( tkCoverC, tkUV ); // wetness, m2 (131 m), m3 (29 m), scree
+    float tkPen = cB.a;
+    float tkDev = cB.b;
+    float m1 = tkNoise( tkPw.xz / 470.0 + vec2( 3.1, 9.7 ) );
+    float m2 = cC.g;
     float m3 = cC.b;
     float wet = cC.r;
 
@@ -296,10 +353,62 @@ const FRAG_SURFACE = /* glsl */ `
     if ( tkNear > 0.0 ) tkGd += tkDetail( tkPw.xz, tkH, tkG ).xy * tkNear;
 #endif
 
-    // Ground detail texture (two scales; the fine one only near).
-    vec4 gr = texture( tkGroundTex, tkPw.xz / 13.7 + 0.31 );
-    float grAlb = gr.b;
-    vec2 grN = ( gr.rg * 2.0 - 1.0 ) * 0.4;
+    // Mid-scale relief the 7.8 m DEM cannot carry (normal only; heightAt is unaffected): soil-creep hummocks and
+    // V-shaped rills running down the fall line, which is where Kodiak's alder grows in fingers. Each octave fades out
+    // before its wavelength drops below a few pixels, so distant slopes stay stable.
+    float tkRill = 1.0; // 0 in a rill trough
+    float tkMos = 0.5; // vegetation mosaic, 0.5 = neutral
+    float tkLandW = smoothstep( 0.6, 2.5, tkH );
+#ifndef TK_PROF_NORELIEF
+    if ( tkFw < 2.4 && tkLandW > 0.0 ) {
+      float o1 = 1.0 - smoothstep( 1.0, 2.4, tkFw );
+      float o2 = 1.0 - smoothstep( 0.6, 1.8, tkFw );
+      vec3 n1 = tkNoiseD( tkPw.xz / 23.0 + vec2( 4.7, -2.1 ) );
+      vec2 rel = n1.xy * ( 0.6 / 23.0 ) * o1;
+      if ( o2 > 0.0 ) {
+        vec3 n2 = tkNoiseD( tkPw.xz / 8.5 + vec2( -1.3, 9.2 ) );
+        rel += n2.xy * ( 0.32 / 8.5 ) * o2;
+        tkMos = mix( 0.5, n2.z * 0.6 + n1.z * 0.4, o2 );
+      }
+      float slopeW = smoothstep( 0.2, 0.55, tkS ) * ( 1.0 - smoothstep( 1.5, 2.2, tkS ) ) * ( 1.0 - smoothstep( 0.9, 2.3, tkFw ) );
+      if ( slopeW > 0.0 ) {
+        // The stretched noise is evaluated in the two fixed orientations (of four, 45° apart) nearest the fall line and
+        // blended: rotating the lookup by the local gradient itself would swirl, since world positions are large.
+        float ang = atan( tkG.y, tkG.x ) * ${f(4 / Math.PI)};
+        ang = ang < 0.0 ? ang + 4.0 : ang;
+        float k0 = floor( ang );
+        float bw = smoothstep( 0.0, 1.0, ang - k0 );
+        vec2 rg = vec2( 0.0 );
+        float rc = 0.0;
+        for ( int i = 0; i < 2; i ++ ) {
+          float a = ( k0 + float( i ) ) * ${f(Math.PI / 4)};
+          vec2 gd = vec2( cos( a ), sin( a ) );
+          vec2 tt = vec2( -gd.y, gd.x );
+          vec3 nr = tkNoiseD( vec2( dot( tkPw.xz, tt ) / 15.0, dot( tkPw.xz, gd ) / 90.0 ) + vec2( 11.3 + float( i ) * 5.1, 2.9 ) );
+          float c = 2.0 * nr.z - 1.0;
+          // Rounded V: the crease is softened over |c| < ~0.12 so it does not alias.
+          float cr = c / sqrt( c * c + 0.015 );
+          float wi = i == 0 ? 1.0 - bw : bw;
+          rg += wi * cr * 2.0 * ( nr.x * tt / 15.0 + nr.y * gd / 90.0 );
+          rc += wi * smoothstep( 0.0, 0.45, abs( c ) );
+        }
+        rel += rg * 0.6 * slopeW;
+        tkRill = mix( 1.0, rc, slopeW );
+      }
+      tkGd += rel * tkLandW;
+    }
+#endif
+
+    // Ground detail texture (two scales; the fine one only near; neither once it has averaged out by distance).
+    float grAlb = 0.5;
+    vec2 grN = vec2( 0.0 );
+    vec4 gr;
+    if ( tkFw < 2.4 ) {
+      gr = texture( tkGroundTex, tkPw.xz / 13.7 + 0.31 );
+      float gf = 1.0 - smoothstep( 1.4, 2.4, tkFw );
+      grAlb = mix( 0.5, gr.b, gf );
+      grN = ( gr.rg * 2.0 - 1.0 ) * 0.4 * gf;
+    }
     if ( tkNearTex > 0.0 ) {
       gr = texture( tkGroundTex, tkPw.xz / 3.3 );
       grAlb = mix( grAlb, gr.b * 0.6 + grAlb * 0.4, tkNearTex );
@@ -320,23 +429,37 @@ const FRAG_SURFACE = /* glsl */ `
     land = mix( land, ${col(PALETTE.grassDry)}, dry );
     land = mix( land, ${col(PALETTE.rye)}, ( 1.0 - smoothstep( 2.0, 6.0, tkH ) ) * smoothstep( -80.0, -20.0, tkSd ) * 0.6 );
     land = mix( land, mix( ${col(PALETTE.tundra)}, ${col(PALETTE.tundraBrown)}, smoothstep( 0.35, 0.8, m3 ) * 0.6 + tkPen * 0.35 ), alpine );
+    // Mosaic of meadow communities a few metres across: dark fern and cow-parsnip beds, pale seed-head swards; rill
+    // troughs run lush and dark.
+    land = mix( land, ${col(PALETTE.fern)}, smoothstep( 0.56, 0.74, tkMos ) * 0.6 * ( 1.0 - alpine * 0.6 ) );
+    land = mix( land, ${col(PALETTE.seedhead)}, smoothstep( 0.42, 0.24, tkMos ) * 0.4 * ( 1.0 - wetW ) );
+    land = mix( land, ${col(PALETTE.grassDeep)} * 0.85, ( 1.0 - tkRill ) * 0.55 * ( 1.0 - alpine * 0.5 ) );
     land *= 0.8 + 0.4 * grAlb;
     // Wildflower meadows as distant tints (instanced flowers take over up close); developed ground is trodden.
     float flowerFar = smoothstep( 25.0, 90.0, tkDist );
-    land = mix( land, ${col(PALETTE.fireweed)}, cB.g * ( 0.05 + 0.1 * flowerFar ) );
-    land = mix( land, ${col(PALETTE.lupine)}, cB.b * ( 0.04 + 0.08 * flowerFar ) );
-    land = mix( land, ${col(PALETTE.developed)} * ( 0.8 + 0.4 * grAlb ), reg.g * 0.35 * smoothstep( 0.25, 0.6, m3 + grAlb * 0.3 ) );
+    land = mix( land, ${col(PALETTE.fireweed)}, max( 0.0, 2.0 * cB.g - 1.0 ) * ( 0.05 + 0.1 * flowerFar ) );
+    land = mix( land, ${col(PALETTE.lupine)}, max( 0.0, 1.0 - 2.0 * cB.g ) * ( 0.04 + 0.08 * flowerFar ) );
+    land = mix( land, ${col(PALETTE.developed)} * ( 0.8 + 0.4 * grAlb ), tkDev * 0.35 * smoothstep( 0.25, 0.6, m3 + grAlb * 0.3 ) );
     tkLakeW = smoothstep( 0.35, 0.65, cB.r ) * ( 1.0 - tkOutF );
     tkRough = 0.93;
     tkPert = vec3( grN.x, 0.0, grN.y ) * 0.55;
+    tkTransW = 0.4 * tkLandW * ( 1.0 - alpine * 0.6 );
 
-    // 2. alder and salmonberry thickets: dark, clumpy crowns that read as bands along the gullies.
-    if ( cA.g > 0.01 ) {
+    // 2. alder and salmonberry thickets: dark, clumpy crowns that read as bands along the gullies and as fingers down
+    // the rills of mid slopes.
+    float tkAlderW = max( cA.g, ( 1.0 - tkRill ) * ${f(COVER.rillAlder)} * smoothstep( 5.0, 16.0, tkH ) * ( 1.0 - smoothstep( 88.0, 125.0, tkH ) ) * ( 1.0 - cA.r ) * ( 1.0 - tkDev ) );
+    if ( tkAlderW > 0.01 ) {
       // Per-pixel crowns only while each noise cell spans many pixels: further out value-noise cells read as squares.
-      float clump = tkFw < 0.6 ? mix( tkNoise( tkPw.xz / 3.4 + vec2( 5.1, 1.7 ) ), m3, smoothstep( 0.15, 0.6, tkFw ) ) : m3;
-      vec3 alderC = mix( ${col(PALETTE.alder)}, ${col(PALETTE.alderLight)}, smoothstep( 0.2, 0.8, clump ) ) * ( 0.75 + 0.5 * grAlb );
+      // Two octaves on rotated lattices so the value-noise cells never line up into squares.
+      float clump = m3;
+      if ( tkFw < 0.6 ) {
+        vec2 q1 = mat2( 0.8, -0.6, 0.6, 0.8 ) * tkPw.xz / 3.4;
+        vec2 q2 = mat2( 0.38, 0.92, -0.92, 0.38 ) * tkPw.xz / 1.9;
+        clump = mix( tkNoise( q1 + vec2( 5.1, 1.7 ) ) * 0.65 + tkNoise( q2 - vec2( 2.3, 8.1 ) ) * 0.35, m3, smoothstep( 0.15, 0.6, tkFw ) );
+      }
+      vec3 alderC = mix( ${col(PALETTE.alder)}, ${col(PALETTE.alderLight)}, smoothstep( 0.15, 0.85, clump ) ) * ( 0.75 + 0.5 * grAlb );
       // A soft ramp: sharpening the bilinear 7.8 m bake would print its texel grid on the canopy.
-      float aw = smoothstep( 0.0, 0.7, cA.g ) * ( 0.85 + 0.3 * grAlb );
+      float aw = smoothstep( 0.0, 0.7, tkAlderW ) * ( 0.85 + 0.3 * grAlb );
       land = mix( land, alderC, aw );
       tkPert = mix( tkPert, vec3( grN.x, 0.0, grN.y ) * 1.3, aw );
       tkRough = mix( tkRough, 0.88, aw );
@@ -344,10 +467,11 @@ const FRAG_SURFACE = /* glsl */ `
 
     // 3. spruce: canopy crowns read at distance, dark forest floor near (where the trees themselves stand).
     if ( cA.r > 0.0 ) {
-      float crown = tkFw < 0.9 ? mix( tkNoise( tkPw.xz / 5.5 + vec2( 2.3, 8.8 ) ), m3, smoothstep( 0.25, 0.9, tkFw ) ) : m3;
+      float crown = tkFw < 0.9 ? mix( tkNoise( mat2( 0.8, 0.6, -0.6, 0.8 ) * tkPw.xz / 5.5 + vec2( 2.3, 8.8 ) ), m3, smoothstep( 0.25, 0.9, tkFw ) ) : m3;
       vec3 spruceC = mix( ${col(PALETTE.spruce)} * ( 0.8 + 0.45 * crown ), ${col(PALETTE.forestFloor)} * ( 0.8 + 0.4 * grAlb ), 1.0 - smoothstep( 120.0, 420.0, tkDist ) );
       float fw = cA.r * ( 1.0 - tkOutF * 0.5 );
       land = mix( land, spruceC, fw );
+      tkTransW *= 1.0 - fw * 0.6;
       tkPert *= 1.0 - fw * 0.6;
     }
 
@@ -368,24 +492,41 @@ const FRAG_SURFACE = /* glsl */ `
     }
     // Rock follows the ribs and crests (convex), turf and scree fill the gullies (concave, wet), so crags break into
     // dendritic bands instead of round stains.
-    float ribs = clamp( -tkCurv, -2.5, 2.5 ) * 0.11 - smoothstep( 0.12, 0.45, wet ) * 0.3;
-    float solid = smoothstep( ${f(COVER.rock0)}, ${f(COVER.rock1)}, score + ribs + ( m3 - 0.5 ) * 0.28 + ( grAlb - 0.5 ) * 0.12 );
+    float ribs = clamp( -tkCurv, -2.5, 2.5 ) * 0.07 - smoothstep( 0.12, 0.45, wet ) * 0.3;
+    float solid = smoothstep( ${f(COVER.rock0 - 0.12)}, ${f(COVER.rock1)}, score + ribs + ( m3 - 0.5 ) * 0.28 + ( grAlb - 0.5 ) * 0.12 );
+    // Where the ground is only just steep enough, rock shows on the ribs between the fall-line rills and turf fills
+    // the rill troughs, so outcrops fray into streaks instead of ending in a hard outline.
+    solid *= mix( smoothstep( 0.25, 0.85, tkRill ), 1.0, smoothstep( ${f(COVER.rock1 - 0.1)}, ${f(COVER.rock1 + 0.25)}, score + ribs ) );
     // Away from the steepest cores, crags break into bedding ledges along the contour with turf between (phase from
     // the baked macro noise, so the bands wander and end instead of ringing the hill).
-    float strata = smoothstep( 0.32, 0.6, tkNoise( vec2( tkH / 6.5 + m2 * 4.0, m3 * 3.0 + m1 * 5.0 ) ) );
-    solid *= mix( 0.15 + 0.85 * strata, 1.0, smoothstep( ${f(COVER.rock1)}, ${f(COVER.rock1 + 0.4)}, score + ribs ) );
+    if ( solid > 0.0 ) {
+      float strata = smoothstep( 0.32, 0.6, tkNoise( vec2( tkH / 6.5 + m2 * 4.0, m3 * 3.0 + m1 * 5.0 ) ) );
+      solid *= mix( 0.5 + 0.5 * strata, 1.0, smoothstep( ${f(COVER.rock1)}, ${f(COVER.rock1 + 0.4)}, score + ribs ) );
+    }
     float tkRockW = max( solid, outcrop );
     vec4 gv = vec4( 0.5 );
     if ( screeW > 0.01 || tkH < 3.0 ) {
       gv = tkNearTex > 0.0 ? mix( texture( tkGravelTex, tkPw.xz / 4.6 + 0.17 ), texture( tkGravelTex, tkPw.xz / 1.35 ), tkNearTex ) : texture( tkGravelTex, tkPw.xz / 4.6 + 0.17 );
     }
+#ifdef TK_PROF_NOROCK
+    tkRockW = 0.0; screeW = 0.0;
+#endif
     if ( tkRockW > 0.01 || screeW > 0.01 ) {
       vec3 w = pow( abs( normalize( vec3( -tkGd.x, 1.0, -tkGd.y ) ) ), vec3( 4.0 ) );
       w /= ( w.x + w.y + w.z );
       float hgt;
       vec4 r = tkTri( tkCliffTex, tkPw + 11.0, w, 61.0, hgt );
-      vec3 rockN = r.xyz * 0.7;
+      vec3 rockN = r.xyz * 1.25;
       float rockAlb = r.w;
+      // Mid-scale crags (19 m): the faces, ribs and gullies that catch a low sun from a kilometre or so away.
+      float midW = ( 1.0 - smoothstep( 1.2, 2.6, tkFw ) ) * step( 0.01, tkRockW );
+      if ( midW > 0.0 ) {
+        float hm;
+        vec4 rm = tkTri( tkCliffTex, tkPw * 1.7 + 5.3, w, 61.0, hm );
+        rockN += rm.xyz * 1.3 * midW;
+        rockAlb = mix( rockAlb, rockAlb * 0.5 + rm.w * 0.5, midW );
+        hgt = mix( hgt, hgt * 0.5 + hm * 0.5, midW );
+      }
       if ( tkNearTex > 0.0 && tkRockW > 0.01 ) {
         float h1;
         vec4 r2 = tkTri( tkRockTex, tkPw, w, 9.5, h1 );
@@ -396,25 +537,36 @@ const FRAG_SURFACE = /* glsl */ `
       // Scree: grey talus streaked down the fall line, green creeping in where it thins out.
       if ( screeW > 0.01 ) {
         float sw = smoothstep( 0.2, 0.65, screeW + ( hgt - 0.5 ) * 0.6 * screeW + ( gv.a - 0.5 ) * 0.3 * screeW );
-        vec3 screeC = mix( ${col(PALETTE.scree)}, ${col(PALETTE.ash)}, tkPen * 0.6 ) * ( 0.62 + 0.5 * rockAlb + 0.3 * gv.b );
+        vec3 screeC = mix( ${col(PALETTE.scree)}, ${col(PALETTE.ash)}, tkPen * 0.6 ) * ( 0.55 + 0.45 * rockAlb + 0.3 * gv.b );
+        // Turf and moss creep over the thinner talus.
+        screeC = mix( screeC, land * 0.9, ( 1.0 - smoothstep( 0.35, 0.9, screeW ) ) * 0.5 * ( 1.0 - tkPen ) );
         land = mix( land, screeC, sw );
+        tkTransW *= 1.0 - sw;
         tkPert = mix( tkPert, vec3( gv.r - 0.5, 0.0, gv.g - 0.5 ) + rockN * 0.4, sw );
       }
       if ( tkRockW > 0.01 ) {
-        // Irregular edges: turf creeps over the low parts of the rock.
-        tkRockW = smoothstep( 0.3, 0.6, tkRockW + ( hgt - 0.5 ) * 2.4 * tkRockW * ( 1.0 - tkRockW ) );
-        vec3 rockC = mix( ${col(PALETTE.rock)}, ${col(PALETTE.rockWarm)}, smoothstep( 0.3, 0.8, m2 ) * 0.35 + tkPen * 0.35 );
+        // Irregular edges: turf creeps over the low parts of the rock, and a few metres of noise rag the outline.
+        float edgeN = tkFw < 1.6 ? mix( tkNoise( tkPw.xz / 4.1 + vec2( 2.2, -7.3 ) ), 0.5, smoothstep( 0.5, 1.6, tkFw ) ) : 0.5;
+        tkRockW = smoothstep( 0.36, 0.56, tkRockW + ( ( hgt - 0.5 ) * 2.4 + ( edgeN - 0.5 ) * 1.6 ) * tkRockW * ( 1.0 - tkRockW ) );
+        vec3 rockC = mix( ${col(PALETTE.rock)}, ${col(PALETTE.rockWarm)}, smoothstep( 0.3, 0.8, m2 ) * 0.2 + tkPen * 0.35 );
         rockC = mix( rockC, ${col(PALETTE.rockDark)}, ( 1.0 - smoothstep( 0.25, 0.6, hgt ) ) * 0.8 );
         // Dark water streaks down the faces below the crest.
         rockC *= 1.0 - 0.25 * smoothstep( 0.1, 0.4, wet );
-        rockC = mix( rockC, ${col(PALETTE.lichen)}, smoothstep( 0.55, 0.85, m3 ) * 0.35 );
+        rockC = mix( rockC, ${col(PALETTE.lichen)}, smoothstep( 0.45, 0.85, m3 ) * 0.45 );
         // Ledges are darker, mossy, half-buried stone.
         rockC = mix( rockC, mix( ${col(PALETTE.rockDark)}, land, 0.3 ), outcrop * 0.6 );
         // Moss and turf on the up-facing facets of broken rock.
         rockC = mix( rockC, land * 0.85, smoothstep( 0.72, 0.95, w.y ) * ( 1.0 - tkPen ) * 0.55 );
         // Thin fragments at the edge of a crag are shadowed, mossy stone rather than bare pale faces.
         rockC = mix( mix( ${col(PALETTE.rockDark)}, land, 0.35 ), rockC, smoothstep( 0.35, 0.85, tkRockW ) );
-        land = mix( land, rockC * ( 0.55 + 0.9 * rockAlb ), tkRockW );
+        // Crustose lichen: pale grey-green and a few orange spots on the rock up close.
+        if ( tkNearTex > 0.0 ) {
+          float lc = tkNoise( tkPw.xz / 1.7 + tkPw.y * 0.31 );
+          rockC = mix( rockC, ${col(PALETTE.lichen)} * 1.15, smoothstep( 0.62, 0.8, lc ) * 0.45 * tkNearTex );
+          rockC = mix( rockC, ${col(PALETTE.lichenOrange)}, smoothstep( 0.86, 0.95, lc ) * 0.5 * tkNearTex );
+        }
+        land = mix( land, rockC * ( 0.3 + 0.95 * rockAlb ), tkRockW );
+        tkTransW *= 1.0 - tkRockW;
         tkRough = mix( tkRough, 0.82, tkRockW );
         tkPert = mix( tkPert, rockN, tkRockW );
       }
@@ -426,10 +578,16 @@ const FRAG_SURFACE = /* glsl */ `
       float beachW = ( 1.0 - smoothstep( ${f(COVER.beachTop - 0.55)}, ${f(COVER.beachTop + 0.55)}, tkH + ( bn - 0.5 ) * 0.9 ) ) * smoothstep( -70.0, -35.0, tkSd ) * ( 1.0 - tkRockW * 0.85 );
       float sandW = ( 1.0 - smoothstep( 0.06, 0.16, tkS ) ) * smoothstep( 0.35, 0.6, tkNoise( tkPw.xz / 60.0 ) );
       vec3 beachC = mix( mix( ${col(PALETTE.gravel)}, ${col(PALETTE.gravelWarm)}, m2 ) * ( 0.62 + 0.76 * gv.b ), ${col(PALETTE.sand)} * ( 0.85 + 0.3 * grAlb ), sandW );
-      float wrack = ( 1.0 - smoothstep( 0.0, 0.18, abs( tkH - 1.05 - ( bn - 0.5 ) * 0.5 ) ) ) * smoothstep( 0.35, 0.6, tkNoise( tkPw.xz / 3.1 ) ) * ( 1.0 - sandW * 0.6 );
-      beachC = mix( beachC, ${col(PALETTE.wrack)}, wrack * 0.8 );
+      // Wrack line: a ragged string of dried kelp and eelgrass at the last high tide, broken into clumps.
+      float wrack = 0.0;
+      if ( tkFw < 0.9 ) {
+        float wl = abs( tkH - 1.05 - ( bn - 0.5 ) * 0.4 + ( tkNoise( tkPw.xz / 1.3 ) - 0.5 ) * 0.08 );
+        wrack = ( 1.0 - smoothstep( 0.02, 0.07, wl ) ) * smoothstep( 0.4, 0.62, tkNoise( tkPw.xz / 2.2 + 7.1 ) ) * ( 1.0 - sandW * 0.6 ) * ( 1.0 - smoothstep( 0.4, 0.9, tkFw ) );
+      }
+      beachC = mix( beachC, ${col(PALETTE.wrack)} * ( 0.8 + 0.5 * gv.b ), wrack * 0.85 );
       float wet2 = 1.0 - smoothstep( 0.05, 0.5, tkH + ( bn - 0.5 ) * 0.25 );
       land = mix( land, beachC * ( 1.0 - 0.45 * wet2 ), beachW );
+      tkTransW *= 1.0 - beachW;
       tkRough = mix( tkRough, mix( mix( 0.9, 0.95, sandW ), 0.32, wet2 ), beachW );
       tkSpec = max( tkSpec, wet2 * beachW * 0.9 );
       tkPert = mix( tkPert, vec3( gv.r - 0.5, 0.0, gv.g - 0.5 ) * ( 1.4 - sandW ), beachW );
@@ -443,6 +601,7 @@ const FRAG_SURFACE = /* glsl */ `
       float snowN = tkFw < 1.5 ? mix( tkNoise( tkPw.xz / 9.0 + vec2( 1.3, 7.7 ) ), 0.5, smoothstep( 0.4, 1.5, tkFw ) ) : 0.5;
       float snowW = smoothstep( 0.3, 0.7, cA.a + ( snowN - 0.5 ) * 0.35 * cA.a + ( m3 - 0.5 ) * 0.3 * cA.a );
       land = mix( land, ${col(PALETTE.snow)} * ( 0.92 + 0.08 * grAlb ), snowW );
+      tkTransW *= 1.0 - snowW;
       tkRough = mix( tkRough, 0.55, snowW );
       tkSpec = max( tkSpec, snowW * 0.3 );
       tkPert *= 1.0 - snowW * 0.7;
@@ -457,6 +616,7 @@ const FRAG_SURFACE = /* glsl */ `
     if ( tkLakeW > 0.01 ) {
       vec3 rip = tkNoiseD( tkPw.xz / 3.0 + uWindDir * uTime * 0.35 ) + tkNoiseD( tkPw.xz / 1.3 - uWindDir.yx * uTime * 0.5 ) * 0.5;
       land = mix( land, ${col(PALETTE.lake)}, tkLakeW );
+      tkTransW *= 1.0 - tkLakeW;
       tkRough = mix( tkRough, 0.07, tkLakeW );
       tkSpec = max( tkSpec, tkLakeW );
       tkPert = mix( tkPert, vec3( rip.x, 0.0, rip.y ) * 0.05 * ( 1.0 - smoothstep( 50.0, 400.0, tkDist ) ), tkLakeW );
@@ -470,9 +630,61 @@ const FRAG_SURFACE = /* glsl */ `
   vec3 tkSunView = normalize( ( viewMatrix * vec4( uSunDir, 0.0 ) ).xyz );
 `;
 
-export function createTerrainMaterial({ uniforms, textures, lodUniform, heightTex, size, half, getEnvDefines = () => null }) {
+// Reflection-pass surface (TK_CHEAP): the same baked cover weights and palette without detail textures, per-pixel
+// noise or triplanar rock. The planar water reflection is half resolution and wave-distorted, so this is visually
+// indistinguishable there at a fraction of the cost.
+const FRAG_SURFACE_CHEAP = /* glsl */ `
+  vec3 tkPw = vKWorldPos;
+  vec2 tkUV = ( tkPw.xz + tkHalf ) / ( 2.0 * tkHalf );
+  vec2 tkUVc = clamp( tkUV, 0.0, 1.0 );
+  float tkH = tkPw.y;
+#ifdef TK_PROF_NOINFO
+  vec4 tkI = vec4( 0.1, 0.1, 0.0, 0.8 );
+#else
+  vec4 tkI = texture( tkInfo, tkUV );
+#endif
+  float tkOut = max( abs( tkPw.x ), abs( tkPw.z ) ) - tkHalf;
+  float tkOutF = tkOut > 0.0 ? smoothstep( 0.0, 3200.0, tkOut ) : 0.0;
+  vec2 tkMir = vec2( tkUV.x < 0.0 || tkUV.x > 1.0 ? -1.0 : 1.0, tkUV.y < 0.0 || tkUV.y > 1.0 ? -1.0 : 1.0 );
+  vec2 tkG = tkI.xy * tkMir * ( 1.0 - tkOutF );
+  float tkAO = mix( tkI.w, 1.0, tkOutF );
+  float tkSh = texture( uTerrainShadow, tkUVc ).r;
+  float tkUnder = 0.0;
+  float tkCaustic = 0.0;
+  float tkTransW = 0.0;
+#ifdef TK_PROF_NOCOVER
+  vec4 cA = vec4( 0.2, 0.3, 0.1, 0.0 ), cB = vec4( 0.0, 0.5, 0.0, 0.0 ), cC = vec4( 0.2, 0.5, 0.5, 0.0 );
+#else
+  vec4 cA = texture( tkCoverA, tkUV );
+  vec4 cB = texture( tkCoverB, tkUV );
+  vec4 cC = texture( tkCoverC, tkUV );
+#endif
+  float alpine = smoothstep( 92.0, 150.0, tkH + ( cC.g - 0.5 ) * 50.0 );
+  vec3 land = mix( ${col(PALETTE.grassLush)}, ${col(PALETTE.grassBright)}, smoothstep( 0.25, 0.75, cC.g * 0.45 + cC.b * 0.55 ) ) * ( 0.84 + 0.32 * cC.b );
+  land = mix( land, ${col(PALETTE.grassDeep)}, smoothstep( 0.1, 0.45, cC.r ) * 0.75 );
+  land = mix( land, ${col(PALETTE.tundra)}, alpine );
+  land = mix( land, ${col(PALETTE.alder)} * 1.2, smoothstep( 0.0, 0.7, cA.g ) );
+  land = mix( land, ${col(PALETTE.spruce)}, cA.r * ( 1.0 - tkOutF * 0.5 ) );
+  land = mix( land, ${col(PALETTE.scree)} * 0.85, smoothstep( 0.2, 0.65, cC.a ) );
+  float rockW = smoothstep( ${f(COVER.rock0)}, ${f(COVER.rock1)}, 0.9 + cA.b );
+  land = mix( land, ${col(PALETTE.rock)}, rockW );
+  land = mix( land, ${col(PALETTE.gravel)} * 0.85, ( 1.0 - smoothstep( ${f(COVER.beachTop - 0.55)}, ${f(COVER.beachTop + 0.55)}, tkH ) ) * ( 1.0 - rockW * 0.85 ) );
+  land = mix( land, ${col(PALETTE.snow)}, smoothstep( 0.3, 0.7, cA.a ) );
+  float tkLakeW = smoothstep( 0.35, 0.65, cB.r ) * ( 1.0 - tkOutF );
+  land = mix( land, ${col(PALETTE.lake)}, tkLakeW );
+  land *= 1.0 - 0.25 * uRain;
+  float tkRough = mix( 0.93, 0.15, tkLakeW );
+  float tkSpec = tkLakeW * 0.6;
+  vec3 tkAlbedo = land * ( 0.72 + 0.28 * smoothstep( 0.35, 0.95, tkAO ) );
+  vec3 tkN = normalize( vec3( -tkG.x, 1.0, -tkG.y ) );
+  vec3 tkSunView = normalize( ( viewMatrix * vec4( uSunDir, 0.0 ) ).xyz );
+`;
+
+// cheap: the reflection-pass variant (FRAG_SURFACE_CHEAP, no detail displacement).
+export function createTerrainMaterial({ uniforms, textures, lodUniform, heightTex, size, half, getEnvDefines = () => null, cheap = false }) {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0.0 });
-  mat.name = 'terrain';
+  mat.name = cheap ? 'terrain-reflection' : 'terrain';
+  if (cheap) mat.defines = { TK_CHEAP: 1 };
   const own = {
     tkHeight: { value: heightTex },
     tkSize: { value: size },
@@ -507,9 +719,22 @@ export function createTerrainMaterial({ uniforms, textures, lodUniform, heightTe
       .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n#ifdef TK_DBG_UNLIT\n  gl_FragColor = vec4( 0.2, 0.4, 0.1, 1.0 ); return;\n#endif')
       .replace(
         '#include <map_fragment>',
-        `${FRAG_SURFACE}
+        `${cheap ? FRAG_SURFACE_CHEAP : `#ifdef TK_PROF_CHEAPFRAG\n${FRAG_SURFACE_CHEAP}\n#else\n${FRAG_SURFACE}\n#endif`}
 #ifdef TK_DEBUG_FLAT
   tkAlbedo = vec3( 0.2, 0.4, 0.1 );
+#endif
+#ifdef TK_PROF_NOLIGHT
+  gl_FragColor = vec4( tkAlbedo * dot( tkN, normalize( uSunDir ) ), 1.0 );
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+  return;
+#endif
+#ifdef TK_DBG_LEVELS
+  {
+    // LOD debug: hue per level, darkening toward the next level as the vertices morph.
+    vec3 lc = 0.5 + 0.5 * cos( 6.2831 * ( vTkLevel.x * 0.17 + vec3( 0.0, 0.33, 0.67 ) ) );
+    tkAlbedo = lc * ( 1.0 - 0.6 * vTkLevel.y ) * 0.35;
+  }
 #endif
   diffuseColor.rgb = tkAlbedo;`,
       )
@@ -534,7 +759,7 @@ vec3 nonPerturbedNormal = normal;`,
 }`,
       );
   };
-  mat.customProgramCacheKey = () => `kodiak-terrain-v3|${JSON.stringify(getEnvDefines() ?? {})}`;
+  mat.customProgramCacheKey = () => `kodiak-terrain-v4|${cheap ? 'cheap' : 'full'}|${JSON.stringify(getEnvDefines() ?? {})}`;
   patchUnderwater(mat, uniforms);
   return mat;
 }

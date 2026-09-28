@@ -1,0 +1,16 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 90000 },
+  { "wait": 3000 },
+  { "state": "title" },
+  { "eval": "JSON.stringify(__KODIAK__.systems.audio.debugState())" },
+  { "start": {} },
+  { "time": 9 },
+  { "wait": 1500 },
+  { "hold": "KeyW", "ms": 3000 },
+  { "eval": "__KODIAK__.systems.seiner.horn(); 1" },
+  { "eval": "__KODIAK__.systems.ui.radio('Kodiak tender', 'Northern Dawn, this is the Kodiak tender, we are buying humpies at thirty-two cents.', '10'); 1" },
+  { "wait": 3000 },
+  { "state": "underway" },
+  { "eval": "JSON.stringify(__KODIAK__.systems.audio.debugState())" },
+  { "perf": "underway", "ms": 3000 }
+]

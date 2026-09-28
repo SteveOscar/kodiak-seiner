@@ -1,0 +1,11 @@
+[
+  { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 90000 },
+  { "start": {} },
+  { "time": 10 },
+  { "wait": 2000 },
+  { "key": "KeyW", "down": true },
+  { "wait": 3000 },
+  { "eval": "(() => { const A = __KODIAK__.systems.audio; const out = {}; for (const round of [1,2,3]) { const t0 = performance.now(); for (let i = 0; i < 600; i++) A.frame(1/60); out['r' + round] = +((performance.now() - t0) / 600).toFixed(4); } const d = A.debugState(); out.voices = d.voices.live; out.beds = d.beds; return JSON.stringify(out); })()" },
+  { "key": "KeyW", "up": true },
+  { "perf": "p", "ms": 3000 }
+]
