@@ -335,10 +335,13 @@ export function createTravel(ctx) {
     },
   };
 
-  // Open water with room to manoeuvre, outside no-approach zones (e.g. the Marmot Island rookery buffer).
+  // Open water with room to manoeuvre, inside the world boundary and outside no-approach zones (e.g. the Marmot
+  // Island rookery buffer).
+  const limit = config.world.boundary - 150;
+  const inBounds = (px, pz) => Math.abs(px) <= limit && Math.abs(pz) <= limit;
   function openWaterNear(x, z) {
-    let px = x;
-    let pz = z;
+    let px = Math.max(-limit, Math.min(limit, x));
+    let pz = Math.max(-limit, Math.min(limit, z));
     for (const a of ctx.systems.places?.closedAreas ?? []) {
       const r = (a.radius ?? 0) + 80;
       const d = Math.hypot(px - a.x, pz - a.z);
@@ -354,7 +357,7 @@ export function createTravel(ctx) {
   // Nearest point with at least minShore metres of sea room and enough water under the keel, searching in rings.
   function deepWaterNear(x, z, minShore) {
     const minDepth = config.boat.groundingDepth + 1.5;
-    const ok = (px, pz) => heightmap.shoreDistance(px, pz) >= minShore && heightmap.heightAt(px, pz) < -minDepth;
+    const ok = (px, pz) => inBounds(px, pz) && heightmap.shoreDistance(px, pz) >= minShore && heightmap.heightAt(px, pz) < -minDepth;
     if (ok(x, z)) return { x, z };
     for (let r = 30; r <= 5000; r += 30) {
       const n = Math.max(12, Math.ceil((2 * Math.PI * r) / 30));

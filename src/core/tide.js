@@ -5,7 +5,8 @@
 //   tide.currentAt(x, z, o) → surface current (m/s) in world x/z: a tidal stream along the local shore tangent,
 //                             strongest near shore, plus 3% wind drift.
 //
-// The flood runs with the shore on its left (counter-clockwise around the island), the ebb the other way. One cycle
+// The flood runs with the shore on its right (clockwise around the island on a north-up chart), the ebb the other
+// way; fish/sim.js uses the same tangent. One cycle
 // is 12.42 game hours (~12 real minutes at the default time speed), so a fishing day sees floods, ebbs and slacks.
 
 const PERIOD = 12.42; // game hours, semidiurnal

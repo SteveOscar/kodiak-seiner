@@ -53,3 +53,14 @@ test('teleport to a chart point on land lands in the nearest open water', async 
   assert.ok(r.ok, r.reason);
   assert.ok(w.ctx.heightmap.shoreDistance(r.x, r.z) >= 30);
 });
+
+test('teleport to a point beyond the chart edge stays inside the world boundary in deep water', async () => {
+  const w = await makeWorld({ places: realPlaces, freeExplore: true });
+  const { heightmap } = w.ctx;
+  for (const [x, z] of [[-8350, -5000], [8400, -5800], [0, 8600], [-9000, 9000]]) {
+    const r = w.season.travel.teleport({ x, z });
+    assert.ok(r.ok, r.reason);
+    assert.ok(Math.abs(r.x) <= config.world.boundary && Math.abs(r.z) <= config.world.boundary, `inside boundary for ${x},${z}`);
+    assert.ok(heightmap.heightAt(r.x, r.z) < -config.boat.groundingDepth, `deep water for ${x},${z}`);
+  }
+});

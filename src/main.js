@@ -203,8 +203,10 @@ async function boot() {
     snapshot() {
       if (state.mode !== 'play' && state.mode !== 'paused') return null;
       if (state.control !== 'boat') return null;
-      if ((systems.fishing?.state ?? 'idle') !== 'idle') return null;
-      if ((systems.skiff?.state ?? 'stowed') !== 'stowed') return null;
+      // 'report' is after the catch is in the hold; net, skiff and fish are not saved (they stow/reseed on load).
+      const fishingState = systems.fishing?.state ?? 'idle';
+      if (fishingState !== 'idle' && fishingState !== 'report') return null;
+      if (fishingState === 'idle' && (systems.skiff?.state ?? 'stowed') !== 'stowed') return null;
       const out = {
         version: SAVE_VERSION,
         seed: flags.seed,
