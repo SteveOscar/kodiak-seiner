@@ -230,14 +230,21 @@ const ESCAPE_WAY = {
   gap: ['out through the gap before you closed up', 'Close up sooner.'],
   hole: ['through a hole torn on the bottom', 'Keep the leads off rocky ground.'],
 };
+// Arcade sets (r.mode === 'arcade'): the crew purses and hauls, so the lessons are about the encircling and the tide.
+const ESCAPE_WAY_ARCADE = {
+  ...ESCAPE_WAY,
+  leads: ['under the leadline as she closed up', 'Some always dive — keep off the school so it isn’t spooked.'],
+  corks: ['over the corks on the haul', 'The tide was running — set in slacker water.'],
+};
 export function escapeSummary(r) {
   const e = r?.escapes;
   if (e && typeof e === 'object') {
-    const parts = Object.keys(ESCAPE_WAY).map((k) => [k, Math.max(0, Math.round(Number(e[k]) || 0))]);
+    const ways = r?.mode === 'arcade' ? ESCAPE_WAY_ARCADE : ESCAPE_WAY;
+    const parts = Object.keys(ways).map((k) => [k, Math.max(0, Math.round(Number(e[k]) || 0))]);
     const total = parts.reduce((a, [, n]) => a + n, 0);
     if (total > 0) {
       const [cause, n] = parts.reduce((a, b) => (b[1] > a[1] ? b : a));
-      const [way, lesson] = ESCAPE_WAY[cause];
+      const [way, lesson] = ways[cause];
       const text = n >= total ? `${int(total)} got away ${way}.` : `${int(total)} got away — most ${way} (${int(n)}).`;
       return { total, cause, text: `${text} ${lesson}` };
     }

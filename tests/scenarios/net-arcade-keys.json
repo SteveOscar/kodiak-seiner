@@ -4,7 +4,7 @@
   "timeout": 90000
  },
  {
-  "eval": "(() => { const k = 'kodiak-seiner:settings'; let s = {}; try { s = JSON.parse(localStorage.getItem(k) || '{}') || {}; } catch {} s.fishingMode = 'realistic'; localStorage.setItem(k, JSON.stringify(s)); return s.fishingMode; })()"
+  "eval": "(() => { const k = 'kodiak-seiner:settings'; let s = {}; try { s = JSON.parse(localStorage.getItem(k) || '{}') || {}; } catch {} s.fishingMode = 'arcade'; localStorage.setItem(k, JSON.stringify(s)); return s.fishingMode; })()"
  },
  {
   "start": {}
@@ -17,6 +17,9 @@
  },
  {
   "eval": "(() => {\n  const K = __KODIAK__, S = K.systems;\n  const wrap = (a) => ((((a + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI;\n  const hdg = (vx, vz) => Math.atan2(vx, -vz);\n  const p0 = S.seiner.position;\n  const sc = S.fish.nearestSchool(p0.x, p0.z, 1500).school;\n  const R = 58;\n  const dx = sc.position.x - p0.x, dz = sc.position.z - p0.z, d = Math.hypot(dx, dz);\n  const ux = dx / d, uz = dz / d;\n  const P = { x: sc.position.x - uz * R, z: sc.position.z + ux * R };\n  const pos = () => S.seiner.position;\n  const fwd = () => ({ x: Math.sin(S.seiner.heading), z: -Math.cos(S.seiner.heading) });\n  const F = () => S.fishing;\n  const band = () => F().hud.tensionBand;\n  // Metres to go until the school is abeam; armed once it has been well ahead (it may start astern of the spawn).\n  let armed = false;\n  let pauseT = 0;\n  const along = () => {\n    const f = fwd(), a = (sc.position.x - pos().x) * f.x + (sc.position.z - pos().z) * f.z;\n    if (a > 30) armed = true;\n    return armed ? a : 1e4;\n  };\n  window.__T = {\n    school: sc, P, R,\n    // Tangent guidance on the live school: the heading whose track passes it R metres to port (then the circle turns\n    // left around it), re-aimed from wherever the boat is, so a slow turn or a nudge off a tender never misses it.\n    aErr: () => {\n      const p = pos(), bx = sc.position.x - p.x, bz = sc.position.z - p.z, d = Math.hypot(bx, bz) || 1;\n      return wrap(hdg(bx, bz) + Math.asin(Math.min(1, R / d)) - S.seiner.heading);\n    },\n    distP: along,\n    abeam: () => along() < 3,\n    letGo: () => K.ctx.interact.current.action?.id === 'fishing-letgo',\n    cErr: () => {\n      const p = pos(), cx = sc.position.x, cz = sc.position.z;\n      const ddx = p.x - cx, ddz = p.z - cz, dd = Math.hypot(ddx, ddz) || 1;\n      const k = Math.max(-0.8, Math.min(0.8, (dd - R) / 25));\n      return wrap(hdg(ddz / dd - (ddx / dd) * k, -ddx / dd - (ddz / dd) * k) - S.seiner.heading);\n    },\n    done: () => F().hud.closeReady || F().state !== 'setting',\n    // Heading error to the skiff end (bringing her around when the net ran out short of it).\n    kErr: () => {\n      const g = K.systems.net.gap?.();\n      if (!g) return 0;\n      const p = pos();\n      return wrap(hdg(g.a.x - p.x, g.a.z - p.z) - S.seiner.heading);\n    },\n    ready: () => F().hud.closeReady && K.ctx.interact.current.action?.id === 'fishing-close',\n    // True once ms real milliseconds have passed since the first call of a wait.\n    pause: (ms) => {\n      const n = performance.now();\n      if (!pauseT) pauseT = n;\n      if (n - pauseT < ms) return false;\n      pauseT = 0;\n      return true;\n    },\n    st: () => F().state,\n    tHi: () => F().state !== 'pursing' || F().hud.tension > band()[0] + (band()[1] - band()[0]) * 0.68,\n    tLo: () => F().state !== 'pursing' || F().hud.tension < band()[0] + (band()[1] - band()[0]) * 0.3,\n    view: (mode) => {\n      if (K.systemStatus.cameraRig === 'ok') { K.camera(null); S.cameraRig.setMode(mode); return 'rig:' + mode; }\n      F().debug.cam(mode === 'crowsnest' ? 'crow' : mode); return 'debug:' + mode;\n    },\n  };\n  return JSON.stringify({ school: [Math.round(sc.position.x), Math.round(sc.position.z), sc.count, sc.species], P, d: Math.round(d) });\n})()"
+ },
+ {
+  "eval": "(() => {\n  const K = __KODIAK__, F = () => K.systems.fishing;\n  const A = (window.__A = { t: {}, offers: [], msgs: [], modes: [], panel: [] });\n  K.ctx.events.on('fishing:state', (e) => { A.t[e.state] ??= performance.now(); });\n  const crew = () => ['pursing', 'hauling', 'brailing'].includes(F().state);\n  const tick = () => {\n    if (crew()) {\n      const o = K.ctx.interact.current.interact?.id;\n      if (o && !A.offers.includes(o)) A.offers.push(o);\n      const m = F().hud.message;\n      if (m && !A.msgs.includes(m)) A.msgs.push(m);\n      if (!A.modes.includes(F().hud.mode)) A.modes.push(F().hud.mode);\n      const vis = (sel) => { const el = document.querySelector(sel); return !!el && !el.closest('.hidden') && el.offsetParent !== null; };\n      const p = F().state + (vis('.set-tension') ? '+tension' : '') + (vis('.set-pull') ? '+pull' : '');\n      if (!A.panel.includes(p)) A.panel.push(p);\n    }\n    requestAnimationFrame(tick);\n  };\n  requestAnimationFrame(tick);\n  A.ok = () =>\n    A.offers.every((id) => !/^fishing/.test(id)) &&\n    A.msgs.every((m) => !/winch|tension|A\\/D|wheel|corks|block/i.test(m)) &&\n    A.modes.every((m) => m === 'arcade') &&\n    A.panel.every((p) => !/\\+/.test(p));\n  A.report = () => {\n    const s = (a, b) => (A.t[a] && A.t[b] ? +((A.t[b] - A.t[a]) / 1000).toFixed(2) : null);\n    return JSON.stringify({\n      realSeconds: { closing: s('closing', 'pursing'), pursing: s('pursing', 'hauling'), hauling: s('hauling', 'brailing'), brailing: s('brailing', 'report'), closeUpToReport: s('pursing', 'report'), spaceToReport: s('closing', 'report') },\n      offers: A.offers, msgs: A.msgs, modes: A.modes, panel: A.panel, ok: A.ok(),\n    });\n  };\n  return 'probe installed';\n})()"
  },
  {
   "eval": "__T.view('chase')"
@@ -459,7 +462,7 @@
   "state": "released"
  },
  {
-  "until": "__KODIAK__.systems.fishing.hud.mode === 'realistic'",
+  "until": "__KODIAK__.systems.fishing.hud.mode === 'arcade'",
   "timeout": 5000
  },
  {
@@ -2066,243 +2069,39 @@
   "press": "Space"
  },
  {
-  "wait": 300
- },
- {
   "state": "closing"
- },
- {
-  "wait": 3500
- },
- {
-  "eval": "__T.view('chase')"
  },
  {
   "wait": 1200
  },
  {
-  "shot": "06-closing-chase"
- },
- {
-  "eval": "__T.view('crowsnest')"
+  "shot": "06-closing-crowsnest"
  },
  {
   "until": "__KODIAK__.systems.fishing.state === 'pursing'",
-  "timeout": 90000
+  "timeout": 60000
  },
  {
-  "state": "pursing-start"
+  "state": "pursing"
  },
  {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
+  "wait": 700
  },
  {
   "shot": "07-pursing-crowsnest"
  },
  {
-  "key": "KeyE",
-  "down": true
+  "until": "__KODIAK__.systems.fishing.state === 'hauling'",
+  "timeout": 20000
  },
  {
-  "until": "__T.tHi()",
-  "timeout": 40000
+  "state": "hauling"
  },
  {
-  "key": "KeyE",
-  "up": true
+  "wait": 500
  },
  {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
+  "shot": "08-hauling-crowsnest"
  },
  {
   "eval": "__T.view('chase')"
@@ -2311,813 +2110,24 @@
   "wait": 900
  },
  {
-  "shot": "08-pursing-chase"
- },
- {
-  "eval": "__T.view('crowsnest')"
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "down": true
- },
- {
-  "until": "__T.tHi()",
-  "timeout": 40000
- },
- {
-  "key": "KeyE",
-  "up": true
- },
- {
-  "until": "__T.tLo()",
-  "timeout": 40000
- },
- {
-  "until": "__KODIAK__.systems.fishing.state === 'hauling'",
-  "timeout": 40000
- },
- {
-  "state": "hauling-start"
- },
- {
-  "wait": 6000
- },
- {
-  "shot": "09-hauling-crowsnest"
- },
- {
-  "eval": "__T.view('chase')"
- },
- {
-  "wait": 5000
- },
- {
-  "shot": "10-hauling-chase"
- },
- {
-  "eval": "__T.view('crowsnest')"
+  "shot": "09-hauling-chase"
  },
  {
   "until": "__KODIAK__.systems.fishing.state === 'brailing'",
-  "timeout": 180000
+  "timeout": 20000
  },
  {
   "state": "brailing"
  },
  {
-  "wait": 800
+  "wait": 400
  },
  {
-  "shot": "11-brailing-crowsnest"
- },
- {
-  "eval": "__T.view('chase')"
- },
- {
-  "wait": 1500
- },
- {
-  "shot": "12-brailing-chase"
+  "shot": "10-brailing-chase"
  },
  {
   "until": "__KODIAK__.systems.fishing.state === 'report'",
-  "timeout": 90000
+  "timeout": 20000
  },
  {
   "state": "report"
@@ -3126,25 +2136,38 @@
   "eval": "JSON.stringify(__KODIAK__.systems.fishing.lastSet)"
  },
  {
-  "wait": 1500
+  "eval": "__A.report()"
  },
  {
-  "shot": "13-set-report"
+  "until": "__A.ok()",
+  "timeout": 2000
+ },
+ {
+  "wait": 1200
+ },
+ {
+  "shot": "11-set-report"
  },
  {
   "eval": "(() => { if (__KODIAK__.ctx.state.mode !== 'paused') return 'no panel'; for (const t of ['keydown', 'keyup']) window.dispatchEvent(new KeyboardEvent(t, { code: 'Escape', key: 'Escape' })); return 'dismissed'; })()"
  },
  {
-  "until": "__KODIAK__.systems.fishing.state === 'idle'",
-  "timeout": 90000
+  "until": "__KODIAK__.systems.fishing.state === 'idle' && __KODIAK__.systems.skiff.state === 'stowed'",
+  "timeout": 20000
  },
  {
-  "wait": 500
+  "eval": "__T.view('chase')"
  },
  {
-  "shot": "14-done"
+  "wait": 800
+ },
+ {
+  "shot": "12-done-chase"
  },
  {
   "state": "done"
+ },
+ {
+  "eval": "JSON.stringify({ t: __A.t, idle: performance.now(), letGo: __KODIAK__.ctx.interact.current.action?.id ?? null })"
  }
 ]

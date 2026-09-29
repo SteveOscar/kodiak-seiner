@@ -3,6 +3,8 @@
   { "eval": "localStorage.removeItem('kodiak-seiner:save'); 'cleared'" },
   { "wait": 800 },
   { "clickSel": "#ui .title-item.primary" },
+  { "until": "document.querySelector('#ui .start-picker.on')", "timeout": 8000 },
+  { "clickSel": "#ui .start-picker .sp-start" },
   { "wait": 2500 },
   { "time": 20.4 },
   { "wait": 1200 },

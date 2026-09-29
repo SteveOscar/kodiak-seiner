@@ -1,7 +1,9 @@
 // Save games, settings and the Free Explore discovery log (localStorage).
 //
 //   kodiak-seiner:save      the career save: ctx.game.snapshot() + { saveFormat, savedAt, meta } for the Continue button
-//   kodiak-seiner:settings  { quality, volumes: {master, music, sfx, ambience}, timeSpeed, invertY }
+//   kodiak-seiner:settings  { quality, volumes: {master, music, sfx, ambience}, timeSpeed, invertY, fishingMode }
+//                           fishingMode 'arcade' (default: the crew purses and hauls) | 'realistic' (winch, skiff
+//                           pull, tide); fishing reads it at each let-go
 //   kodiak-seiner:explore   Free Explore keeps only discovery.serialize()
 //
 // Autosaves (career): after a delivery, a purchase, sleeping or waiting for an opener, tying up at a harbor, and on
@@ -23,7 +25,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   volumes: Object.freeze({ master: 0.8, music: 0.6, sfx: 0.9, ambience: 0.8 }),
   timeSpeed: 1,
   invertY: false,
+  fishingMode: 'arcade',
 });
+
+export const FISHING_MODES = Object.freeze(['arcade', 'realistic']);
 
 function memoryStorage() {
   const m = new Map();
@@ -78,6 +83,7 @@ export function mergeSettings(base, patch) {
   }
   out.timeSpeed = Math.max(0.25, Math.min(8, Number(out.timeSpeed) || 1));
   out.invertY = !!out.invertY;
+  out.fishingMode = FISHING_MODES.includes(out.fishingMode) ? out.fishingMode : DEFAULT_SETTINGS.fishingMode;
   for (const k of Object.keys(out.volumes)) out.volumes[k] = Math.max(0, Math.min(1, Number(out.volumes[k]) || 0));
   return out;
 }

@@ -1,5 +1,7 @@
-// WP-NET: the key-driven tutorial set scenario (tests/scenarios/net-tutorial-keys.json) is generated from this
-// description; the test keeps the committed JSON in sync. Regenerate with:
+// WP-NET: the key-driven tutorial set scenarios are generated from this description; the test keeps the committed
+// JSON in sync. tests/scenarios/net-tutorial-keys.json flies a realistic set (the setup stores fishingMode
+// 'realistic'); tests/scenarios/net-arcade-keys.json flies the same approach and circle in arcade mode, photographs
+// each automatic phase and checks there is no winch or skiff-pull prompt. Regenerate with:
 //   WRITE_SCENARIO=1 node --test tests/net-tutorial-scenario.test.mjs
 // The scenario drives a complete round haul around the new-season tutorial school with Playwright key input only:
 // W/S throttle lever, A/D rudder (bang-bang against a heading error computed in the page), Space let go / close up,
@@ -10,6 +12,11 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const FILE = new URL('./scenarios/net-tutorial-keys.json', import.meta.url);
+const ARCADE_FILE = new URL('./scenarios/net-arcade-keys.json', import.meta.url);
+
+// Stores settings.fishingMode before the game starts (fishing reads it at each let-go).
+const setMode = (mode) =>
+  `(() => { const k = 'kodiak-seiner:settings'; let s = {}; try { s = JSON.parse(localStorage.getItem(k) || '{}') || {}; } catch {} s.fishingMode = '${mode}'; localStorage.setItem(k, JSON.stringify(s)); return s.fishingMode; })()`;
 
 const HELPERS = String.raw`(() => {
   const K = __KODIAK__, S = K.systems;
@@ -81,9 +88,11 @@ const HELPERS = String.raw`(() => {
 const DISMISS =
   "(() => { if (__KODIAK__.ctx.state.mode !== 'paused') return 'no panel'; for (const t of ['keydown', 'keyup']) window.dispatchEvent(new KeyboardEvent(t, { code: 'Escape', key: 'Escape' })); return 'dismissed'; })()";
 
-export function tutorialSteps() {
+// Title → full ahead onto the tutorial school → let go abeam of it (shared by both scenarios).
+function approachSteps(mode) {
   const steps = [
     { until: "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", timeout: 90000 },
+    { eval: setMode(mode) },
     { start: {} },
     { time: 9 },
     { wait: 2500 },
@@ -123,7 +132,13 @@ export function tutorialSteps() {
     { press: 'Space' },
     { wait: 200 },
     { state: 'released' },
+    { until: `__KODIAK__.systems.fishing.hud.mode === '${mode}'`, timeout: 5000 },
   );
+  return steps;
+}
+
+// Round haul around the school, then bring her around to the skiff until the close-up is offered.
+function circleSteps(steps) {
   // Round haul: bang-bang A to follow a circle around the school (counter-clockwise on the chart).
   for (let i = 0; i < 70; i++) {
     steps.push(
@@ -149,10 +164,13 @@ export function tutorialSteps() {
       { until: '__T.ready() || __T.pause(1500)', timeout: 10000 },
     );
   }
+  steps.push({ until: '__T.ready()', timeout: 120000 }, { state: 'closeReady' }, { shot: '05-close-ready-crowsnest' });
+  return steps;
+}
+
+export function tutorialSteps() {
+  const steps = circleSteps(approachSteps('realistic'));
   steps.push(
-    { until: '__T.ready()', timeout: 120000 },
-    { state: 'closeReady' },
-    { shot: '05-close-ready-crowsnest' },
     { press: 'Space' },
     { wait: 300 },
     { state: 'closing' },
@@ -206,6 +224,96 @@ export function tutorialSteps() {
   return steps;
 }
 
+// Arcade: records real-time phase timestamps and every interact prompt / caption seen while the crew works.
+const ARCADE_PROBE = String.raw`(() => {
+  const K = __KODIAK__, F = () => K.systems.fishing;
+  const A = (window.__A = { t: {}, offers: [], msgs: [], modes: [], panel: [] });
+  K.ctx.events.on('fishing:state', (e) => { A.t[e.state] ??= performance.now(); });
+  const crew = () => ['pursing', 'hauling', 'brailing'].includes(F().state);
+  const tick = () => {
+    if (crew()) {
+      const o = K.ctx.interact.current.interact?.id;
+      if (o && !A.offers.includes(o)) A.offers.push(o);
+      const m = F().hud.message;
+      if (m && !A.msgs.includes(m)) A.msgs.push(m);
+      if (!A.modes.includes(F().hud.mode)) A.modes.push(F().hud.mode);
+      const vis = (sel) => { const el = document.querySelector(sel); return !!el && !el.closest('.hidden') && el.offsetParent !== null; };
+      const p = F().state + (vis('.set-tension') ? '+tension' : '') + (vis('.set-pull') ? '+pull' : '');
+      if (!A.panel.includes(p)) A.panel.push(p);
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  A.ok = () =>
+    A.offers.every((id) => !/^fishing/.test(id)) &&
+    A.msgs.every((m) => !/winch|tension|A\/D|wheel|corks|block/i.test(m)) &&
+    A.modes.every((m) => m === 'arcade') &&
+    A.panel.every((p) => !/\+/.test(p));
+  A.report = () => {
+    const s = (a, b) => (A.t[a] && A.t[b] ? +((A.t[b] - A.t[a]) / 1000).toFixed(2) : null);
+    return JSON.stringify({
+      realSeconds: { closing: s('closing', 'pursing'), pursing: s('pursing', 'hauling'), hauling: s('hauling', 'brailing'), brailing: s('brailing', 'report'), closeUpToReport: s('pursing', 'report'), spaceToReport: s('closing', 'report') },
+      offers: A.offers, msgs: A.msgs, modes: A.modes, panel: A.panel, ok: A.ok(),
+    });
+  };
+  return 'probe installed';
+})()`;
+
+export function arcadeSteps() {
+  const steps = approachSteps('arcade');
+  steps.splice(steps.findIndex((s) => s.eval === HELPERS) + 1, 0, { eval: ARCADE_PROBE });
+  circleSteps(steps);
+  const st = (s) => `__KODIAK__.systems.fishing.state === '${s}'`;
+  steps.push(
+    { press: 'Space' },
+    { state: 'closing' },
+    { wait: 1200 },
+    { shot: '06-closing-crowsnest' },
+    { until: st('pursing'), timeout: 60000 },
+    { state: 'pursing' },
+    { wait: 700 },
+    { shot: '07-pursing-crowsnest' },
+    { until: st('hauling'), timeout: 20000 },
+    { state: 'hauling' },
+    { wait: 500 },
+    { shot: '08-hauling-crowsnest' },
+    { eval: "__T.view('chase')" },
+    { wait: 900 },
+    { shot: '09-hauling-chase' },
+    { until: st('brailing'), timeout: 20000 },
+    { state: 'brailing' },
+    { wait: 400 },
+    { shot: '10-brailing-chase' },
+    { until: st('report'), timeout: 20000 },
+    { state: 'report' },
+    { eval: 'JSON.stringify(__KODIAK__.systems.fishing.lastSet)' },
+    { eval: '__A.report()' },
+    // The crew's phases showed no winch / block prompt, no tension gauge or skiff-pull dial, only arcade.
+    { until: '__A.ok()', timeout: 2000 },
+    { wait: 1200 },
+    { shot: '11-set-report' },
+    { eval: DISMISS },
+    { until: "__KODIAK__.systems.fishing.state === 'idle' && __KODIAK__.systems.skiff.state === 'stowed'", timeout: 20000 },
+    { eval: "__T.view('chase')" },
+    { wait: 800 },
+    { shot: '12-done-chase' },
+    { state: 'done' },
+    { eval: "JSON.stringify({ t: __A.t, idle: performance.now(), letGo: __KODIAK__.ctx.interact.current.action?.id ?? null })" },
+  );
+  return steps;
+}
+
+test('the committed key-driven arcade scenario matches its generator', () => {
+  const steps = arcadeSteps();
+  if (process.env.WRITE_SCENARIO) writeFileSync(ARCADE_FILE, `${JSON.stringify(steps, null, 1)}\n`);
+  const committed = JSON.parse(readFileSync(ARCADE_FILE, 'utf8'));
+  assert.deepEqual(committed, steps);
+  const text = JSON.stringify(steps);
+  assert.ok(!/fishing\.debug|debug\.(letGo|closeUp|stage|pilot)/.test(text));
+  assert.ok(steps.some((s) => s.press === 'Space') && !steps.some((s) => s.key === 'KeyE'), 'Space only: no winch');
+  assert.ok(steps.some((s) => s.eval?.includes("fishingMode = 'arcade'")));
+});
+
 test('the committed key-driven tutorial scenario matches its generator', () => {
   const steps = tutorialSteps();
   if (process.env.WRITE_SCENARIO) writeFileSync(FILE, `${JSON.stringify(steps, null, 1)}\n`);
@@ -215,4 +323,5 @@ test('the committed key-driven tutorial scenario matches its generator', () => {
   const text = JSON.stringify(steps);
   assert.ok(!/fishing\.debug|debug\.(letGo|closeUp|stage|pilot)/.test(text));
   assert.ok(steps.some((s) => s.press === 'Space') && steps.some((s) => s.key === 'KeyE'));
+  assert.ok(steps.some((s) => s.eval?.includes("fishingMode = 'realistic'")), 'the tutorial flies a realistic set');
 });

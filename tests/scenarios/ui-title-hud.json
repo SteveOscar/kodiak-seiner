@@ -4,6 +4,8 @@
   { "shot": "01-title" },
   { "eval": "document.querySelectorAll('#ui .title-item').length" },
   { "clickSel": "#ui .title-item.primary" },
+  { "until": "document.querySelector('#ui .start-picker.on')", "timeout": 8000 },
+  { "clickSel": "#ui .start-picker .sp-start" },
   { "wait": 2500 },
   { "time": 12.2 },
   { "wait": 2500 },

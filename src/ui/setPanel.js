@@ -1,7 +1,8 @@
 // Fishing phase widgets from fishing.hud (SPEC §6.12): payout, distance to the skiff, hold timer and in-the-hook
 // estimate, the purse tension gauge with its green band, haul progress, the skiff-pull dial, the brailer count-up,
 // depth under the stern and bottom warnings. A low, wide console under the caption line so the crow's-nest view of
-// the net stays clear. Updated at the HUD rate; needles and bars glide with CSS transitions.
+// the net stays clear. Updated at the HUD rate; needles and bars glide with CSS transitions. In arcade mode
+// (hud.mode) the crew purses and hauls: plain progress bars, no tension gauge or skiff-pull dial.
 
 import { h, svg, setText, setStyle, toggle } from './dom.js';
 import { tensionState, bearingDistance, pullAdvice } from './lib/logic.js';
@@ -156,9 +157,12 @@ export function createSetPanel(ctx) {
       lastPhase = phase;
       for (const p of PHASES) toggle(panel, `ph-${p}`, p === phase);
     }
+    const arcade = hud.mode === 'arcade';
+    const crew = arcade && (phase === 'pursing' || phase === 'hauling' || phase === 'brailing');
+    toggle(panel, 'arcade', arcade);
     setText(setNoEl, `Set ${hud.setNumber || f?.setNumber || 1}`);
     toggle(closedEl, 'hidden', !hud.closedWater);
-    setText(phaseEl, `${PHASE_LABEL[phase] ?? phase}${hud.hook && (phase === 'setting' || phase === 'holding') ? ' · hook' : ''}${hud.tied ? ' · tied off' : ''}`);
+    setText(phaseEl, `${PHASE_LABEL[phase] ?? phase}${hud.hook && (phase === 'setting' || phase === 'holding') ? ' · hook' : ''}${hud.tied ? ' · tied off' : ''}${crew ? ' · crew' : ''}`);
 
     const netLen = Number(ctx.systems.net?.length) || ctx.config.net.length;
     const pay = Math.max(0, Math.min(1, hud.payout ?? 0));
@@ -191,9 +195,13 @@ export function createSetPanel(ctx) {
     setText(hold.val, mmss(hud.holdSeconds ?? 0));
 
     // Purse.
-    show(tension, phase === 'pursing');
+    show(tension, phase === 'pursing' && !arcade);
     show(rings.el, phase === 'pursing');
-    if (phase === 'pursing') {
+    if (phase === 'pursing' && arcade) {
+      const pr = Math.max(0, Math.min(1, hud.pursed ?? 0));
+      setStyle(rings.fill, 'transform', `scaleX(${pr.toFixed(3)})`);
+      setText(rings.value, `${Math.round(pr * 100)}%`);
+    } else if (phase === 'pursing') {
       const ts = tensionState(hud.tension, hud.tensionBand);
       const band = `${ts.lo.toFixed(3)}:${ts.hi.toFixed(3)}`;
       if (band !== lastBand) {
@@ -220,7 +228,7 @@ export function createSetPanel(ctx) {
     }
 
     // Skiff pull dial.
-    const pulling = phase === 'pursing' || phase === 'hauling';
+    const pulling = (phase === 'pursing' || phase === 'hauling') && !arcade;
     show(pull, pulling);
     if (pulling) {
       const sh = ctx.systems.seiner?.heading ?? 0;
@@ -261,7 +269,7 @@ export function createSetPanel(ctx) {
     setText(bottomEl, hud.bottomWarning ?? '');
     toggle(bottomEl, 'hidden', !hud.bottomWarning);
     toggle(bottomEl, 'rocky', /rock/i.test(hud.bottomWarning ?? ''));
-    const wheel = (hud.wheelDanger ?? 0) > 0.35 && phase === 'pursing';
+    const wheel = (hud.wheelDanger ?? 0) > 0.35 && phase === 'pursing' && !arcade;
     toggle(wheelEl, 'hidden', !wheel);
     show(foot, !!hud.bottomWarning || wheel);
     const ab = Number(hud.abortProgress) || 0;

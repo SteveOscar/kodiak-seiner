@@ -121,6 +121,15 @@ const SPEEDS = [
   [2, '2×'],
   [4, '4×'],
 ];
+export const FISHING_MODE_OPTIONS = [
+  ['arcade', 'Arcade'],
+  ['realistic', 'Realistic'],
+];
+export const FISHING_MODE_HINTS = {
+  arcade: 'Arcade: the crew purses and hauls for you',
+  realistic: 'Realistic: run the winch, steer the skiff’s pull, watch the tide',
+};
+const fishingModeOf = (s) => (s?.fishingMode === 'realistic' ? 'realistic' : 'arcade');
 const VOLUMES = [
   ['master', 'Master'],
   ['music', 'Music'],
@@ -191,6 +200,20 @@ export function createSettingsPanel(ctx, { saves, confirm, close }) {
       ]),
     );
 
+    // Fishing mode: a set in progress keeps the mode it was let go with.
+    const fm = fishingModeOf(s);
+    const setOn = !!ctx.systems.fishing && ctx.systems.fishing.state !== 'idle' && inGame;
+    const fishing = h('div.set-group.set-fishing', null, [
+      h('div.set-label', null, [h('span', { text: 'Fishing' }), h('span.set-hint', { text: FISHING_MODE_HINTS[fm] + (setOn ? ' — from the next set' : '') })]),
+      segmented(FISHING_MODE_OPTIONS, fm, (v) => {
+        if (v === fm) return;
+        saves.setSettings({ fishingMode: v });
+        render();
+      }),
+    ]);
+    fishing.dataset.mode = fm;
+    body.append(fishing);
+
     const inv = h('button.toggle', { type: 'button', role: 'switch', 'aria-checked': s.invertY ? 'true' : 'false' }, [h('span.toggle-knob')]);
     inv.classList.toggle('on', !!s.invertY);
     inv.addEventListener('click', (e) => {
@@ -259,6 +282,8 @@ const STEPS = [
   ['Deliver', 'Come alongside a tender and press E. The fish ticket pays you, less the crew’s 30%.'],
 ];
 
+const ARCADE_PURSE_STEP = 'The crew purses her up, hauls the bag alongside and brails the catch aboard — a few seconds. (Settings → Fishing: Realistic to run the winch yourself.)';
+
 export function createHelpPanel(ctx, { close }) {
   const section = ([title, rows]) => {
     const sec = h('div.help-sec', null, [h('div.help-h', { text: title })]);
@@ -277,6 +302,11 @@ export function createHelpPanel(ctx, { close }) {
   const teleportRow = h('div.help-row', null, [h('span.help-keys', null, [keycap('T')]), h('span.help-text', { text: 'Where to? — teleport anywhere' })]);
   const steps = h('ol.help-steps');
   for (const [t, d] of STEPS) steps.append(h('li', null, [h('span.step-t', { text: t }), h('span.step-d', { text: d })]));
+  // Arcade fishing (the default): the crew purses and hauls, so the winch and skiff-pull lines change.
+  const purseStep = [...steps.querySelectorAll('.step-t')].find((x) => x.textContent === 'Purse')?.nextSibling ?? null;
+  const helmRows = [...helm.querySelectorAll('.help-text')];
+  const rudderRow = helmRows.find((x) => x.textContent === KEYS[0][1][1][1]);
+  const interactRow = helmRows.find((x) => x.textContent === KEYS[0][1][3][1]);
   const el = card('panel-help', [
     h('div.help-top', null, [
       h('div', null, [h('div.panel-kicker', { text: 'Controls' }), h('h2.panel-title', { text: 'How to work a seine' })]),
@@ -289,6 +319,10 @@ export function createHelpPanel(ctx, { close }) {
     id: 'help',
     el,
     show() {
+      const arcade = (ctx.systems.fishing?.hud?.mode ?? 'arcade') !== 'realistic';
+      if (purseStep) purseStep.textContent = arcade ? ARCADE_PURSE_STEP : STEPS[4][1];
+      if (rudderRow) rudderRow.textContent = arcade ? 'Rudder' : KEYS[0][1][1][1];
+      if (interactRow) interactRow.textContent = arcade ? 'Interact' : KEYS[0][1][3][1];
       const ex = !!ctx.state.freeExplore;
       if (chartRow) chartRow.textContent = ex ? 'Chart and teleport' : 'Chart and fast travel';
       if (ex && chartRow) chartRow.parentElement.after(teleportRow);

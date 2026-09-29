@@ -158,14 +158,15 @@ async function boot() {
       events.emit('game:mode', { mode, prev });
     },
 
-    // Enter gameplay. newGame resets every system (sys.reset) and places the boat at the spawn.
-    start({ newGame = true, freeExplore = flags.explore } = {}) {
+    // Enter gameplay. newGame resets every system (sys.reset) and places the boat at the spawn, or at startAt
+    // ({ x, z, heading }: the start location the player picked on the title screen).
+    start({ newGame = true, freeExplore = flags.explore, startAt = null } = {}) {
       state.freeExplore = freeExplore;
       if (newGame) {
         state.control = 'boat';
         clock.set(flags.time ?? config.time.startHours, flags.day ?? config.time.startDay);
         each((sys) => sys.reset?.());
-        const s = spawnPoint();
+        const s = startAt && Number.isFinite(startAt.x) && Number.isFinite(startAt.z) && !flags.at ? { heading: 0, ...startAt } : spawnPoint();
         ctx.game.teleport(s.x, s.z, s.heading, { reason: 'start' });
       }
       ctx.game.setMode('play');

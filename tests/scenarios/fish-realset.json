@@ -4,6 +4,9 @@
   "timeout": 90000
  },
  {
+  "eval": "(() => { const k = 'kodiak-seiner:settings'; let s = {}; try { s = JSON.parse(localStorage.getItem(k) || '{}') || {}; } catch {} s.fishingMode = 'realistic'; localStorage.setItem(k, JSON.stringify(s)); return s.fishingMode; })()"
+ },
+ {
   "start": {
    "freeExplore": true
   }

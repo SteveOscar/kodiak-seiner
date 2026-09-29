@@ -62,4 +62,24 @@ export const FISHING_TUNING = {
   goodValue: 2500,
   pluggedLbs: 30000,
   waterHaulFish: 25, // fewer fish than this is a water haul
+
+  // Arcade mode (settings.fishingMode, read at let-go): the encircling plays as in realistic, then the crew purses,
+  // hauls and brails on its own. No winch, skiff tow-off, wheel, snags or corks under.
+  arcade: {
+    closeFactor: 2, // setting: close-up offered within closeFactor × config.net.closeDistance of the skiff end
+    holdRange: 60, // holding a round haul: close-up offered within this (m) of the skiff end ...
+    liftGap: 75, // ... and kept out to this once offered; closing also waits until the end is this close
+    closeSeconds: 3, // closing up: the skiff runs its end in and the net is made fast after this
+    closeBlend: [1.6, 2.6], // s the net's ends take to come alongside after close-up (scaled by the gap)
+    purseSeconds: 2, // rings up after this (× 1 / economy.modifiers.purseRate)
+    haulSeconds: 3, // bag dried up (NET_TUNING.haul.bagTarget) after this (× 1 / haulRate)
+    brailSeconds: 2, // brailer count-up (a water haul: brailEmptySeconds)
+    brailEmptySeconds: 1.5,
+    finishSeconds: 1.5, // the empty bag comes aboard after the report
+    skiffStowAfter: 2.5, // report: a skiff not yet winched aboard by now is stowed
+  },
 };
+
+export const FISHING_MODES = ['arcade', 'realistic'];
+export const DEFAULT_FISHING_MODE = 'arcade';
+export const normalizeFishingMode = (m) => (m === 'realistic' ? 'realistic' : DEFAULT_FISHING_MODE);

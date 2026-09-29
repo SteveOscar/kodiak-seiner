@@ -4,8 +4,13 @@
 //
 // Offers go through ctx.interact (priority 100) only while control === 'boat'; speed limits and control locks use
 // the seiner's owner APIs with owner 'fishing'. Every cross-system call tolerates stubs or missing systems.
+//
+// Two modes (settings.fishingMode, read at let-go and kept for the whole set): 'realistic' is the full set above;
+// 'arcade' plays the same up to close-up (a little more forgiving), then the crew purses, hauls and brails on its own
+// in a few seconds — no purse winch, skiff tow-off, wheel, snags or corks under.
 
-import { FISHING_TUNING as T, NET_TUNING as NT } from '../../entities/net/tuning.js';
+import { FISHING_TUNING as T, NET_TUNING as NT, normalizeFishingMode } from '../../entities/net/tuning.js';
+import { getSettings } from '../save.js';
 import { polylineDistance } from '../../entities/net/geom.js';
 import { HINTS, PETE } from './hints.js';
 import { createWinch } from './winch.js';
@@ -26,6 +31,7 @@ const headingOf = (vx, vz) => Math.atan2(vx, -vz);
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const compassOf = (h) => COMPASS[Math.round((((h * 180) / Math.PI) % 360 + 360) % 360 / 45) % 8];
+const A = T.arcade;
 const fmtDist = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.max(10, Math.round(m / 10) * 10)} m`);
 
 export function createFishingCore(ctx, { rng }) {
@@ -52,6 +58,8 @@ export function createFishingCore(ctx, { rng }) {
   let escapeOff = null;
   let harbourSrc = null;
   let harbourList = [];
+  let idleMode = null; // the setting while idle (refreshed about once a second)
+  let idleModeT = 0;
 
   const hud = {
     phase: 'idle',
@@ -90,6 +98,7 @@ export function createFishingCore(ctx, { rng }) {
     payoutEta: null, // s until the seine is all out at the current pace
     tideRunning: false, // hauling: current over the corks-under threshold (speeding up the block sinks the corks)
     valuedAt: null, // tender whose price values the catch (brailing/report)
+    mode: 'arcade', // 'arcade' | 'realistic': the set's mode (read at let-go), or the setting while idle
   };
 
   const newStats = () => ({
@@ -116,6 +125,10 @@ export function createFishingCore(ctx, { rng }) {
     winch,
     get set() {
       return set;
+    },
+    // The fishing mode a let-go now would use (settings.fishingMode).
+    get settingMode() {
+      return readMode();
     },
 
     canSet() {
@@ -202,7 +215,7 @@ export function createFishingCore(ctx, { rng }) {
     // Scripting helpers for smoke scenarios and tests.
     debug: {
       auto: { purse: false, haul: false },
-      letGo: (opts = {}) => letGo({ tie: !!opts.tie, force: opts.force !== false, confirm: true }),
+      letGo: (opts = {}) => letGo({ tie: !!opts.tie, force: opts.force !== false, confirm: true, mode: opts.mode }),
       tieOff: () => tieOff(),
       holdHook: () => holdHook(),
       closeUp: () => startClose(),
@@ -232,6 +245,15 @@ export function createFishingCore(ctx, { rng }) {
     const h = s?.heading ?? 0;
     return out.set(p.x - Math.sin(h) * 8.8, p.y + 1.5, p.z + Math.cos(h) * 8.8);
   }
+
+  // settings.fishingMode from the running save manager (season.save), else the save module's storage.
+  function readMode() {
+    const mgr = S().season?.save;
+    const s = safe(() => (typeof mgr?.getSettings === 'function' ? mgr.getSettings() : getSettings()));
+    return normalizeFishingMode(s?.fishingMode);
+  }
+
+  const arcade = () => set?.mode === 'arcade';
 
   function clockHours() {
     return ctx.clock.day * 24 + ctx.clock.hours;
@@ -286,6 +308,7 @@ export function createFishingCore(ctx, { rng }) {
     if (prev === state) return;
     core.state = state;
     if (set) set.phaseT = 0;
+    if (state === 'idle') idleModeT = 0;
     refreshHud();
     events.emit('fishing:state', { state, prev });
   }
@@ -455,7 +478,7 @@ export function createFishingCore(ctx, { rng }) {
   // --- transitions --------------------------------------------------------------------------------------------
 
   // force: skip canSet (debug); confirm: the closed-waters warning was already given.
-  function letGo({ tie = false, force = false, confirm = false } = {}) {
+  function letGo({ tie = false, force = false, confirm = false, mode = null } = {}) {
     if (core.state !== 'idle') return false;
     const cs = core.canSet();
     if (!cs.ok && !force) {
@@ -476,6 +499,7 @@ export function createFishingCore(ctx, { rng }) {
     core.setNumber += 1;
     set = {
       number: core.setNumber,
+      mode: mode ? normalizeFishingMode(mode) : readMode(),
       startClock: clockHours(),
       startElapsed: ctx.time.elapsed,
       elapsed: 0,
@@ -518,8 +542,9 @@ export function createFishingCore(ctx, { rng }) {
     if (sk?.release) safe(() => sk.release());
     const net = S().net;
     let began = false;
-    if (net?.begin) began = safe(() => net.begin(sk?.endPoint ? sk : { x: stern.x, z: stern.z })) !== false;
-    if (!began && net?.begin) safe(() => net.begin({ x: stern.x, z: stern.z }));
+    const netOpts = { arcade: set.mode === 'arcade' };
+    if (net?.begin) began = safe(() => net.begin(sk?.endPoint ? sk : { x: stern.x, z: stern.z }, netOpts)) !== false;
+    if (!began && net?.begin) safe(() => net.begin({ x: stern.x, z: stern.z }, netOpts));
     s.setSpeedLimit?.('fishing', T.speed.setting);
     safe(() => S().cameraRig?.suggest?.('crowsnest'));
     events.emit('fishing:skiffReleased', { x: stern.x, z: stern.z });
@@ -570,6 +595,7 @@ export function createFishingCore(ctx, { rng }) {
     if (!set || set.hook || set.tied) return false;
     const e = skiffEndXZ();
     set.closeGap = e ? seinerNear(e.x, e.z) : 0;
+    if (arcade()) return set.closeGap > (set.closeReady ? A.liftGap : A.holdRange);
     return set.closeGap > (set.closeReady ? T.close.liftGap : T.close.holdRange);
   }
 
@@ -598,12 +624,27 @@ export function createFishingCore(ctx, { rng }) {
     if (!set || core.state !== 'closing') return false;
     const net = S().net;
     const est = estimate();
-    net?.close?.();
+    if (arcade()) {
+      // The ends come alongside a little slower from farther off.
+      const [b0, b1] = A.closeBlend;
+      net?.close?.({ blend: Math.min(b1, Math.max(b0, (set.closeGap ?? 0) / 18)) });
+    } else net?.close?.();
     set.everClosed = true;
     set.closedEstimate = est;
     const poly = net?.polygon?.();
     events.emit('fishing:closedUp', { polygon: poly ? poly.map((p) => ({ x: p.x, z: p.z })) : null, estimate: est });
     toast(est > 0 ? `Closed up — looks like ~${fmt(est)} in the net` : 'Closed up — not much showing inside', 'fishing', 4);
+    if (arcade()) {
+      // The crew takes over: no tow-off (the skiff keeps coming alongside and heads home at rings up).
+      const s = S().seiner;
+      s?.lockControls?.('fishing', true);
+      s?.setSpeedLimit?.('fishing', T.speed.pursing);
+      set.towHeading = s?.heading ?? 0;
+      hud.wheelDanger = 0;
+      enter('pursing');
+      hint('purseArcade');
+      return true;
+    }
     // The skiff runs a line to the far side from the net body and pulls the seiner off it.
     const side = net?.bodySide ?? net?.side ?? 1;
     const s = S().seiner;
@@ -626,6 +667,20 @@ export function createFishingCore(ctx, { rng }) {
     toast('Rings up!', 'fishing', 3);
     setMessage('Rings up!', 2.5);
     enter('hauling');
+    if (arcade()) {
+      S().net?.haul?.(arcadeHaulRate());
+      // The skiff comes home while the block works.
+      const sk = S().skiff;
+      if (sk && sk.state !== 'stowed' && sk.state !== 'returning') {
+        safe(() =>
+          sk.returnTo(() => {
+            if (set) set.skiffHome = true;
+          }),
+        );
+      }
+      hint('ringsUpArcade');
+      return true;
+    }
     S().net?.haul?.(haulRate(false));
     hint('ringsUp');
     return true;
@@ -663,10 +718,13 @@ export function createFishingCore(ctx, { rng }) {
     }
     set.acceptedLbs = lbsOf(set.accepted, species);
     const loads = set.acceptedLbs / config.net.phases.brailLoadLbs;
-    set.brailDur =
-      set.acceptedLbs > 0
-        ? Math.min(config.net.phases.brailMaxS, Math.max(2, loads * config.net.phases.brailPerLoadS))
-        : 2.5;
+    if (arcade()) set.brailDur = set.acceptedLbs > 0 ? A.brailSeconds : A.brailEmptySeconds;
+    else {
+      set.brailDur =
+        set.acceptedLbs > 0
+          ? Math.min(config.net.phases.brailMaxS, Math.max(2, loads * config.net.phases.brailPerLoadS))
+          : 2.5;
+    }
     set.brailT = 0;
     set.brailedLbs = 0;
     set.buyer = valuationBuyer();
@@ -706,6 +764,7 @@ export function createFishingCore(ctx, { rng }) {
       valuedAt: buyer?.name ?? null,
       valuedAtId: buyer?.id ?? null,
     });
+    payload.mode = set.mode;
     core.lastSet = payload;
     const st = core.stats;
     st.sets++;
@@ -764,6 +823,12 @@ export function createFishingCore(ctx, { rng }) {
   function haulRate(boost) {
     const mod = S().economy?.modifiers?.haulRate ?? 1;
     return (NT.haul.bagTarget / NT.haul.seconds) * mod * (boost ? NT.haul.boost : 1);
+  }
+
+  // Arcade: the crew runs the block flat out; the bag is dried up in A.haulSeconds (upgrades still help).
+  function arcadeHaulRate() {
+    const mod = S().economy?.modifiers?.haulRate ?? 1;
+    return (NT.haul.bagTarget / A.haulSeconds) * mod;
   }
 
   // Current at the bag strong enough that the block at full speed pulls the corks under (net model rule).
@@ -887,7 +952,7 @@ export function createFishingCore(ctx, { rng }) {
           enterHolding();
           break;
         }
-        const closeReady = frac >= 0.45 && dSkiff <= config.net.closeDistance;
+        const closeReady = frac >= 0.45 && dSkiff <= config.net.closeDistance * (arcade() ? A.closeFactor : 1);
         set.closeReady = closeReady;
         if (closeReady) {
           offer({ id: 'fishing-close', key: 'action', label: 'Close up!', onPress: startClose });
@@ -941,6 +1006,13 @@ export function createFishingCore(ctx, { rng }) {
         const e = skiffEndXZ();
         const d = e ? seinerNear(e.x, e.z) : 0;
         set.closeGap = d;
+        if (arcade()) {
+          // The skiff runs its end in; the crew makes it fast once it is within reach (a hook's beach end may need
+          // the seiner to run down to meet it first).
+          s?.setSpeedLimit?.('fishing', d > A.liftGap ? T.speed.bringAround : T.speed.closing);
+          if ((set.closeT >= A.closeSeconds && d <= A.liftGap) || set.closeT >= T.close.hardTimeout) finishClose();
+          break;
+        }
         // Running down to meet a far skiff (a hook's beach end) at towing speed would take minutes.
         s?.setSpeedLimit?.('fishing', d > T.close.liftGap ? T.speed.bringAround : T.speed.closing);
         if (!set.arrived && e && d < T.close.arriveDistance) set.arrived = true;
@@ -953,6 +1025,12 @@ export function createFishingCore(ctx, { rng }) {
         break;
       }
       case 'pursing': {
+        if (arcade()) {
+          const mod = S().economy?.modifiers?.purseRate ?? 1;
+          net?.purse?.(mod / A.purseSeconds);
+          if (!net || (net.pursed ?? 0) >= 1) ringsUp();
+          break;
+        }
         steerTow(dt);
         wheelCheck(dt);
         snagCheck();
@@ -983,6 +1061,11 @@ export function createFishingCore(ctx, { rng }) {
           }
           break;
         }
+        if (arcade()) {
+          net?.haul?.(arcadeHaulRate());
+          if (!net || (net.hauled ?? 1) >= NT.haul.bagTarget) startBrail();
+          break;
+        }
         steerTow(dt);
         wheelCheck(dt);
         const held = !!ctx.input?.action?.('interact') || core.debug.auto.haul;
@@ -1007,10 +1090,16 @@ export function createFishingCore(ctx, { rng }) {
       case 'report': {
         set.reportT += dt;
         const sk = S().skiff;
+        const finish = arcade() ? A.finishSeconds : NT.haul.finishSeconds;
         if (net && net.state !== 'stowed') {
-          net.haul?.(1 / NT.haul.finishSeconds);
+          net.haul?.(1 / finish);
           const sim = net.model?.sim;
-          if (!sim || sim.count <= 3 || set.reportT > NT.haul.finishSeconds + 1.5) net.stow?.();
+          if (!sim || sim.count <= 3 || set.reportT > finish + 1.5) net.stow?.();
+        }
+        // Arcade: straight back to the fish — a skiff still on its way home is winched aboard.
+        if (arcade() && sk && sk.state !== 'stowed' && !set.skiffHome && set.reportT > A.skiffStowAfter) {
+          safe(() => sk.stow?.());
+          set.skiffHome = true;
         }
         const home = !sk || sk.state === 'stowed' || set.skiffHome;
         if ((home && (!net || net.state === 'stowed')) || set.reportT > T.reportTimeout) {
@@ -1049,10 +1138,19 @@ export function createFishingCore(ctx, { rng }) {
     const s = S().seiner;
     hud.phase = core.state;
     hud.setNumber = core.setNumber;
+    if (set) hud.mode = set.mode;
+    else {
+      idleModeT -= ctx.time.dt || 0;
+      if (idleModeT <= 0 || !idleMode) {
+        idleModeT = 1;
+        idleMode = readMode();
+      }
+      hud.mode = idleMode;
+    }
     hud.payout = net?.length ? Math.min(1, (net.payout ?? 0) / net.length) : 0;
     hud.pursed = net?.pursed ?? 0;
     hud.hauled = net?.hauled ?? 0;
-    hud.tension = core.state === 'pursing' ? winch.tension : 0;
+    hud.tension = core.state === 'pursing' && !arcade() ? winch.tension : 0;
     hud.tensionBand = winch.band;
     hud.hook = !!set?.hook;
     hud.tied = !!set?.tied;
@@ -1080,7 +1178,7 @@ export function createFishingCore(ctx, { rng }) {
       hud.nearestFish = null;
       hud.fishClose = null;
     }
-    hud.tideRunning = core.state === 'hauling' && !set?.aborting && tideRunning();
+    hud.tideRunning = core.state === 'hauling' && !set?.aborting && !arcade() && tideRunning();
     hud.valuedAt = set?.buyer?.name ?? null;
     hud.holdSeconds = set?.holdSeconds ?? 0;
     // In the hook / in the net estimate, refreshed twice a second.
@@ -1102,7 +1200,7 @@ export function createFishingCore(ctx, { rng }) {
       hud.bottomWarning = heightmap.seabedAt(stern.x, stern.z) === 'rock' ? 'Rocky bottom — the lead will hang up' : null;
     } else hud.bottomWarning = null;
     // Skiff pull.
-    if (set && (core.state === 'pursing' || core.state === 'hauling')) {
+    if (set && !arcade() && (core.state === 'pursing' || core.state === 'hauling')) {
       hud.towHeading = set.towHeading;
       const sim = net?.model?.sim;
       if (sim && sim.count > 2 && s?.position) {
@@ -1126,7 +1224,7 @@ export function createFishingCore(ctx, { rng }) {
     } else if (net?.snagged) {
       hud.stall = 'snag';
       hud.stallSeconds = net.model?.snagTimer ?? 0;
-    } else if (winch.stall > 0 && core.state === 'pursing') {
+    } else if (winch.stall > 0 && core.state === 'pursing' && !arcade()) {
       hud.stall = 'foul';
       hud.stallSeconds = winch.stall;
     }
@@ -1159,11 +1257,14 @@ export function createFishingCore(ctx, { rng }) {
         if (!set?.closeReady) return `Bring her around to the skiff — ${fmtDist(set?.closeGap ?? 0)}`;
         return 'Holding — close up when the fish are in';
       case 'closing':
+        if (arcade()) return (set?.closeGap ?? 0) > A.liftGap ? 'Closing up — run down to meet the skiff' : 'Closing up — skiff bringing its end';
         return (set?.closeGap ?? 0) > T.close.nearDistance ? 'Closing up — run down to meet the skiff' : 'Closing up — skiff bringing its end';
       case 'pursing':
+        if (arcade()) return "Crew's pursing her up";
         return 'Pursing — keep the tension in the green; A/D aim the skiff';
       case 'hauling':
         if (set?.aborting) return 'Hauling back — water haul';
+        if (arcade()) return "Crew's hauling — drying up the bag";
         return hud.tideRunning ? "Hauling — tide's running: let the block work, or the corks go under" : 'Hauling — drying up the bag';
       case 'brailing':
         // The set panel's count-up carries the pounds; only an empty bag gets a caption.

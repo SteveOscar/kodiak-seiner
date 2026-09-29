@@ -3,7 +3,7 @@
 
 const SAVE_KEY = 'kodiak-seiner:save';
 const SETTINGS_KEY = 'kodiak-seiner:settings';
-const DEFAULTS = { quality: 'high', volumes: { master: 0.8, music: 0.6, sfx: 0.9, ambience: 0.8 }, timeSpeed: 1, invertY: false };
+const DEFAULTS = { quality: 'high', volumes: { master: 0.8, music: 0.6, sfx: 0.9, ambience: 0.8 }, timeSpeed: 1, invertY: false, fishingMode: 'arcade' };
 
 function read(key) {
   try {

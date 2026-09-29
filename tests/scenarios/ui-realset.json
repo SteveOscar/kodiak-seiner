@@ -1,5 +1,6 @@
 [
   { "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'", "timeout": 120000 },
+  { "eval": "(() => { const k = 'kodiak-seiner:settings'; let s = {}; try { s = JSON.parse(localStorage.getItem(k) || '{}') || {}; } catch {} s.fishingMode = 'realistic'; localStorage.setItem(k, JSON.stringify(s)); return s.fishingMode; })()" },
   { "start": {} },
   { "time": 10.5 },
   { "teleport": [5850, -520, 90] },

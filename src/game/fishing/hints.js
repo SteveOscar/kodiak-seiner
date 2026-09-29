@@ -16,6 +16,9 @@ export const HINTS = {
   purse: 'Now purse her up. Hold E on the winch — keep the needle in the green. Don\'t horse it or you\'ll foul the rings.',
   tow: 'The tide wants to set you onto the net. A and D aim the skiff\'s pull — keep your stern clear of the corks.',
   ringsUp: 'Rings up! The block does the work now. E speeds it up — but not in a running tide, or the corks go under.',
+  // Arcade mode: the crew purses and hauls on its own.
+  purseArcade: 'Nice close! Sit tight — the crew\'ll purse her up and run the block. Watch the bag come alongside.',
+  ringsUpArcade: 'Rings up! The block\'s drying up the bag — then we brail \'em aboard and go find more.',
   brail: 'Dry up the bag and brail \'em aboard. That\'s fishing, kid.',
   waterHaul: 'Water haul. Happens to everybody. Watch which way they\'re jumping and lay it out ahead of \'em.',
   shallow: 'Too thin here — you\'ll hang the lead on the bottom. Find six meters or better.',

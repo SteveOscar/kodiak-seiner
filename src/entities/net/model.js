@@ -62,6 +62,7 @@ export function createNetModel(ctx, rng) {
   const polyPool = [];
   const vecPool = [];
   let ashore = false;
+  let closeBlend = null; // s the ends take to come alongside after close() (null: 1.6, or 2.6 around the transom)
   let crossA = false; // the skiff end is brought around the stern to the working side after close-up
   const crossFrom = { r: 0, f: 0 }; // seiner-frame start of that route
 
@@ -107,6 +108,8 @@ export function createNetModel(ctx, rng) {
     ringsUpSeconds: 0,
     currentSpeed: 0,
     shoreTie: null, // {x, z} of the beach end when the skiff end is ashore
+    // Arcade set (begin opts): the crew purses and hauls — no snags, no smooth-bottom slow-down, no corks under.
+    arcade: false,
     pts,
 
     get sim() {
@@ -126,12 +129,14 @@ export function createNetModel(ctx, rng) {
       }
     },
 
-    begin(endAnchor) {
+    begin(endAnchor, opts = null) {
       model.refreshGear();
       anchor = endAnchor ?? sys_().skiff ?? null;
       const p = anchorPoint(endW);
       if (!p) return false;
       sim.begin(p.x, p.z);
+      model.arcade = !!opts?.arcade;
+      closeBlend = null;
       model.state = 'paying';
       model.closed = false;
       model.pursed = 0;
@@ -157,8 +162,10 @@ export function createNetModel(ctx, rng) {
 
     // Both ends are made fast to the seiner on the side the net body lies on (the working side for the purse davit
     // and the haul): the skiff end is held in the seiner's frame just outside the rail, the tow end under the block.
-    close() {
+    // opts.blend: seconds for the ends to come alongside (arcade closes up from farther off).
+    close(opts = null) {
       if (model.state === 'stowed' || model.closed) return;
+      closeBlend = Number.isFinite(opts?.blend) && opts.blend > 0 ? opts.blend : null;
       if (model.state === 'paying') sim.holdEnd();
       const c = sim.centroid(cen);
       const s = sys_().seiner;
@@ -246,6 +253,8 @@ export function createNetModel(ctx, rng) {
       model.hookHealth = 1;
       model.hauledMetres = 0;
       model.shoreTie = null;
+      model.arcade = false;
+      closeBlend = null;
       // A fresh array: a consumer may still hold the last set's polygon for a frame.
       polyCache = [];
       model.corkline.length = 0;
@@ -271,7 +280,7 @@ export function createNetModel(ctx, rng) {
       let b = null;
       if (model.closed) {
         closeT += dt;
-        const k = smooth(0, crossA ? 2.6 : 1.6, closeT);
+        const k = smooth(0, closeBlend ?? (crossA ? 2.6 : 1.6), closeT);
         if (crossA && s?.position && k < 1) {
           // Around the transom in the seiner's frame: a cubic whose control points sit well astern on each side,
           // so the end never passes through the hull and follows the boat as the skiff tows it.
@@ -332,6 +341,9 @@ export function createNetModel(ctx, rng) {
       if (model.state === 'pursing' || model.state === 'closed') {
         if (model.snagTimer > 0) {
           model.snagTimer = Math.max(0, model.snagTimer - dt);
+        } else if (purseCmd > 0 && model.arcade) {
+          model.purseRateEffective = purseCmd;
+          model.pursed = Math.min(1, model.pursed + purseCmd * dt);
         } else if (purseCmd > 0) {
           const smoothBed = model.bottomContact * (1 - model.rockFraction);
           const eff = purseCmd * (1 - T.purse.smoothBottomSlow * Math.min(1, smoothBed * 1.25));
@@ -353,7 +365,7 @@ export function createNetModel(ctx, rng) {
         model.haulRateEffective = dt > 0 ? taken / dt / haulBase : 0;
         model.hauled = Math.min(1, 1 - sim.inWater / haulBase);
         const max = (T.haul.bagTarget / T.haul.seconds) * T.haul.boost * haulRateMod();
-        model.corksUnder = model.closed && haulCmd > T.haul.corksUnderAbove * max && model.currentSpeed > T.haul.corksUnderCurrent;
+        model.corksUnder = !model.arcade && model.closed && haulCmd > T.haul.corksUnderAbove * max && model.currentSpeed > T.haul.corksUnderCurrent;
       } else if (model.state === 'brailing') {
         model.ringsUpSeconds += dt;
       }

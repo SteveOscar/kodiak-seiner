@@ -1,10 +1,11 @@
 // Title screen over the live title cinematic: the KODIAK SEINER mark, the menu (Continue when a save exists, New
 // Season, Free Explore, Settings, Controls, Credits), the boat-name field, and a film-style caption naming the place
-// the cinematic is showing.
+// the cinematic is showing. Every new game (New Season, Free Explore) first asks where to start (./startPicker.js).
 
 import { h, svgFrom, clear, setText, toggle } from './dom.js';
 import { salmonMarkSVG } from './lib/art.js';
 import { money, calendar, clockTime } from './lib/format.js';
+import { createStartPicker } from './startPicker.js';
 
 const NAME_KEY = 'kodiak-seiner:boatName';
 
@@ -23,7 +24,8 @@ export function createTitle(ctx, root, { saves, openPanel, confirm, onStart }) {
   const captionPlace = h('div.caption-place');
   const captionSub = h('div.caption-sub', { text: 'Kodiak Island, Alaska' });
   const caption = h('div.title-caption', null, [h('div.caption-rule'), captionPlace, captionSub]);
-  const foot = h('div.title-foot', null, [h('span', { text: 'Terrain: AWS Terrain Tiles (Mapzen) · three.js' }), h('span.title-foot-keys', { text: '↑ ↓ choose · Enter select' })]);
+  const footKeys = h('span.title-foot-keys', { text: '↑ ↓ choose · Enter select' });
+  const foot = h('div.title-foot', null, [h('span', { text: 'Terrain: AWS Terrain Tiles (Mapzen) · three.js' }), footKeys]);
   const col = h('div.title-col', null, [logo, menu, nameRow]);
   const el = h('div.ui-title', null, [h('div.title-scrim'), col, caption, foot]);
   root.append(el);
@@ -72,12 +74,27 @@ export function createTitle(ctx, root, { saves, openPanel, confirm, onStart }) {
     storeName(n);
   });
 
+  const picker = createStartPicker(ctx, el, {
+    onPick: ({ mode, startAt }) => begin(mode === 'explore', startAt),
+    onCancel: () => {
+      setText(footKeys, '↑ ↓ choose · Enter select');
+      select(sel);
+    },
+  });
+
+  // New Season and Free Explore both ask where to start first; without any places to offer, start at the spawn.
   function startGame(freeExplore) {
+    nameInput.blur();
+    if (picker.open(freeExplore ? 'explore' : 'season')) setText(footKeys, '↑ ↓ choose · Enter start here · Esc back');
+    else begin(freeExplore, null);
+  }
+
+  function begin(freeExplore, startAt) {
     const n = boatName();
     storeName(n);
     ctx.systems.seiner?.setBoatName?.(n);
     onStart?.();
-    ctx.game.start({ newGame: true, freeExplore });
+    ctx.game.start({ newGame: true, freeExplore, startAt });
   }
 
   function build() {
@@ -131,6 +148,8 @@ export function createTitle(ctx, root, { saves, openPanel, confirm, onStart }) {
   const api = {
     el,
     show() {
+      picker.reset();
+      setText(footKeys, '↑ ↓ choose · Enter select');
       build();
       toggle(el, 'on', true);
       el.classList.remove('leaving');
@@ -139,6 +158,8 @@ export function createTitle(ctx, root, { saves, openPanel, confirm, onStart }) {
     hide() {
       toggle(el, 'on', false);
       nameInput.blur();
+      // The picker stays on screen while the title fades out; show() puts the menu back.
+      picker.deactivate();
     },
     // Keyboard navigation (raw keys; only while no sub-panel is open and the name field is not focused).
     tick(realDt, { panelOpen }) {
@@ -158,6 +179,10 @@ export function createTitle(ctx, root, { saves, openPanel, confirm, onStart }) {
           }
         }
       }
+      if (picker.active) {
+        if (!panelOpen) picker.tick();
+        return;
+      }
       if (panelOpen || document.activeElement === nameInput) return;
       const I = ctx.input;
       if (I?.keyPressed?.('ArrowDown') || I?.keyPressed?.('KeyS')) select(sel + 1);
@@ -166,6 +191,9 @@ export function createTitle(ctx, root, { saves, openPanel, confirm, onStart }) {
     },
     get boatName() {
       return boatName();
+    },
+    get startPicker() {
+      return picker;
     },
   };
   return api;

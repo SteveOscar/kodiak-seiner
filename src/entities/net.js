@@ -2,7 +2,7 @@
 // Commands come from fishing (src/game/fishing.js); fish read polygon()/gap()/containsPoint()/pursed/bottomContact.
 
 import { createNetModel } from './net/model.js';
-import { createNetView } from './net/render.js';
+import { createNetView, CORK_SPACING } from './net/render.js';
 
 export async function create(ctx) {
   const { THREE } = ctx;
@@ -18,6 +18,11 @@ export async function create(ctx) {
   const shoreEnd = new THREE.Vector3();
   const bagCen = { x: 0, z: 0 };
   let foamTick = 0;
+  // Arcade hauls run the block at ~100 m/s: the corks climbing into it advance at most this much per rendered frame so
+  // they read as fast rather than strobing backwards.
+  const VIS_HAUL_STEP = CORK_SPACING * 0.45;
+  let lastHauledMetres = 0;
+  let visHauledMetres = 0;
 
   const frame = {
     state: 'stowed',
@@ -62,7 +67,12 @@ export async function create(ctx) {
     frame.corksUnder = m.corksUnder;
     frame.time = ctx.time.elapsed;
     frame.payout = m.payout;
-    frame.hauledMetres = m.hauledMetres;
+    if (m.arcade) {
+      const d = m.hauledMetres - lastHauledMetres;
+      visHauledMetres = d < 0 ? m.hauledMetres : visHauledMetres + Math.min(d, VIS_HAUL_STEP);
+      frame.hauledMetres = visHauledMetres;
+    } else frame.hauledMetres = m.hauledMetres;
+    lastHauledMetres = m.hauledMetres;
     frame.ringsUpSeconds = m.ringsUpSeconds;
     frame.seinerMatrix = s?.object3d?.matrixWorld ?? null;
     frame.drawPile = sys.drawsPile;
@@ -154,13 +164,15 @@ export async function create(ctx) {
     polygon: () => model.polygon(),
     gap: () => model.gap(),
     containsPoint: (x, z) => model.containsPoint(x, z),
-    begin(endAnchor) {
-      const ok = model.begin(endAnchor);
+    // opts.arcade: the crew purses and hauls (no snags, smooth-bottom slow-down or corks under).
+    begin(endAnchor, opts) {
+      const ok = model.begin(endAnchor, opts);
       mirror();
       return ok;
     },
-    close() {
-      model.close();
+    // opts.blend: seconds for the ends to come alongside.
+    close(opts) {
+      model.close(opts);
       mirror();
     },
     purse(rate) {
@@ -238,6 +250,9 @@ export async function create(ctx) {
     },
     get shoreTie() {
       return model.shoreTie;
+    },
+    get arcade() {
+      return model.arcade;
     },
     bagCentroid: (out) => model.bagCentroid(out),
     points: model.pts,

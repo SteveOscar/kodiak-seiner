@@ -877,3 +877,34 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1620; }
 .tp-empty { padding: calc(20 * var(--u)) 0; text-align: center; color: var(--ink3); font-style: italic; }
 .ms-where { width: 100%; justify-content: center; margin-bottom: calc(8 * var(--u)); }
 .mp-sub { margin: calc(4 * var(--u)) 0 0; font-size: calc(12 * var(--u)); color: var(--ink3); }
+
+/* ================================================================ start picker (FIX-start) — begin
+   "Where do you start?" over the title cinematic (src/ui/startPicker.js): takes the title column's place. */
+.ui-title.picking .title-col { opacity: 0; visibility: hidden; transition: opacity 0.3s, visibility 0s 0.3s; }
+.start-picker { position: absolute; left: 7.5vw; top: 50%; width: calc(540 * var(--u)); max-width: 86vw; max-height: 88vh; display: flex; flex-direction: column; padding: calc(22 * var(--u)) calc(24 * var(--u)) calc(18 * var(--u)); background: linear-gradient(180deg, rgba(10, 21, 28, 0.86), rgba(7, 15, 21, 0.82)); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: calc(11 * var(--u)); box-shadow: 0 calc(24 * var(--u)) calc(70 * var(--u)) rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05); color: var(--ink); opacity: 0; visibility: hidden; transform: translate(calc(-12 * var(--u)), -50%); transition: opacity 0.35s, transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s 0.35s; }
+.start-picker.on { opacity: 1; visibility: visible; transform: translate(0, -50%); transition: opacity 0.35s, transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.sp-kicker { font: 600 calc(10 * var(--u)) / 1 var(--sans); letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); }
+.sp-title { margin: calc(9 * var(--u)) 0 0; font: 400 calc(30 * var(--u)) / 1.12 var(--serif); letter-spacing: 0.005em; color: #fff; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.35); }
+.sp-sub { margin-top: calc(7 * var(--u)); font: calc(13 * var(--u)) / 1.4 var(--sans); color: var(--ink2); }
+.sp-rule { flex: none; height: 1px; margin: calc(14 * var(--u)) 0 calc(10 * var(--u)); background: linear-gradient(90deg, rgba(255, 122, 26, 0.55), rgba(255, 255, 255, 0.12) 22%, rgba(255, 255, 255, 0.02)); }
+.sp-bar { display: flex; margin-bottom: calc(8 * var(--u)); }
+.sp-bar[hidden] { display: none; }
+.sp-search { flex: 1; padding: calc(8 * var(--u)) calc(12 * var(--u)); font: calc(14 * var(--u)) / 1.2 var(--sans); color: var(--ink); background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: calc(7 * var(--u)); outline: none; }
+.sp-search:focus { border-color: rgba(255, 122, 26, 0.6); background: rgba(255, 255, 255, 0.07); }
+.sp-list { flex: 1 1 auto; min-height: calc(120 * var(--u)); overflow-y: auto; margin: 0 calc(-8 * var(--u)); padding: 0 calc(8 * var(--u)); scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent; }
+.sp-group { margin: calc(12 * var(--u)) 0 calc(4 * var(--u)) calc(11 * var(--u)); font: 600 calc(9.5 * var(--u)) / 1 var(--sans); letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent); opacity: 0.9; }
+.sp-group:first-child { margin-top: calc(4 * var(--u)); }
+.sp-row { display: flex; width: 100%; align-items: baseline; gap: calc(12 * var(--u)); padding: calc(6 * var(--u)) calc(10 * var(--u)); background: transparent; border: 1px solid transparent; border-radius: calc(6 * var(--u)); color: rgba(240, 236, 226, 0.78); text-align: left; cursor: pointer; font: inherit; transition: background 0.15s, border-color 0.15s, color 0.15s; }
+.sp-row.on { background: rgba(255, 122, 26, 0.1); border-color: rgba(255, 122, 26, 0.42); color: #fff; }
+.sp-name { flex: none; font: calc(16.5 * var(--u)) / 1.25 var(--serif); white-space: nowrap; }
+.sp-line { flex: 1; min-width: 0; text-align: right; font: 500 calc(11.5 * var(--u)) / 1.2 var(--sans); color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-row.on .sp-line { color: var(--ink2); }
+.sp-rec .sp-line, .sp-rec.on .sp-line { color: var(--accent2); font-weight: 600; letter-spacing: 0.02em; }
+.sp-surprise .sp-name { font-style: italic; }
+.sp-empty { padding: calc(20 * var(--u)) 0; text-align: center; color: var(--ink3); font-style: italic; }
+.sp-detail { flex: none; margin-top: calc(10 * var(--u)); padding-top: calc(11 * var(--u)); border-top: 1px solid var(--line); min-height: calc(62 * var(--u)); }
+.sp-meta { font: 600 calc(9.5 * var(--u)) / 1.3 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink3); }
+.sp-blurb { margin-top: calc(6 * var(--u)); font: italic calc(13.5 * var(--u)) / 1.4 var(--serif); color: rgba(236, 230, 218, 0.86); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.sp-actions { flex: none; display: flex; justify-content: flex-end; gap: calc(10 * var(--u)); margin-top: calc(14 * var(--u)); }
+.sp-list.more { -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 26 * var(--u)), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 26 * var(--u)), transparent); }
+/* ================================================================ start picker (FIX-start) — end */

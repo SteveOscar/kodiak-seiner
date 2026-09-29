@@ -12,7 +12,9 @@ import { create as createFishing } from '../src/game/fishing.js';
 // Deep open water east of Kodiak (26 m), clear of islands for a 60 m circle to the north.
 export const OPEN = { x: 5850, z: -520 };
 
-export async function makeGame({ freeExplore = true, overrides = {} } = {}) {
+// mode: settings.fishingMode the fishing system reads at let-go (via season.save.getSettings). The WP-NET tests
+// exercise the realistic set; the arcade tests pass mode 'arcade' (or change game.settings between sets).
+export async function makeGame({ freeExplore = true, overrides = {}, mode = 'realistic' } = {}) {
   const ctx = fakeCtx();
   const held = new Set();
   const edges = new Set();
@@ -44,6 +46,8 @@ export async function makeGame({ freeExplore = true, overrides = {} } = {}) {
     sys.name = name;
     ctx.systems[name] = sys;
   }
+  const settings = { fishingMode: mode };
+  if (ctx.systems.season && !ctx.systems.season.save) ctx.systems.season.save = { getSettings: () => ({ ...settings }) };
   // The stub school mills inside the test circle (the first set only lets go close to fish).
   if (!overrides.fish) ctx.systems.fish.schools?.[0]?.position?.set(OPEN.x, -2, OPEN.z - 60);
   ctx.events.emit('game:ready', {});
@@ -51,6 +55,7 @@ export async function makeGame({ freeExplore = true, overrides = {} } = {}) {
   const dt = 1 / 30;
   const game = {
     ctx,
+    settings,
     events,
     held,
     raw,

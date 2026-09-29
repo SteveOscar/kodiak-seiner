@@ -144,7 +144,8 @@ export function createDebugTools(ctx) {
   // Look-dev helper: lays a round haul instantly around (x, z) — the seiner is walked around the circle and the net
   // pays out from its real stern point — then advances the set to `phase` ('laid' | 'holding' | 'closing' |
   // 'pursing' | 'hauling' | 'brailing'). pursed / hauled preset those phases. Spawns a milling school at the centre.
-  function stage(core, { x, z, r = 58, phase = 'laid', frac = 0.975, pursed = 0.55, hauled = 0.5, school = true, schoolAt = null, species = 'pink', count = 5000 } = {}) {
+  // mode: the set's fishing mode (default 'realistic', whose phases wait for the player, so a staged phase holds).
+  function stage(core, { x, z, r = 58, phase = 'laid', frac = 0.975, pursed = 0.55, hauled = 0.5, school = true, schoolAt = null, species = 'pink', count = 5000, mode = 'realistic' } = {}) {
     const S = ctx.systems;
     const s = S.seiner;
     const net = S.net;
@@ -154,7 +155,7 @@ export function createDebugTools(ctx) {
     const pose = (a) => s.setPose(x + Math.cos(a) * r, z + Math.sin(a) * r, wrap(a));
     pose(0);
     s.update?.(0);
-    core.debug.letGo({ force: true });
+    core.debug.letGo({ force: true, mode });
     const stern = { x: 0, y: 0, z: 0 };
     const V = new ctx.THREE.Vector3();
     let laid = false;
