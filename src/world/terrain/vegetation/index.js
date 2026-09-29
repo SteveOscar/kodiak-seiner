@@ -22,7 +22,7 @@ import {
   fernGeometry,
 } from './models.js';
 import { bakeImpostors, createImpostorMaterial, createImpostorTile } from './impostor.js';
-import { createKelpLayer } from './kelp.js';
+import { createKelpLayer, KELP_FADE } from './kelp.js';
 import { smoothstep } from '../landcover.js';
 import { createPlacement, TREE_CELL, BOULDER_CELL, DRIFT_CELL } from './placement.js';
 
@@ -535,12 +535,14 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
 
   // ---- Bull kelp beds in rocky nearshore shallows.
   const kelp = createKelpLayer({ ctx, sunScale, capacity: 3000 });
-  group.add(kelp.mesh);
-  const KELP_CELL = 1.7;
+  for (const m of kelp.meshes) group.add(m);
+  // Loose beds: one candidate plant per 2 m cell, thinned by the bed noise into clumps; the layer fades out by
+  // KELP_FADE[1].
+  const KELP_CELL = 2.0;
   const kelpScatter = createTileScatter({
     name: 'kelp',
     tileSize: 64,
-    radius: 420,
+    radius: KELP_FADE[1] + 40,
     stride: 8,
     capacity: 3000,
     generate(tx, tz, x0, z0, size, push) {
@@ -552,10 +554,9 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
           const z = (iz + rand(ix, iz, 103)) * KELP_CELL;
           const sd = heightmap.shoreDistance(x, z);
           if (sd < 14 || sd > 190) continue;
-          // Beds: dense rafts (the 17 m noise) inside larger patches along the reef (75 m).
-          // Beds are dense floating mats (the 14 m noise) inside larger patches along the reef (70 m).
-          const bed = smoothstep(0.5, 0.64, landcover.noise(x / 70 + 3.3, z / 70 - 8.1)) * smoothstep(0.42, 0.6, landcover.noise(x / 14, z / 14));
-          if (bed <= 0 || r0 > bed * 1.3) continue;
+          // Beds: clumps (6 m noise) in loose rafts (14 m) inside larger patches along the reef (70 m).
+          const bed = smoothstep(0.5, 0.64, landcover.noise(x / 70 + 3.3, z / 70 - 8.1)) * smoothstep(0.42, 0.6, landcover.noise(x / 14, z / 14)) * smoothstep(0.3, 0.6, landcover.noise(x / 6 - 4.7, z / 6 + 2.9));
+          if (bed <= 0 || r0 > bed) continue;
           const h = surface.heightAt(x, z);
           if (h > -2.2 || h < -15 || dev(x, z)) continue;
           const s = landcover.sample(x, z);
@@ -566,8 +567,9 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
           const coast = landcover.sample(cx, cz);
           const rocky = Math.max(smoothstep(0.06, 0.2, s.s), smoothstep(0.55, 1.2, coast.s));
           if (rocky < 0.3) continue;
-          const yaw = rand(ix, iz, 104) * Math.PI * 2;
-          push(x, 0, z, (2.8 + rand(ix, iz, 105) * 3.2) * (0.7 + 0.3 * bed), Math.cos(yaw), Math.sin(yaw), 0, rand(ix, iz, 106));
+          // Plants in a bed stream the same way (a 50 m direction field, small jitter) instead of fanning out at random.
+          const yaw = landcover.noise(x / 50 + 17.2, z / 50 - 5.4) * Math.PI * 4 + (rand(ix, iz, 104) - 0.5) * 1.2;
+          push(x, 0, z, (1.6 + rand(ix, iz, 105) * 2.0) * (0.75 + 0.25 * bed), Math.cos(yaw), Math.sin(yaw), 0, rand(ix, iz, 106));
         }
       }
     },

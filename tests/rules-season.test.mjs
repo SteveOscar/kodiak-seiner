@@ -362,7 +362,7 @@ test('season.fleetBoard includes the player with live partial days', async () =>
 // ---- radio ----
 
 test('radio library: at least 120 authentic lines with only known tokens', () => {
-  const known = new Set(['me', 'boat', 'skipper', 'cape', 'bay', 'place', 'harbor', 'tender', 'pinkc', 'redc', 'dogc', 'silverc', 'fuel', 'lbs', 'dist', 'dir', 'rel', 'weekday', 'date', 'towFee', 'towTotal', 'opener']);
+  const known = new Set(['me', 'boat', 'skipper', 'cape', 'bay', 'place', 'harbor', 'tender', 'pinkc', 'redc', 'dogc', 'silverc', 'fuel', 'lbs', 'dist', 'dir', 'rel', 'weekday', 'date', 'towFee', 'towTotal', 'opener', 'rival']);
   let n = 0;
   for (const [cat, list] of Object.entries(LINES)) {
     for (const l of list) {

@@ -62,6 +62,7 @@ export async function create(ctx) {
   let peteCount = 0;
   let peteNextAt = 0;
   let noaaDeferredDay = null;
+  let bearCharge = null; // { t: simulated seconds since the charge, retreat: the player's retreat was seen }
   const announced = new Set();
   const mixCache = new Map();
   const districtCache = new Map();
@@ -298,6 +299,7 @@ export async function create(ctx) {
       fuel: () => formatMoney(fuelPriceAt({ isTender: true }, config.economy), true),
       towFee: () => spokenDollars(config.economy.towCost),
       towTotal: () => spokenDollars(ctx.systems.economy?.towQuote?.()?.total ?? config.economy.towCost),
+      rival: () => rivalName(),
       weekday: dateOf(clock.day).weekday,
       date: dateOf(clock.day).label,
       ...extra,
@@ -305,6 +307,8 @@ export async function create(ctx) {
   }
 
   const pickFleet = () => fleetList[Math.floor(radioRng.next() * fleetList.length)];
+  // The best fleet boat on the board other than the player's (the one the new highliner just passed).
+  const rivalName = () => fleetBoard().find((r) => !r.player)?.name ?? fleetList[0].name;
 
   function adoptFleetNames() {
     const boats = ctx.systems.fleet?.boats;
@@ -318,6 +322,9 @@ export async function create(ctx) {
     });
   }
 
+  // A line that opens on a token filled in lower case ("the tender" when no tender is out) still reads as a sentence.
+  const fill = (text, toks) => fillTemplate(text, toks).replace(/^[a-z]/, (c) => c.toUpperCase());
+
   // Builds a message from a category. kind: 'fleet' | 'tender' | 'pete' | 'uscg' | 'adfg'
   function compose(category, { kind = 'fleet', extra = {}, preset = null } = {}) {
     const line = radio.pickLine(LINES, category, preset ?? ctx.systems.sky?.weather?.preset ?? null);
@@ -326,12 +333,12 @@ export async function create(ctx) {
       const t = extra.tenderObj ?? nearestTender();
       if (!t) return null;
       extra = { ...extra, tenderObj: t };
-      return { from: t.name, text: fillTemplate(line.text, tokens(null, extra)), channel: tenderChannel(t) };
+      return { from: t.name, text: fill(line.text, tokens(null, extra)), channel: tenderChannel(t) };
     }
-    if (kind === 'pete') return { from: FROM.pete, text: fillTemplate(line.text, tokens(null, extra)), channel: CHANNELS.fleet };
-    if (kind === 'uscg') return { from: FROM.uscg, text: fillTemplate(line.text, tokens(null, extra)), channel: CHANNELS.uscg };
+    if (kind === 'pete') return { from: FROM.pete, text: fill(line.text, tokens(null, extra)), channel: CHANNELS.fleet };
+    if (kind === 'uscg') return { from: FROM.uscg, text: fill(line.text, tokens(null, extra)), channel: CHANNELS.uscg };
     const sp = pickFleet();
-    return { from: sp.name, text: fillTemplate(line.text, tokens(sp.name, extra)), channel: CHANNELS.fleet };
+    return { from: sp.name, text: fill(line.text, tokens(sp.name, extra)), channel: CHANNELS.fleet };
   }
 
   function say(category, opts = {}, queue = {}) {
@@ -343,6 +350,7 @@ export async function create(ctx) {
   function ambient(category) {
     const explore = ctx.state.freeExplore;
     if (explore && (category === 'prices' || category === 'tender' || category === 'closed' || category === 'morning')) return compose('banter');
+    if (category === 'morning' && tutorialQuiet()) return compose('jumpers');
     if (category === 'tender' || (category === 'prices' && radioRng.next() < 0.35)) {
       if (!tenders().length) return compose('banter');
       return compose(category === 'prices' ? 'prices' : 'tender', { kind: category === 'tender' ? 'tender' : 'fleet' });
@@ -423,7 +431,9 @@ export async function create(ctx) {
     // The tender reads everyone's pounds to the nearest hundred, the player's too.
     const mine = ctx.systems.economy?.stats?.daily?.[day]?.lbs ?? 0;
     if (mine > 0) parts.push(`${ctx.systems.seiner?.boatName ?? 'Northern Dawn'} ${lbs(Math.max(100, Math.round(mine / 100) * 100))}`);
-    radio.push({ from: t.name, text: `${t.name} with the daily deliveries: ${parts.join(', ')}. Thanks, fleet — see you next period.`, channel: tenderChannel(t) }, { priority: 3, ttl: 600 });
+    const days = config.season.fishingDays;
+    const signOff = day === days[days.length - 1] ? "That's the season — thanks, fleet." : 'Thanks, fleet — see you next period.';
+    radio.push({ from: t.name, text: `${t.name} with the daily deliveries: ${parts.join(', ')}. ${signOff}`, channel: tenderChannel(t) }, { priority: 3, ttl: 600 });
   }
 
   // Scheduled items fire once inside their window, so a time skip past a window never floods the radio.
@@ -478,11 +488,12 @@ export async function create(ctx) {
       return;
     }
     const p = s?.position;
+    // Pete names "humpies", so only a pink school qualifies; the tutorial school (fish sim, 380–420 m out) first.
     const school = p ? (ctx.systems.fish?.schools ?? [])
-      .filter((sc) => sc.state !== 'captured' && sc.state !== 'gone' && sc.position)
+      .filter((sc) => sc.state !== 'captured' && sc.state !== 'gone' && sc.position && (sc.species ?? 'pink') === 'pink')
       .map((sc) => ({ sc, d: Math.hypot(sc.position.x - p.x, sc.position.z - p.z) }))
       .filter((o) => o.d < 1500)
-      .sort((a, b) => (a.sc.species === 'pink' ? 0 : 1) - (b.sc.species === 'pink' ? 0 : 1) || a.d - b.d)[0] : null;
+      .sort((a, b) => (a.sc.tutorial ? 0 : 1) - (b.sc.tutorial ? 0 : 1) || a.d - b.d)[0] : null;
     if (!school) {
       radio.push({ from: FROM.pete, text: fillTemplate(WELCOME_NONE[0], { me, opener: words.opener }), channel: CHANNELS.fleet }, { priority: 5, ttl: 60 });
       return;
@@ -499,6 +510,35 @@ export async function create(ctx) {
     const dist = nm < 0.15 ? 'a couple hundred yards' : nm < 0.27 ? 'a quarter mile' : nm < 0.75 ? 'half a mile' : nm < 1.25 ? 'about a mile' : `${Math.round(nm)} miles`;
     const text = fillTemplate(WELCOME[Math.floor(radioRng.next() * WELCOME.length)], { me, dist, dir, rel: relText, opener: words.opener, go: words.go });
     radio.push({ from: FROM.pete, text, channel: CHANNELS.fleet }, { priority: 8, ttl: 90 });
+  }
+
+  // ---- bear charges ----
+
+  // A bluff charge ends one of two ways (player.js, notes/FIX-foot.md [25]): the fade puts the deckhand back beside the
+  // landed skiff (phase 'retreat' → 'foot', still on foot), or straight back aboard the seiner (control → 'boat' under
+  // the fade, player:mode). player.js emits no outcome event, so season.frame() — which runs in every mode, the
+  // cutscene included — watches for it. `player.phase` is optional: without it the player's cutscene stands in for the
+  // retreat. A charge the player did not act on (no retreat within BEAR_RETREAT_WAIT) or one that never settles is
+  // dropped rather than guessed. The waits count simulated seconds only, so a pause mid-fade does not drop the line.
+  const BEAR_RETREAT_WAIT = 3;
+  const BEAR_SETTLE_WAIT = 30;
+
+  function watchBearCharge(dt) {
+    const c = bearCharge;
+    if (!c) return;
+    if (ctx.state.mode === 'play' || ctx.state.mode === 'cutscene') c.t += dt;
+    const phase = ctx.systems.player?.phase;
+    const retreating = typeof phase === 'string' ? phase === 'retreat' : ctx.state.mode === 'cutscene';
+    if (retreating) c.retreat = true;
+    if (c.retreat && ctx.state.control === 'boat') settleBearCharge('aboard');
+    else if (c.retreat && !retreating && ctx.state.control === 'foot' && ctx.state.mode === 'play') settleBearCharge('skiff');
+    else if ((!c.retreat && c.t > BEAR_RETREAT_WAIT) || c.t > BEAR_SETTLE_WAIT) bearCharge = null;
+  }
+
+  // Delayed so the Skiffman's own quip (player.js, when the fade clears) is heard first.
+  function settleBearCharge(outcome) {
+    bearCharge = null;
+    say(outcome === 'aboard' ? 'bearChargeAboard' : 'bearCharge', {}, { priority: 3, delay: 7, key: 'bearCharge', cooldown: 600, ttl: 90 });
   }
 
   // ---- rest: sleep, wait for the opener, anchor ----
@@ -677,13 +717,18 @@ export async function create(ctx) {
         announcePeriod(today, true, 12);
       }
       noaaDeferredDay = null;
+      bearCharge = null;
       peteCount = 0;
       peteNextAt = radio.time + 150;
     }),
-    events.on('game:toTitle', () => radio.clear()),
+    events.on('game:toTitle', () => {
+      radio.clear();
+      bearCharge = null;
+    }),
     events.on('time:skip', () => {
       // Anything queued before the skip is stale (yesterday's chatter, a reminder for a period now past).
       radio.clear();
+      bearCharge = null;
       mixCache.clear();
       creditBoard();
       if (ctx.state.mode === 'play' || ctx.state.mode === 'paused' || ctx.state.mode === 'map') {
@@ -706,7 +751,7 @@ export async function create(ctx) {
       if (radioRng.next() < 0.45) say('snag', {}, { priority: 2, delay: 5, key: 'snag', cooldown: 300 });
     }),
     events.on('bear:encounter', (e) => {
-      if (e?.stage === 'charge') say('bearCharge', {}, { priority: 3, delay: 8, key: 'bearCharge', cooldown: 600, ttl: 90 });
+      if (e?.stage === 'charge' && ctx.state.control === 'foot' && !bearCharge) bearCharge = { t: 0, retreat: false };
     }),
     events.on('economy:delivered', (r) => {
       const t = tenders().find((x) => x.name === r?.tender) ?? null;
@@ -797,7 +842,8 @@ export async function create(ctx) {
       offerRest();
     },
 
-    frame() {
+    frame(dt = 0) {
+      watchBearCharge(Number.isFinite(dt) ? dt : 0);
       if (save.pending) save.flush();
     },
 
@@ -833,6 +879,7 @@ export async function create(ctx) {
       lastAppliedPreset = null;
       welcomeAt = null;
       noaaDeferredDay = null;
+      bearCharge = null;
       save.suspend();
     },
     dispose() {

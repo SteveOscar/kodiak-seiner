@@ -5,7 +5,7 @@
 // Tokens: {me} player's boat, {boat} another fleet boat, {skipper} that boat's skipper, {cape} {bay} {place}
 // {harbor} nearby names, {tender}, {pinkc} {redc} {dogc} {silverc} spoken prices, {fuel} tender fuel price,
 // {lbs}, {dist} {dir} {rel} directions, {weekday} {date}, {towFee} {towTotal} spoken tow price, {opener} {go}
-// (Pete's welcome, worded from the clock).
+// (Pete's welcome, worded from the clock), {rival} the top fleet-board boat the player just passed.
 // `w` weights a line within its category; `wx` limits it to sky presets.
 
 export const CHANNELS = { fleet: '10', distress: '16', uscg: '22A', noaa: 'WX1' };
@@ -74,13 +74,13 @@ export const LINES = {
     "Heard they're paying {redc} on reds. Nobody's paying that for humpies, I'll tell you.",
     '{pinkc} on pinks? My old man got more than that back in eighty-eight.',
     'Price on dogs went up two cents. Somebody alert the media.',
-    "Cannery says humpies are {pinkc}. Everybody grumble on three.",
-    "If you've got RSW, bring 'em cold. They're docking fish that sat in the sun.",
-    "Silvers are {silverc} at the cannery. Worth chasing if you've got the time.",
+    "{tender} says humpies are {pinkc}. Everybody grumble on three.",
+    "Got RSW? Buyers are paying a nickel over for chilled fish. Adds up by August.",
+    "{tender}'s paying {silverc} on silvers. Worth chasing if you've got the time.",
     "Market's soft on pinks this year. Too much canned salmon in the warehouses, they say.",
     'Reds are the money fish. Humpies pay the fuel bill. That’s the season.',
     'Word is the price goes up after the Fourth. Of next year.',
-    "{tender}'s paying a penny over the cannery on dogs. Every penny counts.",
+    "{tender}'s paying {dogc} on dogs. Every penny counts.",
   ],
   weather: [
     { t: "Fog's so thick I can't see my own bow. I'm blowing the horn every two minutes if you hear it.", wx: ['fog'] },
@@ -157,7 +157,7 @@ export const LINES = {
     "Heading over to scout {cape} for the next opener. Don't follow me.",
     "Took the skiff up the bay to look at the jumpers. Lots of fish, not going anywhere yet.",
     'Changing the oil and pretending it’s a vacation.',
-    'Potluck on the dock in {harbor} tonight. Bring fish. Obviously.',
+    'Potluck on the dock at {harbor} tonight. Bring fish. Obviously.',
     "Crew's getting cabin fever. Somebody tell me when the next opener is.",
     'Spent the whole closure splicing the corkline. Looks better than it has in years.',
     "Anybody got the escapement numbers? Karluk weir's looking good, I hear.",
@@ -166,9 +166,9 @@ export const LINES = {
   ],
   morning: [
     "Morning, fleet. Coffee's hot and the fish are out there somewhere.",
-    'Twenty minutes to six. Everybody find your spot and stay out of mine.',
+    "Not long till six. Everybody find your spot and stay out of mine.",
     "Skiff's ready, net's stacked, crew's awake. Mostly.",
-    'Five minutes, boys. Five minutes.',
+    'Almost time, boys. Almost time.',
     "{boat}, you're sitting right on my hook-off spot. I been fishing this point since before you were born.",
     "Nice morning for it. Let's go catch some fish.",
     "Looks fishy out here. I'm feeling lucky today.",
@@ -181,9 +181,9 @@ export const LINES = {
   ],
   evening: [
     "One more set and I'm heading for the tender.",
-    'Hour left. Might squeeze in one more round haul.',
+    "Period's winding down. Might squeeze in one more round haul.",
     'Last set of the day. Make it count.',
-    'Getting dark out here. Deck lights on, eyes open.',
+    "Sun's getting low. Deck lights handy, eyes open.",
     "Anybody want to raft up at the tender tonight? We've got stew.",
   ],
   openerEnd: [
@@ -204,7 +204,7 @@ export const LINES = {
     "{tender} here, still buying. No line right now — come on over.",
     "Coffee's hot and the scale's certified. Bring us your fish.",
     "Ice cream for the crews tonight. That's not a joke.",
-    "{tender} here. We're buying until midnight, then running fish to the cannery.",
+    "{tender} here. We're buying around the clock — the packer runs our fish to the cannery between periods.",
     'Diesel is {fuel} a gallon alongside. Fill-ups on request.',
     'Reminder to the fleet: kings go back in the water. We don’t want them on the scale.',
   ],
@@ -236,7 +236,7 @@ export const LINES = {
   niceSet: [
     'Nice set, cap! Leave some for the rest of us.',
     'Holy smokes, {me}, you plugged it! I saw your corks go under from here.',
-    "Saw that set, {me}. That's a boat payment right there.",
+    "Saw that set, {me}. That one'll keep the cook in groceries for a week.",
     '{me} found the fish. Anybody else want to follow him around all day?',
   ],
   goodSet: [
@@ -257,16 +257,24 @@ export const LINES = {
     'Heard the troopers got you, {me}. Ouch. Stay outside the markers.',
     "That's an expensive lesson, {me}. The markers are there for a reason.",
   ],
+  // A bluff charge ends with the deckhand back beside the landed skiff (bearCharge) or put straight back aboard the
+  // seiner (bearChargeAboard); season.js waits for the outcome before picking the category.
   bearCharge: [
     'Saw that bear run you back to the skiff, {me}. You looked fast.',
-    'Everybody on ten saw you sprint, {me}. Personal best?',
+    'Heard a brownie bluffed you on the beach, {me}. Stay close to that skiff a while.',
+    'Heard the bear business on ten, {me}. Keep the water at your back a while.',
+  ],
+  bearChargeAboard: [
+    'Heard your skiffman had to haul you back aboard ahead of a brownie, {me}. That beach is hers today.',
+    'Saw your skiff come off that beach in a hurry, {me}. Glad you made it back aboard.',
+    "Bear ran you right off the island, huh, {me}? Pick another landing — that one's taken.",
   ],
   delivered: [
     "Thanks, {me}. {lbs} pounds on the scale — fish ticket's in the window.",
     'Nice fish, {me}. Come back when you’re plugged again.',
     "Got you down for {lbs}. Coffee's on the galley table if your crew wants some.",
   ],
-  holdFull: ["Pete here. Sounds like you're plugged, {me}. Go see a tender before you lose any more fish."],
+  holdFull: ["Pete here. Sounds like you're plugged, {me}. No room for another set — run 'em to a tender, or tie up and sell in town or at a cannery."],
   lowFuel: ['{me}, you sound thirsty. We have diesel — come alongside.'],
   tow: ["{tender} to {me}: heard you're out of fuel. We can come get you — {towFee} for the tow plus diesel to get you going, call it {towTotal}. Say the word."],
   fogIn: ["Fog's rolling in. Radar on, everybody.", "Here comes the fog. Can't see {boat} anymore — I'll miss that ugly boat."],
@@ -276,7 +284,8 @@ export const LINES = {
     'Permit loan paid off? Well, look at you, {me}.',
     'Boat payment made! Your banker’s gonna send you a Christmas card, {me}.',
   ],
-  highliner: ["Tender's saying {me} is highliner. Karluk Queen's not gonna like that one bit."],
+  // Read by the tender that buys the player's fish, after the period that put the player on top of the board.
+  highliner: ["{tender} here. By our scale {me}'s the highliner now. {rival}'s not gonna like that one bit."],
 };
 
 // Pete's welcome on a new season, pointing at the tutorial school. {opener} / {go} are worded from the clock

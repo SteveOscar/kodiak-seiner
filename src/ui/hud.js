@@ -6,7 +6,7 @@
 import { h, setText, setStyle, toggle, clear, keycap, svgFrom } from './dom.js';
 import { createSonar } from './sonar.js';
 import { createSetPanel } from './setPanel.js';
-import { compassLayout, bearingDistance, holdSegments, fuelLevel, tideLabel, keyLabel, dedupeCompassLabels, nextStep } from './lib/logic.js';
+import { compassLayout, bearingDistance, holdSegments, fuelLevel, tideLabel, keyLabel, dedupeCompassLabels, nextStep, isInfoPrompt } from './lib/logic.js';
 import { money, int, clockTime, calendar, headingDeg, cardinal, nmLabel } from './lib/format.js';
 import { GLYPHS } from './lib/art.js';
 
@@ -317,6 +317,14 @@ export function createHud(ctx, root) {
     }
     const cur = ctx.interact?.current ?? {};
     const today = st?.next && st.next.day === ctx.clock.day ? clockTime(st.next.hours ?? 6) : null;
+    let dock = null;
+    if (s?.mooring?.kind === 'dock') {
+      try {
+        dock = eco?.dockedAt?.() ?? ctx.systems.places?.get?.(s.mooring.placeId) ?? null;
+      } catch {
+        dock = null;
+      }
+    }
     const line = nextStep({
       control: ctx.state.control,
       fishing: ctx.systems.fishing?.state ?? 'idle',
@@ -328,6 +336,7 @@ export function createHud(ctx, root) {
       fuelEmpty: !!eco?.fuelEmpty,
       hours: ctx.clock.hours,
       moored: s?.mooring?.kind ?? null,
+      sellHere: !!dock?.services?.includes?.('sell'),
       tender,
       opensToday: today,
       interactId: cur.interact?.id ?? null,
@@ -418,7 +427,7 @@ export function createHud(ctx, root) {
     const entries = [];
     for (const key of ['action', 'interact']) if (cur[key]?.label) entries.push([key, cur[key]]);
     for (const [key, o] of Object.entries(cur)) if (key !== 'action' && key !== 'interact' && o?.label) entries.push([key, o]);
-    const sig = entries.map(([k, o]) => `${k}|${o.id}|${o.label}|${o.hold ? 1 : 0}`).join('/');
+    const sig = entries.map(([k, o]) => `${k}|${o.id}|${o.label}|${o.hold ? 1 : 0}|${isInfoPrompt(o) ? 1 : 0}`).join('/');
     if (sig !== promptKey) {
       promptKey = sig;
       clear(promptBox);
@@ -431,7 +440,7 @@ export function createHud(ctx, root) {
           ring = h('span.prompt-ring');
           cap.append(ring);
         }
-        const p = h(`div.prompt${o.hold ? '.hold' : ''}`, null, [cap, h('span.prompt-label', { text: o.label })]);
+        const p = h(`div.prompt${o.hold ? '.hold' : ''}${isInfoPrompt(o) ? '.info' : ''}`, null, [cap, h('span.prompt-label', { text: o.label })]);
         if (o.hold) p.append(h('span.prompt-hold', { text: 'hold' }));
         promptBox.append(p);
         promptRings.push({ key, id: o.id, ring, el: p });

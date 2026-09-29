@@ -186,7 +186,7 @@ export async function create(ctx) {
   // Smoke and steam.
   let smoke = null;
   if (ctx.quality.name !== 'low' && S.smoke.length) {
-    smoke = createSmoke(ctx, S.smoke, { puffs: 8, rng: rng.fork('smoke') });
+    smoke = createSmoke(ctx, S.smoke, { puffs: 10, steamPuffs: 22, rng: rng.fork('smoke') });
     group.add(smoke.mesh);
   }
 

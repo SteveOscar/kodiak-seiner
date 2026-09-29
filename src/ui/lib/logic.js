@@ -163,13 +163,16 @@ export function tensionState(tension, band = [0.4, 0.7]) {
 // ---------------------------------------------------------------- what to do next
 
 // One quiet line for the status panel saying what the skipper should do next, or null when the moment speaks for
-// itself (a set in progress, ashore, a delivery prompt already on screen). Pure: every input is a plain value.
+// itself (a set in progress, ashore, a tender's delivery prompt already on screen). Pure: every input is a plain value.
 //   s = { control, fishing, freeExplore, open, holdLbs, capacityLbs, fuelFrac, fuelEmpty, hours,
-//         moored ('dock'|'anchor'|null), tender: {name, nm} | null, opensToday ('6:00 AM' | null), interactId }
+//         moored ('dock'|'anchor'|null), sellHere (the dock buys fish), tender: {name, nm} | null,
+//         opensToday ('6:00 AM' | null), interactId }
 export function nextStep(s) {
   if (!s || s.control === 'foot' || (s.fishing && s.fishing !== 'idle')) return null;
   const cap = Math.max(1, Number(s.capacityLbs) || 1);
   const hold = Math.max(0, Number(s.holdLbs) || 0);
+  // Tied up at a fish buyer with fish aboard: sell here rather than run to a tender, whatever else is going on.
+  if (s.moored === 'dock' && s.sellHere && hold > 0) return `Sell your catch here (E) · ${int(hold)} lb`;
   const t = s.tender ? `the ${s.tender.name}${Number.isFinite(s.tender.nm) ? ` · ${s.tender.nm < 10 ? s.tender.nm.toFixed(1) : Math.round(s.tender.nm)} nm` : ''}` : 'a tender';
   if (!s.freeExplore && s.fuelEmpty) return s.interactId === 'tow' ? null : 'Out of fuel — call for a tow';
   if (s.interactId === 'deliver') return null;
@@ -415,6 +418,12 @@ export function keyLabel(code) {
   if (c.startsWith('Digit')) return c.slice(5);
   const map = { Space: 'Space', Escape: 'Esc', Enter: 'Enter', ShiftLeft: 'Shift', ShiftRight: 'Shift', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Slash: '/', Backspace: '⌫', interact: 'E', action: 'Space' };
   return map[c] ?? c;
+}
+
+// Prompts that only inform (Space repeats guidance rather than acting): drawn dimmed in the prompt bar. interact.js
+// publishes { id, label, hold } only, so the id suffix is the reliable signal; an `info: true` flag is honoured too.
+export function isInfoPrompt(o) {
+  return !!o && (o.info === true || /-find-fish$/.test(String(o.id ?? '')));
 }
 
 // ---------------------------------------------------------------- timing

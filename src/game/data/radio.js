@@ -18,7 +18,9 @@ export function ambientWeights({ open, hours, fishingDay, preset }) {
     Object.assign(w, { jumpers: 4, sets: 4, prices: 1, weather: 1.5, bears: 0.8, wildlife: 1, banter: 1.5, tender: 1.2 });
     if (hours >= 20.5) w.evening = 3;
   } else {
-    Object.assign(w, { closed: 3, prices: 1.2, weather: 1.5, bears: 1.2, wildlife: 1, banter: 2, tender: 0.6 });
+    // Closed-day chatter ("a closed day", "waiting on the next period") belongs to the days between periods, not to
+    // the dawn before an opener or the night after one.
+    Object.assign(w, { closed: fishingDay ? 0 : 3, prices: 1.2, weather: 1.5, bears: 1.2, wildlife: 1, banter: 2, tender: 0.6 });
     if (fishingDay && hours >= 4.5 && hours < 6) Object.assign(w, { morning: 6, jumpers: 1 });
     if (hours >= 22) w.night = 3;
   }
