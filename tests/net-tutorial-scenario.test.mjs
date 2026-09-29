@@ -25,16 +25,25 @@ const HELPERS = String.raw`(() => {
   const fwd = () => ({ x: Math.sin(S.seiner.heading), z: -Math.cos(S.seiner.heading) });
   const F = () => S.fishing;
   const band = () => F().hud.tensionBand;
+  // Metres to go until the school is abeam; armed once it has been well ahead (it may start astern of the spawn).
+  let armed = false;
+  let pauseT = 0;
+  const along = () => {
+    const f = fwd(), a = (sc.position.x - pos().x) * f.x + (sc.position.z - pos().z) * f.z;
+    if (a > 30) armed = true;
+    return armed ? a : 1e4;
+  };
   window.__T = {
     school: sc, P, R,
-    // Follow the approach line through P (parallel to spawn → school): heading correction from cross-track error.
+    // Tangent guidance on the live school: the heading whose track passes it R metres to port (then the circle turns
+    // left around it), re-aimed from wherever the boat is, so a slow turn or a nudge off a tender never misses it.
     aErr: () => {
-      const p = pos();
-      const ct = (p.x - P.x) * -uz + (p.z - P.z) * ux;
-      return wrap(hdg(ux, uz) - Math.atan(ct / 40) - S.seiner.heading);
+      const p = pos(), bx = sc.position.x - p.x, bz = sc.position.z - p.z, d = Math.hypot(bx, bz) || 1;
+      return wrap(hdg(bx, bz) + Math.asin(Math.min(1, R / d)) - S.seiner.heading);
     },
-    distP: () => (P.x - pos().x) * ux + (P.z - pos().z) * uz,
-    abeam: () => { const f = fwd(); return (sc.position.x - pos().x) * f.x + (sc.position.z - pos().z) * f.z < 3; },
+    distP: along,
+    abeam: () => along() < 3,
+    letGo: () => K.ctx.interact.current.action?.id === 'fishing-letgo',
     cErr: () => {
       const p = pos(), cx = sc.position.x, cz = sc.position.z;
       const ddx = p.x - cx, ddz = p.z - cz, dd = Math.hypot(ddx, ddz) || 1;
@@ -42,6 +51,22 @@ const HELPERS = String.raw`(() => {
       return wrap(hdg(ddz / dd - (ddx / dd) * k, -ddx / dd - (ddz / dd) * k) - S.seiner.heading);
     },
     done: () => F().hud.closeReady || F().state !== 'setting',
+    // Heading error to the skiff end (bringing her around when the net ran out short of it).
+    kErr: () => {
+      const g = K.systems.net.gap?.();
+      if (!g) return 0;
+      const p = pos();
+      return wrap(hdg(g.a.x - p.x, g.a.z - p.z) - S.seiner.heading);
+    },
+    ready: () => F().hud.closeReady && K.ctx.interact.current.action?.id === 'fishing-close',
+    // True once ms real milliseconds have passed since the first call of a wait.
+    pause: (ms) => {
+      const n = performance.now();
+      if (!pauseT) pauseT = n;
+      if (n - pauseT < ms) return false;
+      pauseT = 0;
+      return true;
+    },
     st: () => F().state,
     tHi: () => F().state !== 'pursing' || F().hud.tension > band()[0] + (band()[1] - band()[0]) * 0.68,
     tLo: () => F().state !== 'pursing' || F().hud.tension < band()[0] + (band()[1] - band()[0]) * 0.3,
@@ -73,13 +98,13 @@ export function tutorialSteps() {
     { key: 'KeyW', up: true },
     { until: '__KODIAK__.systems.seiner.speed > 3', timeout: 40000 },
   ];
-  // Come onto the approach line, then trim it every few seconds on the way in.
+  // Come onto the tangent, then trim it every few seconds on the way in (a trim ends early once the school is abeam).
   const trim = () => [
     { key: 'KeyD', down: true },
-    { until: '__T.aErr() < 0.01', timeout: 40000 },
+    { until: '__T.aErr() < 0.01 || __T.abeam()', timeout: 40000 },
     { key: 'KeyD', up: true },
     { key: 'KeyA', down: true },
-    { until: '__T.aErr() > -0.01', timeout: 40000 },
+    { until: '__T.aErr() > -0.01 || __T.abeam()', timeout: 40000 },
     { key: 'KeyA', up: true },
   ];
   steps.push(...trim());
@@ -89,9 +114,11 @@ export function tutorialSteps() {
   });
   // Ease the lever back to 60% for the set.
   for (let i = 0; i < 4; i++) steps.push({ press: 'KeyS' }, { wait: 150 });
-  for (const d of [130, 80, 40]) steps.push({ until: `__T.distP() < ${d}`, timeout: 90000 }, ...trim());
+  for (const d of [130, 100, 80, 60, 40, 25]) steps.push({ until: `__T.distP() < ${d}`, timeout: 90000 }, ...trim());
   steps.push(
     { until: '__T.abeam()', timeout: 90000 },
+    // The first set only lets go this close to the school (no "Jumpers … get within 150 m" prompt any more).
+    { until: '__T.letGo()', timeout: 20000 },
     { state: 'letgo' },
     { press: 'Space' },
     { wait: 200 },
@@ -109,8 +136,21 @@ export function tutorialSteps() {
     if (i === 22) steps.push({ eval: "__T.view('chase')" }, { wait: 600 }, { shot: '03-setting-chase' }, { eval: "__T.view('crowsnest')" });
     if (i === 34) steps.push({ shot: '04-setting-crowsnest-late' });
   }
+  // Short of the skiff when the net ran out: "Bring her around to the skiff" — steer for it until the close is offered.
+  steps.push({ until: "__T.ready() || __KODIAK__.systems.fishing.state === 'holding'", timeout: 120000 });
+  for (let i = 0; i < 16; i++) {
+    steps.push(
+      { key: 'KeyD', down: true },
+      { until: '__T.kErr() < 0.02 || __T.ready()', timeout: 20000 },
+      { key: 'KeyD', up: true },
+      { key: 'KeyA', down: true },
+      { until: '__T.kErr() > -0.02 || __T.ready()', timeout: 20000 },
+      { key: 'KeyA', up: true },
+      { until: '__T.ready() || __T.pause(1500)', timeout: 10000 },
+    );
+  }
   steps.push(
-    { until: "__KODIAK__.systems.fishing.hud.closeReady || __KODIAK__.systems.fishing.state === 'holding'", timeout: 120000 },
+    { until: '__T.ready()', timeout: 120000 },
     { state: 'closeReady' },
     { shot: '05-close-ready-crowsnest' },
     { press: 'Space' },

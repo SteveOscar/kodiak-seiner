@@ -102,7 +102,7 @@ const ik = { thigh: 0, knee: 0, reach: 0 };
 
 // in: { dt, speed, slopeDeg (+ uphill along facing), onGround, vy, jumped, landed, landSpeed, sliding, depth,
 //       turnRate, mode: 'free'|'ride'|'startled'|'wary', lookYaw, lookPitch (rad, relative to facing; null = none),
-//       boatRoll, boatPitch (ride), scrambling (bool) }
+//       boatRoll, boatPitch (ride), scrambling (bool), reverse (walking backwards) }
 // groundAt(lat, fwd): ground height at a foot position relative to the root (metres; root y = ground under the body).
 // Returns the pose (mutated in place). Emits footfalls by incrementing a.steps (a.stepSide = side that planted).
 export function animate(a, pose, input, groundAt) {
@@ -137,13 +137,18 @@ export function animate(a, pose, input, groundAt) {
   // Gait phase from distance travelled.
   const step = stepLength(v) * lerp(1, 0.62, clamp(Math.abs(uphill) / 50, 0, 1)) * lerp(1, 0.75, a.wade);
   const prevPhase = a.phase;
-  if (onGround && !input.sliding) a.phase = frac(a.phase + (v * dt) / (2 * step));
+  // Walking backwards (backing away while facing something) runs the gait cycle in reverse, so planted feet still
+  // move with the ground.
+  const dir = input.reverse ? -1 : 1;
+  if (onGround && !input.sliding) a.phase = frac(a.phase + (dir * v * dt) / (2 * step));
   // Footfalls at phase 0 (left) and 0.5 (right).
   if (a.moveAmt > 0.3 && onGround && !input.sliding) {
-    if (prevPhase > a.phase) {
+    const wrapped = dir > 0 ? prevPhase > a.phase : prevPhase < a.phase;
+    const crossedHalf = dir > 0 ? prevPhase < 0.5 && a.phase >= 0.5 : prevPhase >= 0.5 && a.phase < 0.5;
+    if (wrapped) {
       a.steps++;
       a.stepSide = -1;
-    } else if (prevPhase < 0.5 && a.phase >= 0.5) {
+    } else if (crossedHalf) {
       a.steps++;
       a.stepSide = 1;
     }

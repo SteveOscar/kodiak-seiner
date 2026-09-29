@@ -70,8 +70,10 @@ export function createPausePanel(ctx, { open, close, saves, toTitle, resume }) {
         snap = null;
       }
       const explore = !!ctx.state.freeExplore;
-      item(explore ? 'Quit to title' : snap ? 'Save & quit to title' : 'Quit to title', null, () => toTitle());
       const info = saves.saveInfo();
+      // Quitting where the game can't save throws away everything since the last save: ask first.
+      const quit = explore || snap ? () => toTitle() : () => open('confirm', quitConfirm(ctx, { fishing: f, info, toTitle }));
+      item(explore ? 'Quit to title' : snap ? 'Save & quit to title' : 'Quit to title', null, quit);
       if (explore) setText(note, 'Free Explore keeps your discoveries between visits.');
       else if (!snap) setText(note, `Can’t save ${f?.state && f.state !== 'idle' ? 'mid-set' : ctx.state.control === 'foot' ? 'while ashore' : 'right now'}${info?.savedAt ? ` — last save ${calendar(info.day ?? 0, ctx.config.time.seasonStart).label}, ${clockTime(info.hours ?? 0)}` : ''}.`);
       else setText(note, info?.savedAt ? `Last save ${calendar(info.day ?? 0, ctx.config.time.seasonStart).label}, ${clockTime(info.hours ?? 0)} · autosaves on deliveries, sleep and tie-ups` : 'Autosaves on deliveries, sleep and tie-ups.');
@@ -87,6 +89,21 @@ export function createPausePanel(ctx, { open, close, saves, toTitle, resume }) {
     activate() {
       items[sel]?.click();
     },
+  };
+}
+
+// The "Quit without saving?" dialog: what is lost (the set in progress, or the trip ashore) and since when.
+function quitConfirm(ctx, { fishing, info, toTitle }) {
+  const midSet = !!(fishing?.state && fishing.state !== 'idle');
+  const ashore = ctx.state.control === 'foot';
+  const since = info?.savedAt ? `since your last save (${calendar(info.day ?? 0, ctx.config.time.seasonStart).label}, ${clockTime(info.hours ?? 0)})` : 'this season — there is no save yet';
+  const what = fishing?.state === 'report' ? 'the set you just made and everything' : midSet ? 'the set in progress and everything' : ashore ? 'your trip ashore and everything' : 'everything';
+  return {
+    title: 'Quit without saving?',
+    text: `The game can’t save ${midSet ? 'mid-set' : ashore ? 'while you’re ashore' : 'right now'}. You’ll lose ${what} ${since}.`,
+    ok: 'Quit without saving',
+    cancel: 'Cancel',
+    onOk: () => toTitle(),
   };
 }
 
@@ -253,7 +270,11 @@ export function createHelpPanel(ctx, { close }) {
     h('div.help-h', { text: 'Gamepad' }),
     h('p.help-pad', { text: 'Left stick drive · right stick look · A action · X interact · Y camera · LB binoculars · B horn · Start pause' }),
   ]);
-  const rest = h('div.help-cols', null, [section(KEYS[1]), section(KEYS[2]), pad]);
+  const screens = section(KEYS[1]);
+  const rest = h('div.help-cols', null, [screens, section(KEYS[2]), pad]);
+  // Free Explore: the chart teleports instead of fast travel, and T opens "Where to?".
+  const chartRow = [...screens.querySelectorAll('.help-text')].find((x) => x.textContent === 'Chart and fast travel');
+  const teleportRow = h('div.help-row', null, [h('span.help-keys', null, [keycap('T')]), h('span.help-text', { text: 'Where to? — teleport anywhere' })]);
   const steps = h('ol.help-steps');
   for (const [t, d] of STEPS) steps.append(h('li', null, [h('span.step-t', { text: t }), h('span.step-d', { text: d })]));
   const el = card('panel-help', [
@@ -264,7 +285,17 @@ export function createHelpPanel(ctx, { close }) {
     h('div.panel-rule'),
     h('div.help-grid', null, [h('div.help-left', null, [steps]), helm, rest]),
   ]);
-  return { id: 'help', el, show() {}, hide() {} };
+  return {
+    id: 'help',
+    el,
+    show() {
+      const ex = !!ctx.state.freeExplore;
+      if (chartRow) chartRow.textContent = ex ? 'Chart and teleport' : 'Chart and fast travel';
+      if (ex && chartRow) chartRow.parentElement.after(teleportRow);
+      else teleportRow.remove();
+    },
+    hide() {},
+  };
 }
 
 // ---------------------------------------------------------------- credits

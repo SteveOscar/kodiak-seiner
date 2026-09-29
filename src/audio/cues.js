@@ -1,9 +1,13 @@
 // Event cues: every discrete game event that makes a sound (fish, fishing, the boat, wildlife, weather, feedback,
 // radio, UI clicks). audio.js subscribes to EVENTS at create time — before the UI exists — and forwards them here once
 // the audio graph is built, so the hint check below sees the UI's shown-set before the UI updates it.
+//
+// VHF: ui:radio / radio-style ui:hint only note the call; the squelch opens on ui:radioShown, the moment the UI starts
+// typing that caption (the UI queues and reorders calls). With a UI that never reports a caption (the stub), calls play
+// on their own after a short grace period, queued behind each other.
 
 import { clamp, radioTiming } from './params.js';
-import { thunderDelay } from './scene.js';
+import { thunderDelay, brailScoop, stampedePlan, matchRadio, radioChannel } from './scene.js';
 
 export const EVENTS = [
   'fish:jump',
@@ -31,12 +35,23 @@ export const EVENTS = [
   'bear:encounter',
   'wildlife:blow',
   'wildlife:breach',
+  'wildlife:disturbed',
   'sky:lightning',
+  'fishing:brail',
+  'ui:radioShown',
+  'player:summit',
 ];
 
 const STEP_SURFACES = new Set(['gravel', 'sand', 'grass', 'forest', 'alder', 'rock', 'snow', 'water', 'skiff']);
 // Seconds the music is lifted after a plugged set or a season goal (the triumph piece runs ~35 s).
 const TRIUMPH_S = 38;
+// Radio calls waiting for their caption: play-time grace before a call plays uncaptioned (no ui:radioShown seen yet
+// this session), how long a noted call may wait behind others, and how many are kept (the UI queues 6).
+const RADIO_GRACE_S = 1.5;
+const RADIO_STALE_S = 90;
+const RADIO_PENDING_MAX = 8;
+// A haulout keeps roaring harder for this long after a stampede (WP-WILDLIFE's alarm window is 90 s).
+const STAMPEDE_S = 90;
 
 // deps: { ac, player, mixer, L (listener), shared { triumphUntil, radioBusyUntil }, panOf(x, z), resetWorld(keepRadio) }
 export function createCues(ctx, { ac, player, mixer, L, shared, panOf, resetWorld }) {
@@ -47,16 +62,26 @@ export function createCues(ctx, { ac, player, mixer, L, shared, panOf, resetWorl
   const warned = new Set();
   let lastMooring = null;
   let lastUiClick = -1e9;
+  let lastDiscovery = -1e9;
+  const pendingRadio = []; // { from, channel, tip, text, age (s of play time) }
+  let captionsSeen = false; // the UI has reported a caption this session (ui:radioShown)
 
-  // VHF: calls queue behind each other (up to ~6 s of backlog); the music and world duck while one plays.
-  function radio(text) {
+  // VHF: squelch, static and a muffled voice for the caption's typing time; the music and world duck under it.
+  function playRadio(text, delay = 0) {
     const now = ac.currentTime;
     const tm = radioTiming(text);
-    const wait = Math.max(0, shared.radioBusyUntil - now);
-    if (wait > 6) return;
-    player.play('radio', { params: { text }, delay: wait, priority: 9 });
-    shared.radioBusyUntil = now + wait + tm.total + 0.1;
-    mixer.duck(wait + tm.duck);
+    player.play('radio', { params: { text }, delay, priority: 9 });
+    shared.radioBusyUntil = Math.max(shared.radioBusyUntil, now + delay + tm.total + 0.1);
+    mixer.duck(delay + tm.duck);
+  }
+  // Uncaptioned fallback: calls queue behind each other (up to ~6 s of backlog).
+  function radioQueued(text) {
+    const wait = Math.max(0, shared.radioBusyUntil - ac.currentTime);
+    if (wait <= 6) playRadio(text, wait);
+  }
+  function noteRadio(p, tip) {
+    pendingRadio.push({ from: String(p.from || 'VHF'), channel: radioChannel(p.channel, tip ? '10' : '16'), tip, text: String(p.text), age: 0 });
+    if (pendingRadio.length > RADIO_PENDING_MAX) pendingRadio.shift();
   }
 
   const seiner = () => S().seiner;
@@ -90,6 +115,18 @@ export function createCues(ctx, { ac, player, mixer, L, shared, panOf, resetWorl
       const z = Number.isFinite(e.z) ? e.z : s?.position?.z;
       if (Number.isFinite(x)) at('snag', x, 1, z);
     },
+    // One brailer scoop: the dip into the bag now, the salmon thumping into the hold as it dumps over the hatch.
+    'fishing:brail'(e) {
+      if (!Number.isFinite(e.x) || !Number.isFinite(e.z)) return;
+      const f = S().fishing;
+      const sc = brailScoop({ lbs: e.lbs, loadLbs: ctx.config?.net?.phases?.brailLoadLbs, progress: f?.hud?.brailProgress, cycle: f?.brailer?.cycle });
+      shared.brailAt = ac.currentTime;
+      at('brail-dip', e.x, 0.2, e.z, { volume: sc.dipVolume });
+      const s = seiner();
+      if (!s?.position) return;
+      const h = s.heading ?? 0;
+      at('brail-dump', s.position.x - Math.sin(h) * 1.5, (s.position.y ?? 0) + 1.5, s.position.z + Math.cos(h) * 1.5, { params: { count: sc.dumpCount }, delay: sc.dumpDelay });
+    },
     'fishing:setComplete'(r) {
       player.play('stinger', { params: { rating: r.rating, cited: !!r.cited }, delay: 0.35 });
       if (r.rating === 'plugged' || (r.rating === 'good' && (r.totalLbs ?? 0) >= 20000)) shared.triumphUntil = ac.currentTime + TRIUMPH_S;
@@ -106,21 +143,36 @@ export function createCues(ctx, { ac, player, mixer, L, shared, panOf, resetWorl
     },
     'place:discovered'(p) {
       // Memorial places (Awa'uq) are marked quietly: no chord.
-      if (!p.memorial) player.play('discovery', { params: { kind: p.kind, memorial: false }, delay: 0.15 });
+      if (!p.memorial) {
+        player.play('discovery', { params: { kind: p.kind, memorial: false }, delay: 0.15 });
+        lastDiscovery = ac.currentTime;
+      }
+    },
+    // Standing on a summit or viewpoint perch: a short, gentle sting (after a discovery chord still ringing).
+    'player:summit'() {
+      const wait = Math.max(0, lastDiscovery + 3.2 - ac.currentTime);
+      player.play('summit', { delay: 0.2 + wait });
     },
     'camera:sighting'() {
       player.play('ui-blip', { volume: 0.9 });
     },
     'ui:radio'(p) {
       const m = ctx.state.mode;
-      if (p.text && m !== 'title' && m !== 'loading') radio(p.text);
+      if (p.text && m !== 'title' && m !== 'loading') noteRadio(p, false);
     },
     'ui:hint'(p) {
       if (!p.from || !p.text || ctx.state.mode === 'title' || ctx.state.mode === 'loading') return;
       // The UI shows each hint once per save; its shown-set is still unchanged here (audio subscribes first).
       const shown = S().ui?.serialize?.()?.hintsShown;
       if (Array.isArray(shown) && shown.includes(p.id)) return;
-      radio(p.text);
+      noteRadio(p, true);
+    },
+    // The UI starts typing a caption: open the squelch now, for that call's text.
+    'ui:radioShown'(p) {
+      captionsSeen = true;
+      const i = matchRadio(pendingRadio, p);
+      const text = i >= 0 ? pendingRadio.splice(i, 1)[0].text : 'x'.repeat(40);
+      playRadio(text);
     },
     'ui:toast'(p) {
       if (p.kind === 'discovery' || p.kind === 'goal' || ctx.state.mode === 'title') return;
@@ -131,6 +183,7 @@ export function createCues(ctx, { ac, player, mixer, L, shared, panOf, resetWorl
       if ((e.prev === 'paused' || e.prev === 'map') && e.mode === 'play') player.play('ui-close', { volume: 0.5 });
     },
     'game:toTitle'() {
+      pendingRadio.length = 0;
       resetWorld();
     },
     'boat:teleport'(e) {
@@ -179,6 +232,15 @@ export function createCues(ctx, { ac, player, mixer, L, shared, panOf, resetWorl
       const orca = e.kind === 'orca';
       at('whale-blow', e.x, 1, e.z, { params: { strength: orca ? 0.45 : 1 }, rate: orca ? 1.5 : 0.95 + 0.1 * rnd() });
     },
+    // A haulout stampeding into the sea: roars and a splash chorus sized to the colony; the herd keeps roaring a while.
+    'wildlife:disturbed'(e) {
+      if ((e.kind && e.kind !== 'sealion') || !Number.isFinite(e.x) || !Number.isFinite(e.z)) return;
+      const site = S().wildlife?.sites?.haulouts?.find?.((h) => h?.id === e.siteId);
+      const n = site?.members?.length;
+      const members = Number.isFinite(n) && n > 0 ? n : e.closed || site?.kind === 'rookery' ? 150 : 18;
+      at('stampede', e.x, 2, e.z, { params: { plan: stampedePlan(members, rnd) } });
+      shared.stampede = { id: e.siteId ?? null, x: e.x, z: e.z, until: ac.currentTime + STAMPEDE_S };
+    },
     'wildlife:breach'(e) {
       if (!Number.isFinite(e.x)) return;
       if (e.stage === 'splash') at('breach', e.x, 0, e.z);
@@ -202,6 +264,28 @@ export function createCues(ctx, { ac, player, mixer, L, shared, panOf, resetWorl
   }
 
   return {
+    // Per frame: ages noted radio calls (play time only; the UI holds captions behind menus) and plays a call on its own
+    // when no UI has ever reported a caption.
+    tick(realDt) {
+      if (!pendingRadio.length) return;
+      const m = ctx.state.mode;
+      const running = m === 'play' || m === 'cutscene';
+      // In arrival order, so uncaptioned calls queue up as they came in.
+      let w = 0;
+      for (const r of pendingRadio) {
+        if (running) r.age += realDt;
+        if (!captionsSeen && r.age > RADIO_GRACE_S) radioQueued(r.text);
+        else if (r.age <= RADIO_STALE_S) pendingRadio[w++] = r;
+      }
+      pendingRadio.length = w;
+    },
+    // Forget noted calls (back to the title, a new game).
+    clearRadio() {
+      pendingRadio.length = 0;
+    },
+    get pendingRadio() {
+      return pendingRadio.length;
+    },
     event(name, p) {
       const fn = handlers[name];
       if (!fn) return;

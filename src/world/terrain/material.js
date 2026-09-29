@@ -323,12 +323,18 @@ ${DEEP_SEABED_EXIT}
     if ( tkH > -18.0 ) {
       float kelpy = rocky * smoothstep( 0.45, 0.7, tkNoise( tkPw.xz / 19.0 + vec2( 6.6, -1.1 ) ) ) * smoothstep( -16.0, -3.0, tkH );
       bed = mix( bed, ${col(PALETTE.kelpBed)}, kelpy * 0.8 );
-      float cd = smoothstep( -12.0, -0.3, tkH ) * ( 1.0 - smoothstep( 60.0, 300.0, tkDist ) );
-      if ( cd > 0.0 ) {
-        vec2 cp = tkPw.xz / 2.3;
-        float c1 = tkNoise( cp + vec2( uTime * 0.23, uTime * 0.11 ) );
-        float c2 = tkNoise( cp * 1.37 + vec2( -uTime * 0.19, uTime * 0.21 ) + 5.0 );
-        tkCaustic = pow( clamp( 1.0 - abs( c1 - c2 ) * 3.0, 0.0, 1.0 ), 5.0 ) * cd * 1.4;
+      // Caustics: a fine, soft network (~1 m cells) that fades with depth, with distance, at grazing view angles
+      // (where the foreshortened pattern reads as long worms) and once a pixel spans more than a few centimetres.
+      float tkViewUp = abs( cameraPosition.y - tkPw.y ) / max( tkDist, 1e-3 );
+      float cd = ( 1.0 - smoothstep( 1.0, 9.0, -tkH ) ) * ( 1.0 - smoothstep( 25.0, 110.0, tkDist ) )
+        * smoothstep( 0.2, 0.55, tkViewUp ) * ( 1.0 - smoothstep( 0.06, 0.25, tkFw ) );
+      if ( cd > 0.001 ) {
+        vec2 cp = tkPw.xz / 0.95;
+        float c1 = tkNoise( cp + vec2( uTime * 0.21, uTime * 0.1 ) );
+        float c2 = tkNoise( cp * 1.41 + vec2( -uTime * 0.17, uTime * 0.19 ) + 5.0 );
+        float c3 = tkNoise( cp * 2.3 + vec2( uTime * 0.12, -uTime * 0.23 ) + 11.0 );
+        float net = clamp( 1.0 - abs( c1 - c2 ) * 3.2, 0.0, 1.0 ) * ( 0.65 + 0.35 * c3 );
+        tkCaustic = net * net * cd * 0.7;
       }
     }
     tkAlbedo = mix( bed, ${col(PALETTE.mud)}, smoothstep( 150.0, 400.0, tkSd ) * 0.6 );

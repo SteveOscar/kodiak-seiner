@@ -3,6 +3,7 @@
 // below its lowest corner (terrain LOD error, SPEC §3). rot follows kit.js (front = local +z).
 
 import { Builder, WIN, col, shade } from './kit.js';
+import { colBox, colCircle } from './colliders.js';
 
 export const PALETTE = {
   houseWalls: ['#c9d1d4', '#e8e2d2', '#8fa8b6', '#5b7b95', '#a4443b', '#d3ae4e', '#6d8a58', '#f0eee6', '#b7c4a6', '#7a5d4b', '#3e5b6d', '#c47e4f', '#9b6f8e', '#e3c9a0'],
@@ -42,13 +43,13 @@ export function footprintHeights(H, x, z, rot, w, d) {
   return { min, max };
 }
 
-// Concrete foundation from below the lowest corner up to floor level; returns floor y.
+// Concrete foundation from below the lowest corner up to floor level; returns { floor, bottom } (y).
 function foundation(S, f, w, d, extraTop = 0.35) {
   const { min, max } = footprintHeights(S.H, f.x, f.z, f.rot, w, d);
   const floor = Math.max(max, 0.4) + extraTop;
   const bottom = Math.min(min, 0) - 2.3;
   S.b.box({ ...f, y: 0 }, 0, bottom, 0, w + 0.3, floor - bottom, d + 0.3, col(PALETTE.concrete), { top: false });
-  return floor;
+  return { floor, bottom };
 }
 
 // Detached house (1-2 storeys, gable roof). Returns { floor, top }.
@@ -59,7 +60,7 @@ export function house(S, x, z, rot, o = {}) {
   const floors = o.floors ?? (rng.next() < 0.45 ? 2 : 1);
   const f = { x, z, rot, y: 0 };
   b.seed = rng.next() * 100;
-  const floor = foundation(S, f, w, d);
+  const { floor, bottom } = foundation(S, f, w, d);
   S.sites?.push({ x, z, r: Math.hypot(w, d) / 2 + 3 });
   const wallH = floors * 2.75 + 0.2;
   const wall = shade(o.wall ?? pick(rng, PALETTE.houseWalls), 0.92 + rng.next() * 0.14);
@@ -67,10 +68,12 @@ export function house(S, x, z, rot, o = {}) {
   b.box({ ...f, y: floor }, 0, 0, 0, w, wallH, d, wall, { win: WIN.house, top: false });
   const rise = (d / 2) * (0.45 + rng.next() * 0.35);
   b.gable({ ...f, y: 0 }, 0, floor + wallH, 0, w, d, rise, roof, wall, { win: WIN.house, v0: wallH });
+  colBox(S, f, 0, 0, w + 0.3, d + 0.3, bottom, floor + wallH + rise);
   // door + stoop on the front
   const door = col(PALETTE.door);
   b.box({ ...f, y: floor }, w * 0.18, 0, d / 2 + 0.02, 1.0, 2.05, 0.06, door, { top: false });
   b.box({ ...f, y: 0 }, w * 0.18, floor - 0.9, d / 2 + 0.8, 1.8, 0.9, 1.5, col(PALETTE.deck));
+  colBox(S, f, w * 0.18, d / 2 + 0.8, 1.8, 1.5, floor - 0.9, floor);
   // trim band under the eaves
   b.box({ ...f, y: floor + wallH - 0.25 }, 0, 0, 0, w + 0.08, 0.25, d + 0.08, col(PALETTE.trim), { top: false });
   let chimney = null;
@@ -98,9 +101,10 @@ export function block(S, x, z, rot, o = {}) {
   const floors = o.floors ?? 2 + Math.floor(rng.next() * 2);
   const f = { x, z, rot };
   b.seed = rng.next() * 100;
-  const floor = foundation(S, f, w, d, 0.2);
+  const { floor, bottom } = foundation(S, f, w, d, 0.2);
   S.sites?.push({ x, z, r: Math.hypot(w, d) / 2 + 3 });
   const h = floors * 3.3;
+  colBox(S, f, 0, 0, w + 0.5, d + 0.5, bottom, floor + h + 1.4);
   const wall = shade(o.wall ?? pick(rng, ['#d9d4c7', '#c2c7c9', '#a9b4b9', '#e6e1d6', '#9c6b54', '#7f8f96', '#c9b79c']), 0.95 + rng.next() * 0.1);
   b.box({ ...f, y: floor }, 0, 0, 0, w, h, d, wall, { win: o.win ?? WIN.office, topColor: col('#5d6266') });
   b.box({ ...f, y: floor + h }, 0, 0, 0, w + 0.3, 0.7, d + 0.3, shade(o.trim ?? '#e9e7e0', 1), { top: false });
@@ -121,6 +125,7 @@ export function shed(S, f, lx, lz, w, d, h, o = {}) {
   const c = Builder.xf(f, lx, 0, lz, [0, 0, 0]);
   S.sites?.push({ x: c[0], z: c[2], r: Math.hypot(w, d) / 2 + 3 });
   b.box({ ...f, y: y0 }, lx, 0, lz, w, h, d, wall, { win: o.win ?? WIN.shed, top: false });
+  colBox(S, f, lx, lz, w, d, y0 - (o.below ?? 0), y0 + h + (o.rise ?? d * 0.12));
   b.gable({ ...f, y: 0 }, lx, y0 + h, lz, w, d, o.rise ?? d * 0.12, roof, wall, { win: WIN.none, overhang: 0.5 });
   // roll-up doors on the front
   const doors = o.doors ?? Math.max(1, Math.floor(w / 14));
@@ -135,6 +140,8 @@ export function pileDeck(S, f, lx, lz, w, d, fy, o = {}) {
   const { b } = S;
   const deckC = shade(o.deck ?? PALETTE.deck, 1);
   b.box({ ...f, y: fy - 0.6 }, lx, 0, lz, w, 0.6, d, deckC);
+  // deck + the fender line on its water face
+  colBox(S, f, lx, lz + 0.375, w, d + 0.75, fy - 1.1, fy);
   const sp = o.spacing ?? 4.5;
   const pc = col(PALETTE.piling);
   const nx = Math.max(2, Math.round(w / sp) + 1);
@@ -151,6 +158,7 @@ export function pileDeck(S, f, lx, lz, w, d, fy, o = {}) {
       const g = S.H(wx, wz) - 2.2;
       if (g > fy - 0.8) continue;
       b.box({ x: wx, z: wz, rot: f.rot, y: g }, 0, 0, 0, 0.42, fy - 0.6 - g, 0.42, pc, { top: false });
+      colCircle(S, wx, wz, 0.27, g, fy - 0.6);
     }
   }
   // fender line / cap on the water face
@@ -160,12 +168,14 @@ export function pileDeck(S, f, lx, lz, w, d, fy, o = {}) {
 // Floating dock segment (main float), at water level. Frame f; runs along local x.
 export function float(S, f, lx, lz, len, width = 2.4) {
   S.b.box({ ...f, y: -0.25 }, lx, 0, lz, len, 0.75, width, col(PALETTE.float), { side: col('#8e8c85') });
+  colBox(S, f, lx, lz, len, width, -0.25, 0.5);
 }
 
 // Steel guide pile standing out of the water at (x, z).
 export function guidePile(S, x, z) {
   const g = S.H(x, z) - 2.2;
   S.b.cylinder({ x, z, rot: 0, y: g }, 0, 0, 0, 0.28, 0.28, 3.8 - g, 6, col('#3c3e40'));
+  colCircle(S, x, z, 0.28, g, 3.8);
 }
 
 // Moored boat (seiner / gillnetter / skiff-sized), afloat at y 0; hull length L along local z (bow = +z).
@@ -187,6 +197,8 @@ export function boat(S, f, o = {}) {
   ];
   const rise = o.bowRise ?? 0.6 + L * 0.045;
   const top = (z) => free + Math.max(0, (z + L * 0.1) / (L * 0.6)) ** 1.6 * rise;
+  // hull and wheelhouse (masts and booms are left out)
+  colBox(S, f, 0, 0, B, L, (f.y ?? 0) - 1.1, (f.y ?? 0) + free + rise + 2.6);
   hull3(b, f, pts, -1.1, top, hull, col('#3a2a24'));
   hull3(b, f, pts.map(([px, pz]) => [px * 1.012, pz * 1.006]), -1.12, (z) => -0.2, col('#6b2a22'), false);
   const stripe = col(pick(rng, ['#b52a22', '#1e4b7a', '#2f6b3a', '#e0b030', '#f2f2ee']));
@@ -284,7 +296,7 @@ export function church(S, x, z, rot, o = {}) {
   b.seed = rng.next() * 100;
   const W = 7 * k;
   const D = 12 * k;
-  const floor = foundation(S, f, W + 1, D + 7 * k);
+  const { floor, bottom } = foundation(S, f, W + 1, D + 7 * k);
   S.sites?.push({ x, z, r: (D + 7 * k) / 2 + 6 });
   const wall = col(o.wall ?? PALETTE.churchWhite);
   const roof = col(o.roof ?? '#56636b');
@@ -324,7 +336,10 @@ export function church(S, x, z, rot, o = {}) {
     // door
     b.box({ ...f, y: floor }, 0, 0, tz + tw / 2 + 0.03, 1.4 * k, 2.6 * k, 0.08, col('#5a3b28'), { top: false });
   }
-  return { floor, top: ridge + drumR * 2.6 + 2 };
+  const top = ridge + drumR * 2.6 + 2;
+  const towerTop = o.tower === 'none' ? 0 : floor + (o.tower === 'short' ? 8.5 : 11.5) * k + 8 * k;
+  colBox(S, f, 0, 0, W + 1.3, D + 7 * k + 0.3, bottom, Math.max(top, towerTop));
+  return { floor, top };
 }
 
 // Vertical storage tank.
@@ -332,6 +347,7 @@ export function tank(S, x, z, r, h, color = '#e9ebe8') {
   const g = S.H(x, z);
   S.sites?.push({ x, z, r: r + 3 });
   S.b.cylinder({ x, z, rot: 0, y: Math.min(g, 0.5) - 2.2 }, 0, 0, 0, r, r, h + Math.max(0, g) + 2.2, 12, col(color), { topColor: col('#b9bdbd') });
+  colCircle(S, x, z, r, Math.min(g, 0.5) - 2.2, Math.min(g, 0.5) + h + Math.max(0, g));
 }
 
 // Skeleton light tower (4 legs + braces + daymark); returns the lantern position.
@@ -370,6 +386,8 @@ export function skeletonTower(S, x, z, rot, h = 10, daymark = ['#c8322a', '#f2f2
   b.box(f, 0, H, 0, 2.0, 0.2, 2.0, steel);
   b.cylinder(f, 0, H + 0.2, 0, 0.45, 0.45, 0.9, 8, col('#2f3336'), { topColor: col('#202224') });
   const p = P(0, H + 0.7, 0);
+  // the legs splay to +-2.2 m at the foot; the braces make the whole footprint solid
+  colBox(S, f, 0, 0, 4.2, 4.2, f.y, f.y + H + 1.1);
   return { x: p[0], y: p[1], z: p[2] };
 }
 
@@ -380,6 +398,8 @@ export function regMarker(S, x, z, rot) {
   const f = { x, z, rot, y: g - 2.2 };
   S.sites?.push({ x, z, r: 4 });
   b.box(f, 0, 0, 0, 0.2, 5.9, 0.2, col('#8a7a62'));
+  colCircle(S, x, z, 0.14, f.y, f.y + 5.9);
+  colBox(S, f, 0, 0.14, 1.5, 0.12, f.y + 4.8, f.y + 6.0);
   b.box(f, 0, 4.8, 0.14, 1.5, 1.2, 0.06, col('#f06a1a'));
   b.box(f, 0, 4.95, 0.18, 1.2, 0.9, 0.04, col('#f5f3ec'));
   b.box(f, 0, 5.3, 0.21, 0.9, 0.14, 0.02, col('#f06a1a'));

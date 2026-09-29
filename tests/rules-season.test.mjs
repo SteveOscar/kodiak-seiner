@@ -339,8 +339,8 @@ test('fleet board: over a whole season the top boat out-earns the average boat',
     avg += g.reduce((a, b) => a + b, 0) / g.length;
   }
   assert.ok(top > avg * 1.25);
-  // A competent full season is ~12 × $7.5k ≈ $90k; the top boat ~1.2× that.
-  assert.ok(top / 5 > 80000 && top / 5 < 140000, `top ${top / 5}`);
+  // A competent full season is ~12 × $12.5k ≈ $150k; the top boat ~1.2× that (less the odd breakdown).
+  assert.ok(top / 5 > 140000 && top / 5 < 215000, `top ${top / 5}`);
 });
 
 test('season.fleetBoard includes the player with live partial days', async () => {
@@ -362,7 +362,7 @@ test('season.fleetBoard includes the player with live partial days', async () =>
 // ---- radio ----
 
 test('radio library: at least 120 authentic lines with only known tokens', () => {
-  const known = new Set(['me', 'boat', 'skipper', 'cape', 'bay', 'place', 'harbor', 'tender', 'pinkc', 'redc', 'dogc', 'silverc', 'fuel', 'lbs', 'dist', 'dir', 'rel', 'weekday', 'date']);
+  const known = new Set(['me', 'boat', 'skipper', 'cape', 'bay', 'place', 'harbor', 'tender', 'pinkc', 'redc', 'dogc', 'silverc', 'fuel', 'lbs', 'dist', 'dir', 'rel', 'weekday', 'date', 'towFee', 'towTotal', 'opener']);
   let n = 0;
   for (const [cat, list] of Object.entries(LINES)) {
     for (const l of list) {

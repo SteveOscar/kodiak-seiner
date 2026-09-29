@@ -7,6 +7,7 @@ import { Builder, WIN, col } from './kit.js';
 import { house, block, church, shed, pileDeck, tank, boat, PALETTE } from './structures.js';
 import { findLots, faceRot, marchToWater } from './sites.js';
 import { breakwater, slips, pier } from './harbor.js';
+import { colBox, colCircle } from './colliders.js';
 
 // Harbour-front axes: A runs NE along the west shore, N points seaward (SE).
 const A = { x: 0.85, z: -0.53 };
@@ -36,6 +37,7 @@ export function buildKodiak(S, chunks) {
     const a = at(s, -2);
     const c = at(s, 17);
     S.b.beam([a.x, 1.6, a.z], [c.x, 0.5, c.z], 1.3, col('#8e8c85'));
+    colBox(S, { x: (a.x + c.x) / 2, z: (a.z + c.z) / 2, rot: ROT_SEA }, 0, 0, 1.3, 19, -0.15, 2.25);
   }
   // harbormaster office and boat-grid shed on the shore
   block(S, at(-20, -16).x, at(-20, -16).z, ROT_SEA, { w: 16, d: 10, floors: 2, wall: '#6f8f9f' });
@@ -69,6 +71,7 @@ export function buildKodiak(S, chunks) {
     for (const lx of [-p.w * 0.4, p.w * 0.4]) {
       const q = Builder.xf(f, lx, 10.5, depth / 2 - 0.8, [0, 0, 0]);
       S.b.box({ x: q[0], z: q[2], rot, y: 3.8 }, 0, 0, 0, 0.18, 6.8, 0.18, col('#44484a'));
+      colCircle(S, q[0], q[2], 0.12, 3.8, 10.6);
       S.glows.push({ x: q[0], y: q[1], z: q[2], color: '#ffd7a0', intensity: 4.5, size: 1.4 });
     }
     // a tender unloading
@@ -108,6 +111,7 @@ export function buildKodiak(S, chunks) {
     if (S.hm.heightAt(p.x, p.z) < 0.3) continue;
     const g = S.H(p.x, p.z);
     S.b.box({ x: p.x, z: p.z, rot: ROT_SEA, y: g - 2.2 }, 0, 0, 0, 0.16, 8.7, 0.16, col('#4a4d50'));
+    colCircle(S, p.x, p.z, 0.12, g - 2.2, g + 6.5);
     S.glows.push({ x: p.x, y: g + 6.6, z: p.z, color: '#ffb35c', intensity: 5, size: 1.5 });
   }
   for (let t = -20; t >= -160; t -= 22) {
@@ -115,6 +119,7 @@ export function buildKodiak(S, chunks) {
     if (S.hm.heightAt(p.x, p.z) < 0.3) continue;
     const g = S.H(p.x, p.z);
     S.b.box({ x: p.x, z: p.z, rot: ROT_SEA, y: g - 2.2 }, 0, 0, 0, 0.16, 8.7, 0.16, col('#4a4d50'));
+    colCircle(S, p.x, p.z, 0.12, g - 2.2, g + 6.5);
     S.glows.push({ x: p.x, y: g + 6.6, z: p.z, color: '#ffb35c', intensity: 5, size: 1.5 });
   }
 
@@ -139,6 +144,7 @@ export function buildKodiak(S, chunks) {
     const l = north[i];
     const g = S.H(l.x + 7, l.z + 5);
     S.b.box({ x: l.x + 7, z: l.z + 5, rot: 0, y: g - 2.2 }, 0, 0, 0, 0.14, 8.2, 0.14, col('#4a4d50'));
+    colCircle(S, l.x + 7, l.z + 5, 0.1, g - 2.2, g + 6);
     S.glows.push({ x: l.x + 7, y: g + 6, z: l.z + 5, color: '#ffb35c', intensity: 4, size: 1.2 });
   }
 
@@ -159,13 +165,14 @@ export function buildKodiak(S, chunks) {
       slips(S, { x: w0.x + g.x * 47 - g.z * 6, z: w0.z + g.z * 47 + g.x * 6, rot }, { len: 96, fingerLen: 10, pitch: 7.4, both: true, fill: 0.85, boatL: [10, 18] });
       // boatyard: travel-lift shed and hauled-out boats
       const yard = { x: w0.x - g.x * 30, z: w0.z - g.z * 30 };
-      shed(S, { x: yard.x, z: yard.z, rot, y: Math.max(0.5, S.H(yard.x, yard.z)) }, 0, 0, 34, 22, 12, { wall: '#c6cdd0', roof: '#5d6c73', doors: 2 });
+      shed(S, { x: yard.x, z: yard.z, rot, y: Math.max(0.5, S.H(yard.x, yard.z)) }, 0, 0, 34, 22, 12, { wall: '#c6cdd0', roof: '#5d6c73', doors: 2, below: 2.5 });
       for (let i = 0; i < 3; i++) {
         const bx = yard.x - g.z * (26 + i * 9);
         const bz = yard.z + g.x * (26 + i * 9);
         S.sites.push({ x: bx, z: bz, r: 11 });
         boat(S, { x: bx, z: bz, rot: rot + 0.1 * i, y: S.H(bx, bz) + 2.2 }, { L: 14 + i * 3, B: 5 });
         S.b.box({ x: bx, z: bz, rot, y: S.H(bx, bz) - 2.2 }, 0, 0, 0, 3, 4.4, 8, col('#5a4f45'));
+        colBox(S, { x: bx, z: bz, rot }, 0, 0, 3, 8, S.H(bx, bz) - 2.2, S.H(bx, bz) + 2.2);
       }
     }
     // Kodiak Fisheries Research Center
@@ -215,6 +222,9 @@ function turbineBase(S, t) {
   S.sites.push({ x: t.x, z: t.z, r: 12 });
   S.b.cylinder(f, 0, 0, 0, 4.2, 4.2, 2.9, 10, col(PALETTE.concrete));
   S.b.cylinder(f, 0, 2.5, 0, TURBINE.towerR0, TURBINE.towerR1, TURBINE.hub - 0.3, 14, col('#eef0f0'), { top: false });
+  // plinth (a knee-high step) and the tower up to the nacelle
+  colCircle(S, t.x, t.z, 4.2, f.y, f.y + 2.9);
+  colCircle(S, t.x, t.z, TURBINE.towerR0, f.y, g + TURBINE.hub + 1.2);
   S.b.box({ x: t.x, z: t.z, rot: 0, y: g }, 0, 0, TURBINE.towerR0 + 0.02, 0.9, 2.1, 0.05, col('#56606a'), { top: false });
 }
 
@@ -253,6 +263,7 @@ function buildBridge(S, a, c) {
     // deck top and underside/edges
     b.quad(P(x0 - px, y0, z0 - pz), P(x0 + px, y0, z0 + pz), P(x1 + px, y1, z1 + pz), P(x1 - px, y1, z1 - pz), col('#5c5e60'));
     b.quad(P(x0 + px, y0 - 1.4, z0 + pz), P(x0 - px, y0 - 1.4, z0 - pz), P(x1 - px, y1 - 1.4, z1 - pz), P(x1 + px, y1 - 1.4, z1 + pz), dark);
+    colBox(S, { x: (x0 + x1) / 2, z: (z0 + z1) / 2, rot }, 0, 0, s1 - s0, 2 * hw, Math.min(y0, y1) - 1.4, Math.max(y0, y1) + 1.0);
     for (const sgn of [1, -1]) {
       const ex = sgn * px;
       const ez = sgn * pz;
@@ -270,7 +281,10 @@ function buildBridge(S, a, c) {
       const zm = (z0 + z1) / 2;
       const gy = S.H(xm, zm) - 2;
       const ym = yAt(sm);
-      if (ym - gy > 3) b.box({ x: xm, z: zm, rot, y: gy }, 0, 0, 0, 1.8, ym - 1.4 - gy, 7.5, concrete, { top: false });
+      if (ym - gy > 3) {
+        b.box({ x: xm, z: zm, rot, y: gy }, 0, 0, 0, 1.8, ym - 1.4 - gy, 7.5, concrete, { top: false });
+        colBox(S, { x: xm, z: zm, rot }, 0, 0, 1.8, 7.5, gy, ym - 1.4);
+      }
     }
     // lamps
     if (i % 5 === 2) {
@@ -278,6 +292,7 @@ function buildBridge(S, a, c) {
       const zm = (z0 + z1) / 2 + pz * 0.95;
       const ym = yAt(sm);
       b.box({ x: xm, z: zm, rot, y: ym }, 0, 0, 0, 0.16, 7.5, 0.16, col('#4a4d50'));
+      colCircle(S, xm, zm, 0.12, ym, ym + 7.5);
       S.glows.push({ x: xm, y: ym + 7.6, z: zm, color: '#ffb35c', intensity: 5, size: 1.5 });
     }
   }
@@ -304,6 +319,7 @@ export function buildCoastGuard(S, place) {
     const y = Math.max(0.5, S.H(p.x, p.z));
     const fr = { x: p.x, z: p.z, rot, y: 0 };
     S.b.box(fr, 0, y - 2.5, 0, 46, 2.8, 40, col(PALETTE.concrete), { top: false });
+    colBox(S, fr, 0, 0, 46, 40, y - 2.5, y + 0.3);
     shed(S, { ...fr, y: y + 0.3 }, 0, 0, 44, 38, 13, { wall: '#e4e6e3', roof: '#8e979b', rise: 3.5, doors: 3, doorColor: '#6b7680' });
   }
   for (const [d, s, ww] of [[40, 50, 40], [70, 58, 36], [100, 40, 44], [110, -30, 30]]) {
@@ -314,6 +330,7 @@ export function buildCoastGuard(S, place) {
   const ap = inland(28, -32);
   S.sites.push({ x: ap.x, z: ap.z, r: 34 });
   S.b.box({ x: ap.x, z: ap.z, rot, y: Math.max(0.2, S.H(ap.x, ap.z)) - 2 }, 0, 0, 0, 60, 2.3, 26, col('#77777a'));
+  colBox(S, { x: ap.x, z: ap.z, rot }, 0, 0, 60, 26, Math.max(0.2, S.H(ap.x, ap.z)) - 2, Math.max(0.2, S.H(ap.x, ap.z)) + 0.3);
   for (let i = 0; i < 2; i++) {
     const hp = inland(28, -50 + i * 26);
     helicopter(S, { x: hp.x, z: hp.z, rot: rot + Math.PI / 2, y: Math.max(0.2, S.H(ap.x, ap.z)) + 0.3 });
@@ -327,6 +344,7 @@ export function buildCoastGuard(S, place) {
   const rmy = S.H(rm.x, rm.z);
   S.sites.push({ x: rm.x, z: rm.z, r: 5 });
   S.b.cylinder({ x: rm.x, z: rm.z, rot: 0, y: rmy - 2.2 }, 0, 0, 0, 0.5, 0.15, 43.2, 4, col('#d0463a'));
+  colCircle(S, rm.x, rm.z, 0.5, rmy - 2.2, rmy + 41);
   S.glows.push({ x: rm.x, y: rmy + 41.5, z: rm.z, color: '#ff2a1a', intensity: 6, size: 1.6, period: 2, flashes: 1 });
   return { pierEnd: end };
 }
@@ -339,6 +357,7 @@ function cutter(S, f) {
   const white = col('#f2f2ef');
   const pts = [[-B / 2, -L / 2], [B / 2, -L / 2], [B / 2, L * 0.18], [B * 0.3, L * 0.4], [0, L / 2], [-B * 0.3, L * 0.4], [-B / 2, L * 0.18]];
   const P = (x, y, z) => Builder.xf(f, x, y, z, [0, 0, 0]);
+  colBox(S, f, 0, 0, B, L, -3.6, 18.8);
   // hull
   for (let i = 0; i < pts.length; i++) {
     const [ax, az] = pts[i];
@@ -384,6 +403,8 @@ function helicopter(S, f) {
   const { b } = S;
   const o = col('#e8541e');
   const w = col('#f2f2ef');
+  // fuselage and tail boom (the rotor disc is overhead)
+  colBox(S, f, 0, -3.8, 2.4, 16.4, f.y ?? 0, (f.y ?? 0) + 3.5);
   b.box(f, 0, 0.9, 0, 2.4, 2.4, 8, w);
   b.box(f, 0, 0.9, 3.8, 2.2, 1.9, 1.2, o);
   b.box(f, 0, 2.2, -7.5, 0.6, 1.0, 8, o);

@@ -88,8 +88,10 @@ Extras: `holdEnd()` (stop paying: the seiner end becomes the last node → 'out'
 ### `fishing` (superset of SPEC §6.12)
 
 Required: `state`, `setNumber`, `lastSet` (the last `fishing:setComplete` payload), `canSet()` → `{ok, reason}`
-(reasons: set under way, ashore, net/skiff out, anchored, aground, waters closed with the next opener, too shallow),
-`abort()`, `hud`.
+(reasons: set under way, ashore, net/skiff out, tied up at a dock ("Cast off first"), anchored, aground, "Hold's
+plugged — deliver first" (the hold can't take one 1,500 lb brailer load), "Too close to the <tender|harbour> to
+set" (< 60 m of water to a tender's hull or < 90 m from a harbour's dock point), waters closed with the next opener,
+too shallow), `abort()`, `hud`.
 
 `hud` (rewritten every frame, same object): `phase`, `payout` 0..1, `distanceToSkiff` (m from the nearest of bow,
 centre or stern to the skiff end; null when idle), `tension` 0..1+, `tensionBand` [0.42, 0.74], `pursed`, `hauled`,
@@ -98,17 +100,28 @@ estimate while pursing/hauling), `holdSeconds`, `depthUnderStern`, `bottomWarnin
 'Leads on bottom — rocky!' | idle 'Rocky bottom — the lead will hang up' | null), `towHeading`, `message`.
 Extras: `setNumber`, `hook`, `tied`, `closeReady`, `stall` ('wheel'|'snag'|'foul'|null), `stallSeconds`,
 `idealTowHeading` (pull that keeps the stern off the net against the current), `brailLbs`, `brailFish`,
-`brailProgress`, `acceptedLbs`, `abortProgress` (Backspace hold seconds), `closedWater`, `wheelDanger` 0..1.
+`brailProgress`, `acceptedLbs`, `abortProgress` (Backspace hold seconds), `closedWater`, `wheelDanger` 0..1,
+`nearestFish` (idle: `{distance, bearing (deg), compass, close}` of the nearest school within 1.5 km, or null),
+`fishClose` (idle: true/false, null when the fish system can't say), `payoutSpeed` (m/s over the stern, smoothed),
+`payoutPace` ('slow' below 60% of the 7 m/s limit | 'steady' | null), `payoutEta` (s to all out at this pace),
+`tideRunning` (hauling: current over the corks-under threshold), `valuedAt` (tender name pricing the catch).
+`closeReady` is false while a round haul is held short of the skiff. `message` is null while brailing a catch (the
+set panel's count-up carries it); "Water haul — nothing to brail" / trooper seizure otherwise.
 
 Extras on the system: `stats` ({sets, waterHauls, fish, lbs, value, bestSetLbs, citations, snags, wraps, fouls,
-aborted, kingsReleased}; saved), `core`, `debug` (see below).
+aborted, kingsReleased}; saved), `core`, `debug` (see below), `brailer` (the visual; tests read `group.visible`).
 
 Offers (all priority 100, only with `control === 'boat'`): idle Space "Let 'er go!" (label warns inside closed
-waters; the first press only warns, a second within 6 s sets); idle E "Let 'er go — tie off to the beach" (see
-deviations); setting Space "Close up!" (≥ 45% out and within `config.net.closeDistance` of the skiff end) or "Hold
-the hook" (≥ 60% out); setting E "Tie off to the beach" (skiff end within range, < 50% out); holding Space "Close
-up!"; pursing E hold-prompt "Hold to run the purse winch"; hauling E hold-prompt "Hold to speed up the block";
-brailing Space "Skip brailing".
+waters — the first press only warns, a second within 6 s sets — or reads "Let 'er go! (no fish close)" when no
+school is within 150 m + its radius); on a new season's first set (not free explore) with no school that close, the
+Space offer is instead `fishing-find-fish` "Jumpers 410 m SE — get within 150 m to let go" (informational: Space
+repeats it as the message and Pete's `findFish` tip; no idle E tie-off either); idle E "Let 'er go — tie off to the
+beach" (see deviations); setting Space "Close up!" (≥ 45% out and within `config.net.closeDistance` of the skiff end)
+or "Hold the hook" (≥ 60% out); setting E "Tie off to the beach" (skiff end within range, < 50% out); holding Space
+"Close up!" (a round haul only within 45 m of the skiff end, kept out to 60 m once offered — see deviations; hooks
+and tied sets any time); pursing E hold-prompt "Hold to run the purse winch"; hauling E hold-prompt `fishing-haul` "Hold to speed up
+the block", relabelled "Speed up the block — tide's running, the corks will sink" while the current at the net is
+over the corks-under threshold; brailing Space "Skip brailing".
 
 ### Events
 
@@ -117,7 +130,15 @@ Emitted: `fishing:state {state, prev}`, `fishing:skiffReleased {x, z}`, `fishing
 overflow), lbs {species: lbs}, totalLbs, value, minutes (game minutes), waterHaul, rating, cited` — plus extras
 `forfeited` (catch seized with a citation), `fine`, `aborted`, `escaped` (fish counted from `fishing:escape`)),
 `ui:toast`, `ui:radio` (trooper on channel 16), `ui:hint {id: 'pete-<key>', text, from: 'Uncle Pete'}` (the `from`
-lets the UI show it as a radio tip). Consumed: `boat:teleport`, `game:toTitle` (hard stop, no report),
+lets the UI show it as a radio tip), `fishing:brail {x, z, lbs}` (one per brailer scoop; the scoops sum to the
+accepted pounds unless skipped; none on water hauls or seized catches). `fishing:setComplete` extras also include
+`escapes: {leads, corks, gap, hole, overflow, spill}` (fish counts by cause: under the leadline, over sunk corks
+while hauling, out through the open gap, through a snag's hole, let go with a plugged hold, and — additive — the
+harvest's spill above the clean-set capture ceiling (WP-FISH `overCorks`), which no skipper action changes, so it is
+kept out of `corks`; `escaped` = leads + corks + gap + hole + spill, overflow is also in `released`) and `valuedAt` / `valuedAtId` (the nearest buying tender whose
+`season.priceFor(k, tenderId)` values the set — the same price a delivery there pays today; null = market price
+estimate). Escapes use WP-FISH's flags (`viaGap`, `overCorks`, `released`, or a `cause` field if one is added) and
+otherwise the net's state when the escape is flushed. Consumed: `boat:teleport`, `game:toTitle` (hard stop, no report),
 `fishing:escape`, `game:ready`.
 
 ### Debug helpers (`__KODIAK__.systems.fishing.debug`)
@@ -146,6 +167,15 @@ real stern path and advances to 'laid'|'holding'|'closing'|'pursing'|'hauling'|'
   stall). Feathered well a purse takes ~16–20 s (15.5 s perfect, 22 s on a smooth bottom); holding E flat out takes
   ~40 s with repeated fouls.
 - "Net's in the wheel" is also checked while hauling (the skiff keeps pulling the stern off the net then too).
+- **Holding short of the skiff.** A round haul that reaches full payout more than 45 m from its skiff end is not
+  offered a close-up (SPEC says `closeDistance`, 22 m; in holding the skiff runs its end in at ~5 m/s, so 45 m still
+  closes in ~10 s, and once offered the close stays offered out to 60 m so it cannot flicker as the skiff tows); the
+  1.5 m/s holding limit is lifted to 7 m/s ("Bring her around to the skiff — 340 m") so the player can run around
+  to it, and closing a hook with the skiff end > 60 m away lifts the 3 m/s closing limit the same way (QA: 75–109 s
+  closes). The untied skiff holds station 18 m up-current of where its end lay when holding began (it used to
+  re-aim from its own position every 20 s and walk away).
+- **First-set let-go.** A new season's tutorial set only lets go within 150 m of the school (QA: players let go
+  600 m off and water-hauled); free explore and later sets only relabel the prompt.
 - Kings are always released (config `release: true`); a cited set forfeits the catch (never reaches the hold) and
   fines $3,000 (65% chance per closed-water set, free explore never).
 - `fishing:setComplete.minutes` is game minutes from let-go to report.
@@ -213,6 +243,14 @@ frame times are not meaningful; fps 23–42 overall). Idle (net stowed) the two 
   with WP-UI's widgets fed by `fishing.hud` and the set report from `fishing:setComplete`.
 
 ## Requests to other work packages
+
+- **WP-UI (QA fixes)**: render the `fishing-find-fish` Space prompt dimmed (it only informs); show the main cause from
+  `fishing:setComplete.escapes` instead of always "under the leads" and label the value with `valuedAt` ("at the
+  Sea Venture's price", or "≈ market price" when null); optional set-panel cues from `hud.payoutPace`/`payoutEta`
+  and `hud.tideRunning`. The brailing caption is now null (no duplicate of the count-up).
+- **WP-AUDIO**: `fishing:brail {x, z, lbs}` fires once per brailer scoop (the splash as the brailer dips).
+- **WP-FISH**: optional `cause: 'leads'|'corks'|'gap'|'hole'` on `fishing:escape` would replace the net-state
+  attribution in fishing.
 
 - **WP-UI**: the hud message is shown both as the caption above the set panel and inside it during brailing
   ("Brailing — N lbs aboard"); consider dropping the caption when the panel already shows the count-up. Available

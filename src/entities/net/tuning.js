@@ -29,8 +29,20 @@ export const FISHING_TUNING = {
   tieOffRange: 90, // m from the drop point to the beach for "Tie off to the beach" (see notes: SPEC says 40)
   tieOffMinSpeed: 0.8, // m/s: the idle tie-off let-go is offered only under way (stopped, E is "Go ashore")
   holdEligible: 0.6, // payout fraction for "Hold the hook"
-  speed: { setting: 7, holding: 1.5, closing: 3, pursing: 0.5 },
-  close: { minSeconds: 8.5, timeout: 24, hardTimeout: 75, nearDistance: 30, arriveDistance: 7 },
+  letGo: {
+    fishNear: 150, // m (+ school radius): "fish close". The new season's first set only lets go this close
+    search: 1500, // m searched for the nearest school (bearing/distance cue)
+    tenderClear: 60, // m of water to a tender's hull inside which no let-go is offered
+    harbourRange: 90, // m from a harbour's dock point inside which no let-go is offered
+  },
+  // bringAround: holding a round haul short of the skiff lifts the 1.5 m/s tow limit to this so the player can run
+  // around to it (the close is only offered alongside).
+  speed: { setting: 7, holding: 1.5, closing: 3, pursing: 0.5, bringAround: 7 },
+  payoutSlow: 0.6, // pay-out below this fraction of the setting speed limit reads "slow" on the HUD
+  // liftGap: while closing with the skiff end farther than this, the seiner may run at bringAround speed to meet it.
+  // holdRange: a round haul held (net all out) is offered the close-up within this of the skiff end (the skiff runs
+  // its end in at ~5 m/s, so ~10 s), and keeps the offer out to liftGap (no flicker as the skiff tows).
+  close: { minSeconds: 8.5, timeout: 24, hardTimeout: 75, nearDistance: 30, arriveDistance: 7, liftGap: 60, holdRange: 45 },
   wheel: { distance: 2.4, seconds: 3, stall: 6 },
   winch: {
     band: [0.42, 0.74],

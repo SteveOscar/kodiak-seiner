@@ -3,6 +3,7 @@
 import { Builder, col, shade } from './kit.js';
 import { boat, float, guidePile, pileDeck, PALETTE } from './structures.js';
 import { faceRot } from './sites.js';
+import { colBox, colCircle } from './colliders.js';
 
 // Rubble-mound breakwater along a world polyline [{x, z}, ...]; top at +2.8 m.
 export function breakwater(S, pts, o = {}) {
@@ -24,6 +25,8 @@ export function breakwater(S, pts, o = {}) {
       const rock = shade('#6f6b65', 0.85 + rng.next() * 0.3);
       const f = { x: mx, z: mz, rot, y: 0 };
       const hw = 3.2 + (top - g) * 0.9;
+      // the mound as a wall: crest plus half the armour slope each side
+      colBox(S, f, 0, 0, seg, 1.8 + hw, g, top);
       // armour stone slopes
       const P = (x, y, z) => Builder.xf(f, x, y, z, [0, 0, 0]);
       b.quad(P(-seg / 2, g, hw), P(seg / 2, g, hw), P(seg / 2, top, 1.8), P(-seg / 2, top, 1.8), rock);
@@ -40,6 +43,7 @@ export function breakwater(S, pts, o = {}) {
   if (o.lightAtEnd) {
     const e = pts[pts.length - 1];
     S.b.cylinder({ x: e.x, z: e.z, rot: 0, y: top }, 0, 0, 0, 0.35, 0.3, 4, 8, col(o.lightAtEnd === 'red' ? '#c8322a' : '#2f8a4a'));
+    colCircle(S, e.x, e.z, 0.35, top, top + 4);
     S.glows?.push({ x: e.x, y: top + 4.4, z: e.z, color: o.lightAtEnd === 'red' ? '#ff3b2f' : '#35ff6a', intensity: 6, size: 1.6, period: 4, flashes: 1, phase: rng.next() * 4 });
   }
 }
@@ -78,6 +82,7 @@ export function slips(S, f, o = {}) {
   for (let lx = -len / 2 + 10; lx < len / 2; lx += 22) {
     const p = Builder.xf(f, lx, 2.4, 0, [0, 0, 0]);
     S.b.box({ x: p[0], z: p[2], rot: f.rot, y: 0.4 }, 0, 0, 0, 0.14, 2.1, 0.14, col('#44484a'));
+    colCircle(S, p[0], p[2], 0.1, 0.4, 2.5);
     S.glows?.push({ x: p[0], y: p[1] + 0.1, z: p[2], color: '#ffd9a0', intensity: 3.2, size: 0.8 });
   }
 }
@@ -90,6 +95,7 @@ export function pier(S, a, c, w = 5, y = 3.4, o = {}) {
   pileDeck(S, { ...f, rot: rot + Math.PI / 2 }, 0, 0, len + 4, w, y, { spacing: 6, deck: o.deck ?? PALETTE.deck });
   if (o.lamp !== false) {
     S.b.box({ x: c.x, z: c.z, rot, y }, 0, 0, 0, 0.16, 4.5, 0.16, col('#44484a'));
+    colCircle(S, c.x, c.z, 0.1, y, y + 4.5);
     S.glows?.push({ x: c.x, y: y + 4.6, z: c.z, color: '#ffcf8a', intensity: 3.5, size: 1.0 });
   }
   return { rot, len };

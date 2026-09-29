@@ -380,7 +380,8 @@ export async function create(ctx) {
       // The sun's glow in the haze narrows once the sun is down, so twilight stays a horizon band.
       fogP.w = 7 + 26 * smoothstep(1, -6, sky.sunElevationDeg);
       const deck = fogUniforms.kodiakFogDeck.value;
-      deck.x = weather.cloudBase;
+      // Crow's-nest view: the ragged deck base never dips between the overhead camera and the sea below it.
+      deck.x = Math.max(weather.cloudBase, (camera.position.y + 45) * mist.overhead);
       deck.y = 0.0095 * smoothstep(0.72, 0.97, weather.cloudCover) * (1 + weather.rain * 0.5);
       deck.z = 38;
 

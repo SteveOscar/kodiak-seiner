@@ -9,35 +9,62 @@ export const ENCOUNTER = {
   chargeDist: 10, // closing to here provokes a bluff charge
   releaseDist: 48, // backing off past this ends the encounter
   watchMax: 22, // seconds a bear holds its ground before moving off on its own
-  chargeTime: 1.8, // seconds of bluff charge
+  minWatch: 1.7, // seconds of visible watching (standing up) before any charge
+  fleeDist: 25, // running, or turning your back and walking off, inside this range provokes a charge
+  runSpeed: 3, // m/s: faster than this reads as running
+  backDeg: 110, // the person faces more than this away from the bear: back turned
+  backGrace: 0.8, // seconds of walking off with the back turned before it provokes
+  reengageDist: 14, // on cooldown, a person closing inside this is watched again (never charged unseen)
+  chargeTime: 1.8, // shortest bluff charge (seconds)
+  chargeMax: 4.5, // a charge from further out runs until the bear pulls up short, or this long
+  stopShort: 6, // metres: the charge is over once the bear has pulled up this close
   retreatTime: 14, // seconds the bear spends leaving
-  cooldown: 25, // seconds before the same bear engages again
+  cooldown: 25, // seconds before the same bear engages from the full watch range again
 };
 
 export function createEncounter() {
-  return { stage: 'none', t: 0, cooldownUntil: 0 };
+  return { stage: 'none', t: 0, cooldownUntil: 0, provoked: false, back: 0 };
+}
+
+// Would a bear with no encounter running engage a person at `dist`? Normally inside watchDist once off cooldown; on
+// cooldown only when the person walks right up to it (it stays wary meanwhile, see land.js).
+export function canEngage(enc, { dist, onFoot, time }, E = ENCOUNTER) {
+  if (!onFoot || enc.stage !== 'none') return false;
+  return time >= enc.cooldownUntil ? dist < E.watchDist : dist < E.reengageDist;
 }
 
 // Advances one bear's encounter. Returns the new stage when it changes ('watch' | 'charge' | 'retreat' | 'none'),
-// else null. `time` is sim seconds; `dist` metres from the bear to the person (Infinity when nobody is ashore).
-export function stepEncounter(enc, { dist, onFoot, dt, time }, E = ENCOUNTER) {
+// else null. `time` is sim seconds; `dist` metres from the bear to the person (Infinity when nobody is ashore);
+// `speed` the person's ground speed (m/s); `facingDeg` how far the person faces away from the bear (0 = straight at
+// it, 180 = back turned); `bearSpeed` the bear's own speed (m/s) during a charge.
+export function stepEncounter(enc, { dist, onFoot, dt, time, speed = 0, facingDeg = 0, bearSpeed = 0 }, E = ENCOUNTER) {
   enc.t += dt;
   const to = (stage) => {
     enc.stage = stage;
     enc.t = 0;
+    enc.provoked = false;
+    enc.back = 0;
     if (stage === 'none') enc.cooldownUntil = time + E.cooldown;
     return stage;
   };
   switch (enc.stage) {
     case 'none':
-      if (onFoot && dist < E.watchDist && time >= enc.cooldownUntil) return to('watch');
+      if (canEngage(enc, { dist, onFoot, time }, E)) return to('watch');
       return null;
-    case 'watch':
+    case 'watch': {
       if (!onFoot || dist > E.releaseDist || enc.t > E.watchMax) return to('retreat');
-      if (dist < E.chargeDist) return to('charge');
+      // Running, or walking off with the back turned, inside fleeDist reads as flight: remembered, and answered with
+      // a charge once the bear has been seen watching for minWatch.
+      const near = dist < E.fleeDist;
+      if (near && speed > E.runSpeed) enc.provoked = true;
+      enc.back = near && speed > 0.5 && facingDeg > E.backDeg ? (enc.back ?? 0) + dt : 0;
+      if (enc.back > E.backGrace) enc.provoked = true;
+      if (enc.t < E.minWatch) return null;
+      if (dist < E.chargeDist || enc.provoked) return to('charge');
       return null;
+    }
     case 'charge':
-      if (enc.t > E.chargeTime) return to('retreat');
+      if (enc.t > E.chargeTime && ((dist < E.stopShort && bearSpeed < 1.5) || enc.t > E.chargeMax)) return to('retreat');
       return null;
     case 'retreat':
       if (enc.t > E.retreatTime) return to('none');

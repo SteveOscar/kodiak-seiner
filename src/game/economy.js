@@ -1,20 +1,23 @@
 // Economy (WP-RULES): cash and the cannery advance, the fish hold, fuel burn / warnings / tow, deliveries and fish
-// tickets, refuelling, tying up at harbours, the upgrade catalog and modifiers, and the season goals.
+// tickets, refuelling, tying up at harbors, the upgrade catalog and modifiers, and the season goals.
 // Money rules live in src/game/data/market.js and the catalog in src/game/data/upgrades.js.
 
-import { SPECIES, emptyCatch, lbsOf, fillHold, buildTicket, fuelBurnPerHour, fuelPriceAt, affordableGallons, towQuote, formatMoney, round2 } from './data/market.js';
+import { SPECIES, emptyCatch, lbsOf, fillHold, buildTicket, fuelBurnPerHour, fuelPriceAt, affordableGallons, towQuote, formatMoney, round2, spokenDollars } from './data/market.js';
 import { UPGRADES, SPOTTER, SPOTTER_ID, computeModifiers, catalogRows, upgradeById, fathoms } from './data/upgrades.js';
 import { dateOf as calDate, clockLabel, STAT_AREAS, normalizeDistrict, nextOpenerAfter, isOpenAt } from './data/calendar.js';
 import { showFade } from './travel.js';
+import { SEASON_GOALS } from './data/fleetBoard.js';
 
 const DELIVER_RANGE = 35; // m of water between the hulls
 const DELIVER_SPEED = 2; // m/s
-const DOCK_RANGE = 90; // m from a harbour's dock point for "Tie up"
+const DOCK_RANGE = 90; // m from a harbor's dock point for "Tie up"
 const HIGHLINER_FROM_PERIOD = 5; // index into fishingDays: the board counts from the sixth period on
 
 export async function create(ctx) {
   const { config, clock, events } = ctx;
   const eco = config.economy;
+  // Goal thresholds are paced on the fleet board's competent rate (data/fleetBoard.js); labels follow config.
+  const goalList = SEASON_GOALS.map((g, i) => ({ gross: g.gross, label: eco.goals?.[i]?.label ?? g.label }));
   const table = config.fish.species;
   const rng = ctx.rng.fork('economy');
   const ticketBase = 300000 + Math.floor(rng.next() * 600000);
@@ -196,7 +199,7 @@ export async function create(ctx) {
       const tier = u.tiers[level];
       if (!tier) return { ok: false, reason: 'Already at the maximum', price: null };
       if (sys.cash < tier.price) return { ok: false, reason: 'Not enough cash', price: tier.price };
-      if (!atUpgradeYard()) return { ok: false, reason: 'Tie up at the Kodiak harbour to have it fitted', price: tier.price };
+      if (!atUpgradeYard()) return { ok: false, reason: 'Tie up at the Kodiak harbor to have it fitted', price: tier.price };
       return { ok: true, price: tier.price, label: tier.label };
     },
 
@@ -248,16 +251,20 @@ export async function create(ctx) {
       return sys.fuel;
     },
 
+    // What a tow costs right now: { gallons, fee, fuelCost, total } — the flat fee plus a fill to 25% at the tender.
+    towQuote() {
+      return towQuote(sys.fuel, sys.fuelCapacity, eco, fuelPriceAt({ isTender: true }, eco));
+    },
+
     // Out of fuel: the nearest tender tows you alongside for the flat fee plus a fill to 25%.
     acceptTow() {
       const t = nearestTender();
       const s = ctx.systems.seiner;
       if (!s) return false;
-      const tenderPrice = fuelPriceAt({ isTender: true }, eco);
-      const q = towQuote(sys.fuel, sys.fuelCapacity, eco, tenderPrice);
+      const q = sys.towQuote();
       const travel = ctx.systems.season?.travel;
       const dest = t ? travel?.resolveTarget?.(t) : travel?.resolveTarget?.('kodiak');
-      showFade(ctx, { title: t ? `Under tow — ${t.name}` : 'Under tow to Kodiak', subtitle: `${formatMoney(q.fee)} tow · ${q.gallons.toLocaleString('en-US')} gal of diesel`, holdMs: 1600, fadeMs: 1300 });
+      showFade(ctx, { title: t ? `Under tow — ${t.name}` : 'Under tow to Kodiak', subtitle: `${formatMoney(q.total)} · ${formatMoney(q.fee)} tow + ${q.gallons.toLocaleString('en-US')} gal of diesel`, holdMs: 1600, fadeMs: 1300 });
       const dist = dest ? Math.hypot(dest.x - s.position.x, dest.z - s.position.z) : 0;
       if (s.mooring) s.setMooring?.(null);
       if (dest) ctx.game.teleport(dest.x, dest.z, dest.heading ?? s.heading, { reason: 'tow' });
@@ -274,7 +281,7 @@ export async function create(ctx) {
       return true;
     },
 
-    // Ties up at a harbour's dock (snaps to the berth behind a short fade; autosaves via boat:mooring).
+    // Ties up at a harbor's dock (snaps to the berth behind a short fade; autosaves via boat:mooring).
     tieUp(place) {
       const p = typeof place === 'string' ? ctx.systems.places?.get?.(place) : place;
       const s = ctx.systems.seiner;
@@ -286,7 +293,7 @@ export async function create(ctx) {
       s.setMooring?.({ kind: 'dock', placeId: p.id });
       const services = (p.services ?? []).filter((x) => x !== 'rest');
       ctx.systems.ui?.toast?.(`Tied up at ${p.name}${services.length ? ` — ${services.map(serviceLabel).join(', ')}` : ''}`, { kind: 'info', duration: 4 });
-      ctx.systems.ui?.hint?.('harbor', 'In harbour: take on fuel, buy upgrades (Kodiak), and rest. Sleep after 10 PM or wait here for the next opener.');
+      ctx.systems.ui?.hint?.('harbor', 'In the harbor: sell your catch, take on fuel, buy upgrades (Kodiak) and rest. E opens the harbor services; sleep after 10 PM or wait here for the next opener.');
       return true;
     },
 
@@ -316,12 +323,12 @@ export async function create(ctx) {
     },
 
     goals() {
-      const out = eco.goals.map((g, i) => ({ id: `goal${i}`, label: g.label, gross: g.gross, reached: sys.stats.goals.includes(g.label) }));
+      const out = goalList.map((g, i) => ({ id: `goal${i}`, label: g.label, gross: g.gross, reached: sys.stats.goals.includes(g.label) }));
       out.push({ id: 'highliner', label: 'Highliner', gross: null, reached: sys.stats.goals.includes('Highliner'), description: 'Top of the fleet board' });
       return out;
     },
 
-    // Human-readable effect of the current modifiers, for the harbour menu.
+    // Human-readable effect of the current modifiers, for the harbor menu.
     gearSummary() {
       return {
         seine: `${fathoms(modifiers.netLength)} fm × ${Math.round(modifiers.netDepth)} m`,
@@ -447,7 +454,7 @@ export async function create(ctx) {
     if (f <= 0.2 && fuelNoticeLevel > 0.2 && sys.fuel > 0) {
       fuelNoticeLevel = 0.2;
       ui?.toast?.(`Fuel at 20% — ${Math.round(sys.fuel).toLocaleString('en-US')} gal. Top off at a tender or in town.`, { kind: 'warn', duration: 6 });
-      ui?.hint?.('fuel', 'Tenders and harbours sell diesel. Come alongside a tender (E) or tie up in town, where it is cheapest.');
+      ui?.hint?.('fuel', 'Tenders and harbors sell diesel. Come alongside a tender (E) or tie up in town, where it is cheapest.');
     }
     if (f <= 0.1 && fuelNoticeLevel > 0.1 && sys.fuel > 0) {
       fuelNoticeLevel = 0.1;
@@ -460,7 +467,8 @@ export async function create(ctx) {
       ctx.systems.seiner?.setSpeedLimit?.('fuel', 2);
       ui?.toast?.('Out of fuel — limping on the fumes.', { kind: 'warn', duration: 6 });
       const t = nearestTender();
-      if (t) ctx.systems.season?.say?.('tow', { kind: 'tender', extra: { tenderObj: t } }, { priority: 5, key: 'tow', cooldown: 300 });
+      const q = sys.towQuote();
+      if (t) ctx.systems.season?.say?.('tow', { kind: 'tender', extra: { tenderObj: t, towFee: spokenDollars(q.fee), towTotal: spokenDollars(q.total) } }, { priority: 5, key: 'tow', cooldown: 300 });
       events.emit('economy:fuel', { fuel: 0, empty: true });
       lastFuelEmit = 0;
       return;
@@ -474,7 +482,7 @@ export async function create(ctx) {
   function checkGoals() {
     if (ctx.state.freeExplore) return;
     const st = sys.stats;
-    eco.goals.forEach((g, i) => {
+    goalList.forEach((g, i) => {
       if (st.seasonGross >= g.gross && !st.goals.includes(g.label)) {
         st.goals.push(g.label);
         ctx.systems.ui?.toast?.(`Season goal: ${g.label} — ${formatMoney(g.gross)} gross`, { kind: 'goal', duration: 7 });
@@ -491,7 +499,7 @@ export async function create(ctx) {
     if (!rows?.length || !rows[0].player || rows[0].gross <= 0) return;
     sys.stats.goals.push('Highliner');
     ctx.systems.ui?.toast?.('Highliner! Top of the Kodiak fleet board.', { kind: 'goal', duration: 8 });
-    events.emit('economy:goal', { label: 'Highliner', gross: sys.stats.seasonGross, index: eco.goals.length });
+    events.emit('economy:goal', { label: 'Highliner', gross: sys.stats.seasonGross, index: goalList.length });
   }
 
   function spotterDay() {
@@ -564,15 +572,15 @@ export async function create(ctx) {
 
   const serviceLabel = (s) => ({ sell: 'fish buyer', fuel: 'fuel', upgrades: 'boatyard', ice: 'ice', rest: 'rest' })[s] ?? s;
 
-  let harbourCache = null;
-  let harbourList = null;
-  function harbourPlaces() {
+  let harborCache = null;
+  let harborList = null;
+  function harborPlaces() {
     const list = ctx.systems.places?.list ?? [];
-    if (list !== harbourList) {
-      harbourList = list;
-      harbourCache = list.filter((p) => !p.memorial && (p.services?.length ?? 0) > 0);
+    if (list !== harborList) {
+      harborList = list;
+      harborCache = list.filter((p) => !p.memorial && (p.services?.length ?? 0) > 0);
     }
-    return harbourCache;
+    return harborCache;
   }
 
   function offers(s) {
@@ -587,7 +595,9 @@ export async function create(ctx) {
     // Out of fuel: the tow offer (unless a tender is already alongside to refuel from).
     if (sys.fuel <= 0 && !free && !tenderAlongside() && !docked) {
       const t = nearestTender();
-      I.offer({ id: 'tow', label: t ? `Accept a tow from the ${t.name}` : 'Call for a tow', key: 'interact', priority: 66, onPress: () => sys.acceptTow() });
+      const q = sys.towQuote();
+      const price = `${formatMoney(q.total)} incl. ${q.gallons.toLocaleString('en-US')} gal diesel`;
+      I.offer({ id: 'tow', label: t ? `Accept a tow from the ${t.name} — ${price}` : `Call for a tow — ${price}`, key: 'interact', priority: 66, onPress: () => sys.acceptTow() });
     }
 
     const t = tenderAlongside();
@@ -600,6 +610,8 @@ export async function create(ctx) {
       }
     }
 
+    // Tied up: Sell (68), Fuel up (67) and Harbor services (64) outrank the night's "Sleep until morning" (62 at a
+    // harbor, see season.js); the harbor panel carries its own Sleep and Wait buttons.
     if (docked) {
       const svc = docked.services ?? [];
       if (holdLbs > 0 && svc.includes('sell')) {
@@ -610,7 +622,7 @@ export async function create(ctx) {
       }
       const ui = ctx.systems.ui;
       if (typeof ui?.openHarbor === 'function') {
-        I.offer({ id: 'harbor', label: `${docked.name} — harbour services`, key: 'interact', priority: 64, onPress: () => ui.openHarbor(docked) });
+        I.offer({ id: 'harbor', label: `${docked.name} — Harbor services`, key: 'interact', priority: 64, onPress: () => ui.openHarbor(docked) });
       }
       return;
     }
@@ -618,7 +630,7 @@ export async function create(ctx) {
     if (speed < 3 && !s.mooring) {
       let best = null;
       let bd = DOCK_RANGE;
-      for (const p of harbourPlaces()) {
+      for (const p of harborPlaces()) {
         const d0 = p.dock && Number.isFinite(p.dock.x) ? p.dock : null;
         if (!d0) {
           if (Math.hypot(p.x - s.position.x, p.z - s.position.z) > (p.radius ?? 300) + 200) continue;

@@ -32,10 +32,14 @@ export function ambientInterval({ open, hours }) {
   return open ? [55, 110] : [90, 170];
 }
 
+// While the radio is held (a coaching tip is on screen), only messages at or above this priority may play.
+export const HOLD_BYPASS_PRIORITY = 9;
+
 export function createRadio({ rng, emit, minGap = 12, recentSize = 48 }) {
   let t = 0;
   let sinceLast = minGap;
   let nextAmbient = 20;
+  let holdUntil = 0;
   const queue = [];
   const recent = [];
   const cooldowns = new Map();
@@ -56,6 +60,16 @@ export function createRadio({ rng, emit, minGap = 12, recentSize = 48 }) {
     },
     get queued() {
       return queue.length;
+    },
+    // True while hold() keeps routine traffic off the air.
+    get held() {
+      return t < holdUntil;
+    },
+
+    // Keeps routine traffic (queued and ambient) off the air for `seconds`, e.g. while a tip card is being read.
+    // Queued messages wait (they still expire on their ttl); priority ≥ HOLD_BYPASS_PRIORITY plays anyway.
+    hold(seconds) {
+      holdUntil = Math.max(holdUntil, t + Math.max(0, Number(seconds) || 0));
     },
 
     // Queue a message. priority: higher first; ttl: seconds before it goes stale; key+cooldown: suppress repeats;
@@ -88,14 +102,16 @@ export function createRadio({ rng, emit, minGap = 12, recentSize = 48 }) {
     },
 
     // Advance time; plays at most one message. `ambient(category)` builds an ambient message or returns null.
+    // ctx: { open, hours, fishingDay, preset, quiet, ambientScale } — ambientScale stretches the ambient interval.
     update(dt, ctx, ambient) {
       t += dt;
       sinceLast += dt;
+      const held = t < holdUntil;
       for (let i = queue.length - 1; i >= 0; i--) if (queue[i].expires < t) queue.splice(i, 1);
       let best = -1;
       for (let i = 0; i < queue.length; i++) {
         const q = queue[i];
-        if (q.readyAt > t || sinceLast < q.gap) continue;
+        if (q.readyAt > t || sinceLast < q.gap || (held && q.priority < HOLD_BYPASS_PRIORITY)) continue;
         if (best < 0 || q.priority > queue[best].priority || (q.priority === queue[best].priority && q.seq < queue[best].seq)) best = i;
       }
       if (best >= 0) {
@@ -105,11 +121,11 @@ export function createRadio({ rng, emit, minGap = 12, recentSize = 48 }) {
         if (q.then) radio.push(q.then, { priority: q.priority + 1, ttl: 30, delay: q.thenDelay ?? 4, gap: 3 });
         return q;
       }
-      if (!ctx || ctx.quiet) return null;
+      if (!ctx || ctx.quiet || held) return null;
       nextAmbient -= dt;
       if (nextAmbient > 0 || queue.length) return null;
       const [a, b] = ambientInterval(ctx);
-      nextAmbient = a + (b - a) * rng.next();
+      nextAmbient = (a + (b - a) * rng.next()) * Math.max(1, ctx.ambientScale ?? 1);
       const cat = weightedPick(ambientWeights(ctx));
       const msg = cat ? ambient?.(cat) : null;
       if (msg) radio.push(msg, { priority: 0, ttl: 20 });
@@ -126,6 +142,7 @@ export function createRadio({ rng, emit, minGap = 12, recentSize = 48 }) {
 
     clear() {
       queue.length = 0;
+      holdUntil = 0;
     },
   };
   return radio;

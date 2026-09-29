@@ -36,6 +36,23 @@ export function splitKings(caught, speciesTable) {
   return { keep, released };
 }
 
+// Why fish left the net: under the leadline, over sunk corks (hauling hard in current), out through the open gap,
+// through a snag's hole, let go over the corks with a plugged hold, or spilled drying up the bag above the clean-set
+// capture ceiling (WP-FISH's harvest; nothing the skipper did).
+export const ESCAPE_CAUSES = ['leads', 'corks', 'gap', 'hole', 'overflow', 'spill'];
+
+export const emptyEscapes = () => ({ leads: 0, corks: 0, gap: 0, hole: 0, overflow: 0, spill: 0 });
+
+export function sanitizeEscapes(e) {
+  const out = emptyEscapes();
+  if (!e || typeof e !== 'object') return out;
+  for (const k of ESCAPE_CAUSES) {
+    const v = Number(e[k]);
+    out[k] = Number.isFinite(v) && v > 0 ? Math.round(v) : 0;
+  }
+  return out;
+}
+
 export function addCatches(a, b) {
   const out = emptyCatch();
   for (const k of SPECIES) out[k] = (a?.[k] ?? 0) + (b?.[k] ?? 0);
@@ -65,6 +82,9 @@ export function buildSetReport({
   fine = 0,
   aborted = false,
   escaped = 0,
+  escapes = null,
+  valuedAt = null,
+  valuedAtId = null,
   tuning = FISHING_TUNING,
 }) {
   const c = sanitizeCatch(caught);
@@ -100,6 +120,11 @@ export function buildSetReport({
     fine,
     aborted,
     escaped: Math.max(0, Math.round(escaped)),
+    // Counts by cause; `escaped` is leads + corks + gap + hole + spill (overflow is also in `released`).
+    escapes: sanitizeEscapes(escapes),
+    // Tender whose price `value` uses (the nearest buying tender at brailing), or null for the market estimate.
+    valuedAt: valuedAt ?? null,
+    valuedAtId: valuedAtId ?? null,
   };
 }
 

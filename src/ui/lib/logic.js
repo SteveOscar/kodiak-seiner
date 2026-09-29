@@ -218,6 +218,45 @@ export function reportHeadline(r) {
   return { title: 'A few fish', kicker: 'Fair set', line: `${int(accepted)} fish aboard. Better than a water haul.`, tone: 'fair' };
 }
 
+// Why fish got away, from fishing:setComplete.escapes { leads, corks, gap, hole, overflow } when fishing reports it
+// (overflow is shown on the species rows and headline, so it is not counted here). Names the main cause with what
+// to do about it; without a breakdown it reports the count alone.
+const ESCAPE_WAY = {
+  leads: ['under the leadline', 'Purse up faster.'],
+  corks: ['over the corks on the haul', 'Ease off the block when the tide is running.'],
+  gap: ['out through the gap before you closed up', 'Close up sooner.'],
+  hole: ['through a hole torn on the bottom', 'Keep the leads off rocky ground.'],
+};
+export function escapeSummary(r) {
+  const e = r?.escapes;
+  if (e && typeof e === 'object') {
+    const parts = Object.keys(ESCAPE_WAY).map((k) => [k, Math.max(0, Math.round(Number(e[k]) || 0))]);
+    const total = parts.reduce((a, [, n]) => a + n, 0);
+    if (total > 0) {
+      const [cause, n] = parts.reduce((a, b) => (b[1] > a[1] ? b : a));
+      const [way, lesson] = ESCAPE_WAY[cause];
+      const text = n >= total ? `${int(total)} got away ${way}.` : `${int(total)} got away — most ${way} (${int(n)}).`;
+      return { total, cause, text: `${text} ${lesson}` };
+    }
+    return null;
+  }
+  const n = Math.round(Number(r?.escaped) || 0);
+  return n > 0 ? { total: n, cause: null, text: `${int(n)} got away` } : null;
+}
+
+// The set's value label: the tender it was priced at (valuedAt, the nearest buying tender), or an average-price
+// estimate when fishing reports valuedAt: null (no tender in reach) or estimate; "today's prices" for payloads
+// without the field.
+export function reportValue(r) {
+  const v = r?.valuedAt;
+  const name = typeof v === 'string' ? v : v && typeof v === 'object' ? v.name ?? v.tender ?? v.place ?? null : null;
+  const unpriced = !!r && typeof r === 'object' && Object.hasOwn(r, 'valuedAt') && !name;
+  const approx = !!r?.estimate || unpriced || /^(average|estimate)$/i.test(String(name ?? ''));
+  if (name && !approx) return { label: `At ${name} prices`, approx: false };
+  if (approx) return { label: 'At today’s average price', approx: true };
+  return { label: 'At today’s prices', approx: false };
+}
+
 // Species rows for the report (accepted counts and lbs, kings released).
 export function reportRows(r, speciesTable) {
   const rows = [];
@@ -319,6 +358,49 @@ export function keycapify(text) {
 export function radioDuration(text, cps = 42) {
   const n = String(text ?? '').length;
   return Math.min(16, n / cps + 2.8 + n / 60);
+}
+
+// VHF caption pacing. Pinned calls (Uncle Pete's tutorial tips and his other calls) stay full-size for their whole
+// life — at least pinMinLife seconds — and routine traffic waits in the queue until a pinned call has been read
+// (pinQuiet seconds after it finishes typing), so a broadcast never buries the instruction a new player needs.
+export const RADIO_PACING = { gap: 0.55, pinMinLife: 12, pinQuiet: 6 };
+
+export function isPinnedRadio(r) {
+  return !!(r?.tip || r?.pin || /\bPete\b/.test(String(r?.from ?? '')));
+}
+
+export function radioLife(text, { pinned = false, tip = false } = {}, cps = 42, P = RADIO_PACING) {
+  const base = radioDuration(text, cps) + (tip ? 3 : 0);
+  return pinned ? Math.max(P.pinMinLife, base) : base;
+}
+
+// A pinned card still being read: routine traffic and Skipper's-notes cards hold until it is done.
+export function pinnedReading(cards, P = RADIO_PACING) {
+  return (cards ?? []).some((c) => c && !c.dead && c.pinned && c.t < Math.min(c.life, c.typing + P.pinQuiet));
+}
+
+// Index of the queued transmission that may start now, or -1. One call at a time: the newest caption types out plus
+// a short gap first. Pinned calls jump the queue; routine calls wait while a pinned call is being read.
+export function nextRadio(queue, cards, P = RADIO_PACING) {
+  if (!queue?.length) return -1;
+  const live = (cards ?? []).filter((c) => c && !c.dead);
+  const cur = live[live.length - 1];
+  if (cur && cur.t < cur.typing + P.gap) return -1;
+  const pin = queue.findIndex((q) => q?.pinned);
+  if (pin >= 0) return pin;
+  return pinnedReading(live, P) ? -1 : 0;
+}
+
+// Cards to retire so at most `max` stay up: the oldest unpinned card below the newest first, then the oldest.
+export function radioOverflow(cards, max) {
+  const live = (cards ?? []).filter((c) => c && !c.dead);
+  const out = [];
+  while (live.length > max) {
+    let i = live.findIndex((c, n) => n < live.length - 1 && !c.pinned);
+    if (i < 0) i = 0;
+    out.push(live.splice(i, 1)[0]);
+  }
+  return out;
 }
 
 export function toastDuration(opts) {

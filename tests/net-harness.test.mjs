@@ -44,6 +44,8 @@ export async function makeGame({ freeExplore = true, overrides = {} } = {}) {
     sys.name = name;
     ctx.systems[name] = sys;
   }
+  // The stub school mills inside the test circle (the first set only lets go close to fish).
+  if (!overrides.fish) ctx.systems.fish.schools?.[0]?.position?.set(OPEN.x, -2, OPEN.z - 60);
   ctx.events.emit('game:ready', {});
   const order = SYSTEMS.map((s) => ctx.systems[s.name]);
   const dt = 1 / 30;

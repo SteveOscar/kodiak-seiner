@@ -5,10 +5,12 @@ export const PETE = 'Uncle Pete';
 
 export const HINTS = {
   spot: 'See those humpies popping? That\'s a school milling. Get up close — not on top of \'em — and hit Space to let the skiff go.',
-  letgo: 'Let \'er go! Now run a big circle around the jumpers. Easy on the throttle while the net\'s going out.',
+  letgo: 'Let \'er go! Now run a big circle around the jumpers. Keep her moving — the winch holds you to setting speed while the net\'s going out.',
   circle: 'Keep bending her around. Don\'t cut across the school or you\'ll spook \'em. Head back for the skiff.',
   closeReady: 'There\'s your skiff. Come alongside and hit Space to close up before they find the hole.',
   hold: 'Net\'s all out. Tow easy and hold \'er open. When the jumpers are inside, Space to close up.',
+  bringAround: 'Net\'s all out and you\'re a long way off the skiff. Bring her around to it — Space closes up once you\'re alongside.',
+  findFish: 'Too far off, kid. Run in closer to those jumpers before you let go — a hundred and fifty yards or so.',
   hook: 'Holding the hook. Fish running the beach will turn into the bight — watch the jumpers, then close up.',
   collapse: 'Current\'s folding your hook up! Tow into it or close up before they leak out.',
   purse: 'Now purse her up. Hold E on the winch — keep the needle in the green. Don\'t horse it or you\'ll foul the rings.',

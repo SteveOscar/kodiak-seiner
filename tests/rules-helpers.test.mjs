@@ -125,7 +125,7 @@ function miniGame(ctx, order) {
   return game;
 }
 
-// Builds the world. places: options for syntheticPlaces (default: a Kodiak harbour with services at the spawn).
+// Builds the world. places: options for syntheticPlaces (default: a Kodiak harbor with services at the spawn).
 export async function makeWorld({ places, storage = memoryStorage(), mode = 'title', start = true, freeExplore = false } = {}) {
   const ctx = fakeCtx();
   ctx.storage = storage;

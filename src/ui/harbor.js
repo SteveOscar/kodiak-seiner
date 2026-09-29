@@ -15,11 +15,12 @@ export function createHarborPanel(ctx, { close, resume }) {
   const services = h('div.hb-services');
   const left = h('div.hb-left');
   const right = h('div.hb-right');
+  const body = h('div.hb-body', null, [left, right]);
   const el = h('div.ui-panel.panel-harbor', null, [
     h('div.panel-card.hb-card.ui-interactive', null, [
       h('div.hb-head', null, [h('div', null, [kicker, title]), services]),
       h('div.panel-rule'),
-      h('div.hb-body', null, [left, right]),
+      body,
       h('div.panel-actions', null, [button('Cast off', () => close(), { cls: 'primary', key: 'Esc' })]),
     ]),
   ]);
@@ -32,7 +33,35 @@ export function createHarborPanel(ctx, { close, resume }) {
     return h(`div.hb-sec${cls ? `.${cls}` : ''}`, null, [h('div.hb-sec-h', { text: t }), ...children]);
   }
 
+  // Rebuilding the columns (after a purchase) keeps each column where the player scrolled it.
   function render() {
+    const keep = [left.scrollTop, right.scrollTop, body.scrollTop];
+    build();
+    [left.scrollTop, right.scrollTop, body.scrollTop] = keep;
+    mark();
+  }
+
+  // Keyboard: ↑/↓ (or W/S) move a highlight through the enabled buttons (sell, fuel, rest, the boatyard, Cast off)
+  // and Enter/Space press it; ui.js routes those keys to nav()/activate(). Tab focus works natively and clears the
+  // highlight, so a Tab-focused button is pressed by the browser, never twice.
+  let sel = -1;
+  let kbd = false;
+  const items = () => [...el.querySelectorAll('button.btn:not(:disabled)')];
+  function mark() {
+    const list = items();
+    if (sel >= list.length) sel = list.length - 1;
+    el.querySelectorAll('button.btn.kbd').forEach((b) => b.classList.remove('kbd'));
+    const b = kbd ? list[sel] : null;
+    if (!b) return;
+    b.classList.add('kbd');
+    b.scrollIntoView?.({ block: 'nearest' });
+  }
+  el.addEventListener('focusin', () => {
+    kbd = false;
+    mark();
+  });
+
+  function build() {
     const e = eco();
     const svc = place?.services ?? [];
     setText(kicker, place?.kind === 'town' ? 'Harbor' : place?.kind === 'cannery' ? 'Cannery dock' : 'Tied up');
@@ -151,8 +180,24 @@ export function createHarborPanel(ctx, { close, resume }) {
     el,
     show(p) {
       place = p ?? eco()?.dockedAt?.() ?? null;
-      render();
+      build();
+      // Every visit starts at the top of both columns, with no keyboard highlight.
+      left.scrollTop = right.scrollTop = body.scrollTop = 0;
+      sel = -1;
+      kbd = false;
+      mark();
     },
     hide() {},
+    nav(d) {
+      const n = items().length;
+      if (!n) return;
+      if (document.activeElement && el.contains(document.activeElement)) document.activeElement.blur();
+      sel = !kbd || sel < 0 ? (d > 0 ? 0 : n - 1) : (sel + d + n) % n;
+      kbd = true;
+      mark();
+    },
+    activate() {
+      if (kbd) items()[sel]?.click();
+    },
   };
 }

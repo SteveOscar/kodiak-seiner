@@ -249,7 +249,7 @@ export async function create(ctx) {
     if (p?.text) messages.inbox.toasts.push({ text: String(p.text), kind: p.kind ?? 'info', duration: p.duration });
   });
   events.on('ui:radio', (p) => {
-    if (p?.text) messages.inbox.radio.push({ from: p.from, text: String(p.text), channel: p.channel });
+    if (p?.text) messages.inbox.radio.push({ from: p.from, text: String(p.text), channel: p.channel, pin: !!p.pin });
   });
   events.on('ui:hint', (p) => {
     if (!p?.id || !p.text || !inGame() || hintsShown.has(p.id)) return;

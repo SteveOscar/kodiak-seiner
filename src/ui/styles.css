@@ -366,6 +366,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1620; }
 .radio-stack .radio:not(:last-child) { opacity: 0.5; }
 .radio-stack .radio:not(:last-child) .radio-text { max-height: 1.42em; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, #000 70%, transparent); mask-image: linear-gradient(90deg, #000 70%, transparent); }
 .radio-stack .radio:not(:last-child) .radio-text .tw { animation: none; opacity: 1; }
+/* Pinned calls (tips, Uncle Pete) stay full-size under newer traffic until their life ends. */
+.radio-stack .radio.pinned.in:not(:last-child) { opacity: 1; }
+.radio-stack .radio.pinned:not(:last-child) .radio-text { max-height: none; -webkit-mask-image: none; mask-image: none; }
 .radio-head { display: flex; align-items: center; gap: calc(8 * var(--u)); font: 600 calc(10 * var(--u)) / 1 var(--sans); letter-spacing: 0.06em; }
 .radio-ch { display: inline-flex; align-items: center; gap: calc(4 * var(--u)); padding: calc(3 * var(--u)) calc(6 * var(--u)); border-radius: calc(3 * var(--u)); background: rgba(255, 122, 26, 0.16); color: var(--accent2); font: 600 calc(9.5 * var(--u)) / 1 var(--mono); letter-spacing: 0.04em; white-space: nowrap; flex: none; }
 .radio-ch svg { width: calc(10 * var(--u)); height: calc(10 * var(--u)); }
@@ -571,6 +574,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1620; }
 .rep-stat-l { font: 600 calc(9 * var(--u)) / 1 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink3); }
 .rep-stat-v { font: 600 calc(19 * var(--u)) / 1 var(--sans); font-variant-numeric: tabular-nums; }
 .rep-extra { display: flex; flex-wrap: wrap; justify-content: center; gap: calc(7 * var(--u)); margin-top: calc(13 * var(--u)); }
+.rep-escape { flex-basis: 100%; margin: 0 0 calc(3 * var(--u)); font: italic calc(13 * var(--u)) / 1.4 var(--serif); color: var(--accent2); }
 .rep-note { padding: calc(4 * var(--u)) calc(10 * var(--u)); border-radius: 999px; background: rgba(255, 255, 255, 0.06); font-size: calc(11.5 * var(--u)); color: var(--ink2); }
 .panel-report .panel-actions { justify-content: center; }
 
@@ -626,7 +630,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1620; }
 .hb-head { display: flex; justify-content: space-between; align-items: flex-end; gap: calc(16 * var(--u)); }
 .hb-services { display: flex; gap: calc(6 * var(--u)); flex-wrap: wrap; justify-content: flex-end; }
 .hb-chip { padding: calc(4 * var(--u)) calc(9 * var(--u)); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 999px; font: 600 calc(9.5 * var(--u)) / 1 var(--sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink2); }
-.hb-body { display: grid; grid-template-columns: calc(310 * var(--u)) 1fr; gap: calc(24 * var(--u)); min-height: 0; overflow-y: auto; max-height: 64vh; padding-right: calc(6 * var(--u)); padding-bottom: calc(18 * var(--u)); }
+/* Each column scrolls on its own, so the boat's cash, hold and fuel and the fuel/rest buttons stay in view while
+   the boatyard scrolls. */
+.panel-harbor .btn.kbd { outline: 2px solid rgba(255, 178, 122, 0.85); outline-offset: 2px; }
+.hb-body { display: grid; grid-template-columns: calc(310 * var(--u)) 1fr; gap: calc(24 * var(--u)); min-height: 0; align-items: start; }
+.hb-left, .hb-right { min-height: 0; max-height: 64vh; overflow-y: auto; overscroll-behavior: contain; }
+.hb-right { padding-right: calc(6 * var(--u)); padding-bottom: calc(18 * var(--u)); }
 .hb-sec { margin-bottom: calc(18 * var(--u)); }
 .hb-sec-h { margin-bottom: calc(9 * var(--u)); font: 600 calc(9.5 * var(--u)) / 1 var(--sans); letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent); }
 .hb-kv { display: flex; justify-content: space-between; gap: calc(10 * var(--u)); padding: calc(5 * var(--u)) 0; border-bottom: 1px solid var(--line); font-size: calc(13 * var(--u)); color: var(--ink2); }
@@ -665,9 +674,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1620; }
 .lb-tab.btn.on { color: #fff; border-bottom-color: var(--accent); }
 .lb-body { flex: 1; min-height: 0; overflow-y: auto; padding-right: calc(8 * var(--u)); padding-bottom: calc(18 * var(--u)); }
 /* Long lists fade out at the bottom edge so it reads as "more below". */
-.lb-body, .hb-body { -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 26px), transparent); }
-.lb-body::-webkit-scrollbar, .hb-body::-webkit-scrollbar, .credits-body::-webkit-scrollbar, .map-side::-webkit-scrollbar { width: calc(6 * var(--u)); }
-.lb-body::-webkit-scrollbar-thumb, .hb-body::-webkit-scrollbar-thumb, .credits-body::-webkit-scrollbar-thumb, .map-side::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); border-radius: 3px; }
+.lb-body, .hb-right { -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 26px), transparent); }
+.lb-body::-webkit-scrollbar, .hb-left::-webkit-scrollbar, .hb-right::-webkit-scrollbar, .hb-body::-webkit-scrollbar, .credits-body::-webkit-scrollbar, .map-side::-webkit-scrollbar { width: calc(6 * var(--u)); }
+.lb-body::-webkit-scrollbar-thumb, .hb-left::-webkit-scrollbar-thumb, .hb-right::-webkit-scrollbar-thumb, .hb-body::-webkit-scrollbar-thumb, .credits-body::-webkit-scrollbar-thumb, .map-side::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); border-radius: 3px; }
 .lb-progress { display: flex; flex-wrap: wrap; gap: calc(18 * var(--u)); margin-bottom: calc(14 * var(--u)); font-size: calc(12.5 * var(--u)); color: var(--ink3); }
 .lb-prog b { color: #fff; font-weight: 600; font-variant-numeric: tabular-nums; }
 .lb-grid { columns: 3 calc(280 * var(--u)); column-gap: calc(12 * var(--u)); }
@@ -825,7 +834,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1620; }
 }
 @media (max-width: 860px) {
   .map-side { display: none; }
-  .hb-body { grid-template-columns: 1fr; }
+  .hb-body { grid-template-columns: 1fr; overflow-y: auto; max-height: 64vh; }
+  .hb-left, .hb-right { max-height: none; overflow: visible; -webkit-mask-image: none; mask-image: none; }
   .lb-two { grid-template-columns: 1fr; }
   .lb-stats { grid-template-columns: repeat(2, 1fr); }
   .title-caption { display: none; }

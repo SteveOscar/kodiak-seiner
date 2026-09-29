@@ -4,7 +4,7 @@
 //   kodiak-seiner:settings  { quality, volumes: {master, music, sfx, ambience}, timeSpeed, invertY }
 //   kodiak-seiner:explore   Free Explore keeps only discovery.serialize()
 //
-// Autosaves (career): after a delivery, a purchase, sleeping or waiting for an opener, tying up at a harbour, and on
+// Autosaves (career): after a delivery, a purchase, sleeping or waiting for an opener, tying up at a harbor, and on
 // game:toTitle — only when ctx.game.snapshot() is non-null (not mid-set, not ashore). Event-driven saves run on the
 // next frame so every system has finished reacting; game:toTitle saves immediately (the mode changes right after).
 // In Free Explore the same triggers (plus each discovery) write only the explore key; the career save is untouched.

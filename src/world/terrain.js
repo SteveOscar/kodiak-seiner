@@ -25,6 +25,8 @@ import { TK_NOISE, TK_HEIGHT, TK_DETAIL } from './terrain/glsl.js';
 import { createShadowPass } from './terrain/shadowPass.js';
 import { createTerrainMaterial } from './terrain/material.js';
 import { createVegetation } from './terrain/vegetation/index.js';
+import { createPlacement } from './terrain/vegetation/placement.js';
+import { createTerrainColliders } from './terrain/colliders.js';
 
 const MAX_INSTANCES = 4096;
 // LOD ranges of the reflection mesh: about half the main view's detail (the planar reflection is half resolution and
@@ -124,10 +126,11 @@ export async function create(ctx) {
   // The low preset has no planar reflection (WP-OCEAN), so its mesh is never drawn; skip its selection too.
   const reflectionsPossible = quality.name !== 'low';
 
-  // ---- vegetation
+  // ---- vegetation, and the colliders of its solid props (same placement, seed and quality)
+  const vegSeed = Math.floor(ctx.rng.fork('terrain').next() * 1e9);
+  const placement = createPlacement({ surface, landcover, heightmap, demAt, texel: T, isDeveloped, seed: vegSeed, q: quality?.vegetation ?? 1 });
   let vegetation = null;
   try {
-    const rng = ctx.rng.fork('terrain');
     vegetation = createVegetation({
       ctx,
       surface,
@@ -137,10 +140,17 @@ export async function create(ctx) {
       texel: T,
       isDeveloped,
       sunScale: material.userData.tk.tkSunScale,
-      seed: Math.floor(rng.next() * 1e9),
+      seed: vegSeed,
+      placement,
     });
   } catch (err) {
     console.error('[terrain] vegetation failed to build', err);
+  }
+  let colliders = null;
+  try {
+    colliders = createTerrainColliders({ placement, seed: vegSeed });
+  } catch (err) {
+    console.error('[terrain] colliders failed to build', err);
   }
 
   const frustum = new THREE.Frustum();
@@ -206,6 +216,20 @@ export async function create(ctx) {
         console.error('[terrain] vegetation update failed', err);
       }
     }
+    // Collision tiles around the camera (and the rig focus) are built ahead of the first query, a little per frame.
+    if (colliders) {
+      try {
+        const cam = camera.position;
+        if (cam.y - surface.heightAt(cam.x, cam.z) < 150) {
+          const deadline = performance.now() + 0.3;
+          const f = ctx.systems.cameraRig?.focus;
+          if (f && Number.isFinite(f.x)) colliders.warm(f.x, f.z, 40, deadline);
+          colliders.warm(cam.x, cam.z, 40, deadline);
+        }
+      } catch (err) {
+        if (!hookErrors++) console.error('[terrain] collider warm-up failed', err);
+      }
+    }
     hookMs += (performance.now() - t0 - hookMs) * 0.05;
   });
 
@@ -219,6 +243,9 @@ export async function create(ctx) {
     heights,
 
     heightAt: (x, z) => surface.heightAt(x, z),
+    // Solid props near (x, z): spruce trunks and boulders (circles), driftwood (boxes; root wads as circles), in the
+    // shared collider shape (see terrain/colliders.js). Grass, ferns, flowers and shrubs are soft. `out` is reused.
+    collidersNear: (x, z, radius = 0, out) => colliders?.near(x, z, radius, out) ?? (out ? ((out.length = 0), out) : []),
     surfaceAt: (x, z) => landcover.surfaceAt(x, z),
     forestDensity: (x, z) => landcover.forestDensity(x, z),
     sunVisibilityAt: (x, z) => sunvis.at(x, z),
@@ -356,6 +383,7 @@ void main() {
         shadowComputations: shadow.computations,
         despiked,
         vegetation: vegetation?.debugState() ?? null,
+        colliders: colliders?.stats() ?? null,
       };
     },
     serialize() {

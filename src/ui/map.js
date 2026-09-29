@@ -60,13 +60,21 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint, openTeleport =
     h('div.ms-sec', null, [h('div.ms-h', { text: 'Waypoint' }), wpBox]),
     h('div.ms-sec.ms-travel', null, [travelHead, travelNote, preview, travelList]),
   ]);
-  const hint = h('div.map-hint', null, [
-    hintItem('Drag', 'pan'),
-    hintItem('Wheel', 'zoom'),
-    hintItem('Click', 'set waypoint · pick a harbor or tender'),
-    hintItem('Right-click', 'clear waypoint'),
-    hintItem('M', 'close'),
-  ]);
+  const hint = h('div.map-hint');
+  // Footer keys: in Free Explore a click picks a teleport target (a place, or the open water under the cursor).
+  function renderHint() {
+    clear(hint);
+    const ex = explore();
+    const items = [
+      hintItem('Drag', 'pan'),
+      hintItem('Wheel', 'zoom'),
+      hintItem('Click', ex ? 'teleport to a place or open water' : 'set waypoint · pick a harbor or tender'),
+      hintItem('Right-click', 'clear waypoint'),
+      ex && openTeleport ? hintItem('T', 'where to?') : null,
+      hintItem('M', 'close'),
+    ];
+    hint.append(...items.filter(Boolean));
+  }
   const el = h('div.ui-panel.panel-map', null, [h('div.map-wrap', null, [frame, side]), hint]);
 
   const view = createChartView({ half, width: 800, height: 600, margin: 26, maxZoom: 7 });
@@ -1336,6 +1344,7 @@ export function createMap(ctx, { close, getWaypoint, setWaypoint, openTeleport =
     show() {
       isOpen = true;
       targetsCache = null;
+      renderHint();
       requestAnimationFrame(() => {
         resize();
         const p = ctx.game?.avatar?.() ?? ctx.systems.seiner?.position;

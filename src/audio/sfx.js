@@ -2,8 +2,9 @@
 // stops every source it created by the returned time. `p.rate` (default 1) scales pitch where it makes sense.
 // Positioning, distance, voice limits and volume are the caller's job (see engine.js).
 
-import { pad, pluck, bell } from './instruments.js';
+import { pad, pluck, bell, whistle } from './instruments.js';
 import { footstepRecipe, gullCall, radioTiming, splashPlan, stingerFor, discoveryChord, TUNING, clamp } from './params.js';
+import { stampedePlan } from './scene.js';
 
 const rr = (a, b) => a + (b - a) * Math.random();
 const rate = (p) => (p && p.rate > 0 ? p.rate : 1);
@@ -404,6 +405,54 @@ export function sealion(kit, out, t, p) {
   const bg = kit.gain(0);
   kit.ahr(bg.gain, t, 0.05, 0.12, Math.max(0.05, dur - 0.15), 0.2);
   kit.chain(br, bb, bg, out);
+  return end;
+}
+
+// A haulout stampeding into the sea (wildlife:disturbed): the herd roaring and barking, bodies plunging in and a
+// churning splash chorus under it all. p = { plan } (scene.stampedePlan) or { members }. One voice for the whole
+// scene, and light: the plunges share one noise source (4 nodes each), ≤ 5 roars and ≤ 8 plunges whatever the colony.
+export function stampede(kit, out, t, p) {
+  const plan = p.plan ?? stampedePlan(p.members ?? 18);
+  const L = plan.level ?? 0.9;
+  const g = kit.gain(L);
+  g.connect(out);
+  let end = t + plan.dur + 0.6;
+  for (const r of plan.roars) end = Math.max(end, sealion(kit, g, t + r.t, { bull: r.bull, rate: r.rate * rate(p) }));
+  // A 300-600 kg body going in: a hollow thump and a heavy, falling slosh.
+  const wn = kit.noise('white', t, end);
+  for (const pl of plan.plunges) {
+    const tt = t + pl.t;
+    const s = clamp(pl.size, 1, 3);
+    const bp = kit.filter('bandpass', 900 / Math.sqrt(s), 0.8);
+    bp.frequency.setValueAtTime(1100 / Math.sqrt(s), tt);
+    bp.frequency.exponentialRampToValueAtTime(260, tt + 0.25 + 0.1 * s);
+    const bg = kit.gain(0);
+    kit.perc(bg.gain, tt, 0.004, 0.3 + 0.15 * s, 0.35 + 0.15 * s);
+    wn.connect(bp);
+    kit.chain(bp, bg, g);
+    const th = kit.osc('sine', 120, tt, tt + 0.35);
+    th.frequency.exponentialRampToValueAtTime(48, tt + 0.16);
+    const tg = kit.gain(0);
+    kit.perc(tg.gain, tt, 0.003, 0.22 * s, 0.2);
+    kit.chain(th, tg, g);
+  }
+  // The churn: many smaller bodies and flippers, a rushing wash of low drops that swells then settles.
+  const c = plan.chorus;
+  const n = kit.noise('rain', t + 0.2, end, { rate: 0.55 });
+  const bp = kit.filter('bandpass', 950, 0.6);
+  const cg = kit.gain(0);
+  cg.gain.setValueAtTime(0, t + 0.2);
+  cg.gain.linearRampToValueAtTime(0.55 * c, t + 1.1);
+  cg.gain.setTargetAtTime(0.3 * c, t + 1.4, plan.dur * 0.25);
+  cg.gain.setTargetAtTime(0, t + plan.dur * 0.8, 0.5);
+  kit.chain(n, bp, cg, g);
+  const w = kit.noise('pinkStereo', t + 0.3, end);
+  const lp = kit.filter('lowpass', 520, 0.7);
+  const wg = kit.gain(0);
+  wg.gain.setValueAtTime(0, t + 0.3);
+  wg.gain.linearRampToValueAtTime(0.4 * c, t + 1.3);
+  wg.gain.setTargetAtTime(0, t + plan.dur * 0.6, plan.dur * 0.15);
+  kit.chain(w, lp, wg, g);
   return end;
 }
 
@@ -1068,6 +1117,18 @@ export function stinger(kit, out, t, p) {
   return end;
 }
 
+// Summit / viewpoint perch (player:summit): a short, gentle open chord, two plucks and a tin-whistle note held high.
+// Only D, E, G, A and B, so it sits in any of the music's keys (D dorian, G mixolydian, D major). p = { root }
+export function summit(kit, out, t, p) {
+  const root = p.root ?? 62;
+  let end = pad(kit, out, t, [-12, -5, 2, 7].map((n) => root + n), { dur: 1.3, vel: 0.46, attack: 0.5, release: 2.4, cutoff: 1500 });
+  [[7, 0.25], [12, 0.5]].forEach(([n, dt], i) => {
+    end = Math.max(end, pluck(kit, out, t + dt, root + n, { vel: 0.28, decay: 2, bright: 0.6, pan: i ? 0.25 : -0.25 }));
+  });
+  end = Math.max(end, whistle(kit, out, t + 0.8, root + 14, { dur: 1.4, vel: 0.24, cut: true }));
+  return end;
+}
+
 // Named one-shots: recipe, priority, bus ('world' | 'ui'), distance model (ref, rolloff), level, audibility range.
 export const SOUNDS = {
   'fish-jump': { fn: fishJump, priority: 4, bus: 'world', ref: 10, rolloff: 0.9, level: 1.1, range: 520 },
@@ -1081,6 +1142,7 @@ export const SOUNDS = {
   'bear-huff': { fn: bearHuff, priority: 7, bus: 'world', ref: 10, rolloff: 1, level: 1, range: 500 },
   'bear-charge': { fn: bearCharge, priority: 7, bus: 'world', ref: 10, rolloff: 1, level: 1, range: 500 },
   sealion: { fn: sealion, priority: 3, bus: 'world', ref: 25, rolloff: 0.9, level: 0.8, range: 1600 },
+  stampede: { fn: stampede, priority: 7, bus: 'world', ref: 40, rolloff: 0.9, level: 0.9, range: 2500 },
   boil: { fn: boil, priority: 4, bus: 'world', ref: 10, rolloff: 1, level: 0.8, range: 300 },
   clunk: { fn: clunk, priority: 7, bus: 'world', ref: 10, rolloff: 1, level: 1, range: 300 },
   footstep: { fn: footstep, priority: 6, bus: 'world', ref: 4, rolloff: 1, level: 1, range: 60 },
@@ -1106,4 +1168,5 @@ export const SOUNDS = {
   'cash-register': { fn: cashRegister, priority: 9, bus: 'ui', level: 1 },
   discovery: { fn: discovery, priority: 9, bus: 'ui', level: 1, reverb: true },
   stinger: { fn: stinger, priority: 9, bus: 'ui', level: 1, reverb: true },
+  summit: { fn: summit, priority: 8, bus: 'ui', level: 1, reverb: true },
 };

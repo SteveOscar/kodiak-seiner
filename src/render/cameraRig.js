@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import {
   clamp, lerp, damp, dampAngle, smoothDamp, wrapAngle, orbitPosition, occlusionFraction, shakeOffsets, easeInOut,
-  easeInOutSine, crowsnestHeight, wobble,
+  easeInOutSine, crowsnestFrame, crowsnestCeiling, wobble, clearOrbit, insideCollider, lookAngles,
 } from './camera/rigMath.js';
 import { TITLE_SHOTS, shotAt } from './camera/titleShots.js';
 
@@ -34,6 +34,7 @@ export async function create(ctx) {
   let target = null;
   let lastCycleAt = -1e9;
   let lastLookAt = -1e9;
+  let lastZoomAt = -1e9;
   let snapNext = true;
   let trauma = 0;
   let time = 0;
@@ -45,11 +46,24 @@ export async function create(ctx) {
   const chase = { yaw: 0, pitch: 0.24, dist: 34, heading: 0, pull: 1, focus: new THREE.Vector3(), sx: { v: 0 }, sy: { v: 0 }, sz: { v: 0 } };
   const NEST_PITCH = 0.9;
   const NEST_HEIGHT = 60;
-  const nest = { yaw: 0, pitch: NEST_PITCH, height: NEST_HEIGHT, heading: 0, focus: new THREE.Vector3(), sx: { v: 0 }, sz: { v: 0 }, h: NEST_HEIGHT };
+  const nest = { yaw: 0, pitch: NEST_PITCH, height: NEST_HEIGHT, heading: 0, focus: new THREE.Vector3(), sx: { v: 0 }, sz: { v: 0 }, d: NEST_HEIGHT / Math.sin(NEST_PITCH), p: NEST_PITCH, f: baseFov };
+  const nestFrame = { dist: 0, pitch: 0, fov: 0, height: 0, shift: 0 };
   // Default bridge pitch looks down over the console to the bow, with the horizon in the upper third.
   const BRIDGE_PITCH = 0.17;
   const bridge = { yaw: 0, pitch: BRIDGE_PITCH };
-  const foot = { yaw: 0, pitch: 0.3, dist: 6.5, pull: 1, focus: new THREE.Vector3(), sx: { v: 0 }, sy: { v: 0 }, sz: { v: 0 }, last: new THREE.Vector3(), moveHeading: 0 };
+  const foot = {
+    yaw: 0, pitch: 0.3, dist: 6.5, pull: 1, focus: new THREE.Vector3(), sx: { v: 0 }, sy: { v: 0 }, sz: { v: 0 }, last: new THREE.Vector3(), moveHeading: 0,
+    // Framing suggested by the player system (ferry, boarding, summit): blend weight and the last suggestion.
+    frameK: 0, frame: null, lift: 0, clearPull: 1,
+  };
+  const footClear = { pitch: 0, frac: 1 };
+  const footColliders = [];
+  const hullBoxes = [
+    { kind: 'box', x: 0, z: 0, hx: 3.2, hz: 9.0, rot: 0, y0: -4, y1: 3 },
+    { kind: 'box', x: 0, z: 0, hx: 2.15, hz: 2.9, rot: 0, y0: -1, y1: 7.8 },
+  ];
+  const vegCache = new Map();
+  const colliderOut = [[], []];
   const free = { pos: new THREE.Vector3(), yaw: 0, pitch: 0, fov: baseFov };
   const title = { t: 0, index: -1 };
   const bino = { k: 0, active: false, yaw: 0, pitch: 0, pending: null, logged: new Map() };
@@ -165,6 +179,7 @@ export async function create(ctx) {
     dy += ly * 420 * dt;
     if (invertY) dy = -dy;
     if (dx || dy) lastLookAt = time;
+    if (m.wheel) lastZoomAt = time;
     return { dx: dx * sens, dy: dy * sens, wheel: m.wheel ?? 0 };
   }
 
@@ -223,49 +238,72 @@ export async function create(ctx) {
       nest.pitch = damp(nest.pitch, NEST_PITCH, 3, dt);
     }
     nest.heading = snap ? s.heading : dampAngle(nest.heading, s.heading, 2.2, dt);
+    const yaw = nest.heading + nest.yaw;
     const f = s.forward(tmpV);
     let cx = s.position.x + f.x * 16;
     let cz = s.position.z + f.z * 16;
-    let h = nest.height;
-    // While the skiff is off, frame the seiner, the skiff and the net between them.
+    let pose = null;
+    // While the skiff is off, frame the seiner and the net (the corkline runs out to the skiff's end); before the net
+    // is in the water, the seiner and the skiff. The height stays under the weather's cloud deck: a wide set tilts the
+    // view toward the horizon and widens the lens instead of climbing into the haze.
     const sk = ctx.systems.skiff;
-    if (sk && sk.state && sk.state !== 'stowed' && sk.position) {
-      const sep = Math.hypot(sk.position.x - s.position.x, sk.position.z - s.position.z);
-      cx = s.position.x + (sk.position.x - s.position.x) * 0.45;
-      cz = s.position.z + (sk.position.z - s.position.z) * 0.45;
-      h = crowsnestHeight(nest.height, sep + 40, baseFov);
-    }
     const poly = ctx.systems.net?.polygon?.();
-    if (poly && poly.length > 2) {
-      let minX = Infinity;
-      let maxX = -Infinity;
-      let minZ = Infinity;
-      let maxZ = -Infinity;
-      for (const p of poly) {
-        minX = Math.min(minX, p.x);
-        maxX = Math.max(maxX, p.x);
-        minZ = Math.min(minZ, p.z);
-        maxZ = Math.max(maxZ, p.z);
-      }
-      cx = (cx + (minX + maxX) / 2) / 2;
-      cz = (cz + (minZ + maxZ) / 2) / 2;
-      h = Math.max(h, crowsnestHeight(nest.height, Math.max(maxX - minX, maxZ - minZ) + 30, baseFov));
+    const hasPoly = Array.isArray(poly) && poly.length > 2;
+    const skiffOut = !!(sk && sk.state && sk.state !== 'stowed' && sk.position);
+    if (hasPoly || skiffOut) {
+      const ux = Math.sin(yaw); // view forward on the water
+      const uz = -Math.cos(yaw);
+      const rx = Math.cos(yaw); // view right
+      const rz = Math.sin(yaw);
+      const box = { r0: Infinity, r1: -Infinity, f0: Infinity, f1: -Infinity };
+      const add = (x, z) => {
+        const r = x * rx + z * rz;
+        const g = x * ux + z * uz;
+        if (r < box.r0) box.r0 = r;
+        if (r > box.r1) box.r1 = r;
+        if (g < box.f0) box.f0 = g;
+        if (g > box.f1) box.f1 = g;
+      };
+      add(s.position.x + f.x * 9, s.position.z + f.z * 9);
+      add(s.position.x - f.x * 9, s.position.z - f.z * 9);
+      if (hasPoly) {
+        for (const p of poly) if (Number.isFinite(p?.x) && Number.isFinite(p?.z)) add(p.x, p.z);
+      } else add(sk.position.x, sk.position.z);
+      const pad = 22;
+      pose = crowsnestFrame({
+        across: box.r1 - box.r0 + pad,
+        along: box.f1 - box.f0 + pad,
+        pitch: nest.pitch,
+        fovDeg: baseFov,
+        aspect: camera.aspect || 16 / 9,
+        ceiling: crowsnestCeiling(ctx.systems.sky?.weather?.cloudBase),
+        floor: nest.height,
+      }, nestFrame);
+      const mr = (box.r0 + box.r1) / 2;
+      const mf = (box.f0 + box.f1) / 2 + pose.shift;
+      cx = rx * mr + ux * mf;
+      cz = rz * mr + uz * mf;
     }
+    const tDist = pose ? pose.dist : nest.height / Math.sin(nest.pitch);
+    const tPitch = pose ? pose.pitch : nest.pitch;
+    const tFov = pose ? pose.fov : baseFov;
     if (snap) {
       nest.focus.set(cx, 0, cz);
-      nest.h = h;
+      nest.d = tDist;
+      nest.p = tPitch;
+      nest.f = tFov;
     } else {
       nest.focus.x = smoothDamp(nest.focus.x, cx, nest.sx, 0.7, dt);
       nest.focus.z = smoothDamp(nest.focus.z, cz, nest.sz, 0.7, dt);
-      nest.h = damp(nest.h, h, 1.2, dt);
+      nest.d = damp(nest.d, tDist, 1.2, dt);
+      nest.p = damp(nest.p, tPitch, 1.2, dt);
+      nest.f = damp(nest.f, tFov, 1.2, dt);
     }
     nest.focus.y = s.position.y;
-    const yaw = nest.heading + nest.yaw;
-    const dist = nest.h / Math.sin(nest.pitch);
-    orbitPosition(nest.focus.x, nest.focus.y, nest.focus.z, yaw, nest.pitch, dist, orbit);
+    orbitPosition(nest.focus.x, nest.focus.y, nest.focus.z, yaw, nest.p, nest.d, orbit);
     desired.pos.set(orbit.x, Math.max(orbit.y, groundY(orbit.x, orbit.z) + 25), orbit.z);
     lookQuat(desired.pos, nest.focus);
-    desired.fov = baseFov;
+    desired.fov = nest.f;
     desired.near = low ? 2 : 0.5;
     focus.copy(nest.focus);
     return true;
@@ -299,9 +337,23 @@ export async function create(ctx) {
     const t = footTarget();
     if (!t) return poseChase(dt, look);
     const snap = snapNext;
+    // The player system's suggested framing (ferry, boarding, summit), eased in while the player leaves the camera
+    // alone. Touching the camera adopts the blended pose as the player's own, so nothing jumps.
+    const fr = ctx.systems.player?.cameraFraming ?? null;
+    if (fr && Number.isFinite(fr.dist) && Number.isFinite(fr.pitch)) foot.frame = fr;
+    const idle = time - lastLookAt > 3 && time - lastZoomAt > 3;
+    if ((look.dx || look.dy || look.wheel) && foot.frameK > 0.001 && foot.frame) {
+      foot.dist = lerp(foot.dist, foot.frame.dist, foot.frameK);
+      foot.pitch = lerp(foot.pitch, foot.frame.pitch, foot.frameK);
+      foot.frameK = 0;
+    }
     foot.yaw = wrapAngle(foot.yaw - look.dx * 0.0048);
     foot.pitch = clamp(foot.pitch + look.dy * 0.0038, -0.35, 1.35);
     if (look.wheel) foot.dist = clamp(foot.dist * (1 + look.wheel * 0.1), 2.2, 28);
+    const summit = fr?.kind === 'summit';
+    // Cutscenes (the skiff runs) take no camera input, so their framing applies at once.
+    const kWant = fr && foot.frame && (idle || ctx.state.mode !== 'play') ? 1 : 0;
+    foot.frameK = snap ? kWant : damp(foot.frameK, kWant, summit ? 1.3 : 0.6, dt);
     t.getWorldPosition(tmpV);
     const tx = tmpV.x;
     const ty = tmpV.y + 1.55;
@@ -310,23 +362,103 @@ export async function create(ctx) {
     if (dt > 0 && moved / dt > 0.6) foot.moveHeading = Math.atan2(tx - foot.last.x, -(tz - foot.last.z));
     foot.last.set(tx, ty, tz);
     if (time - lastLookAt > 3 && dt > 0 && moved / dt > 0.6) foot.yaw = dampAngle(foot.yaw, foot.moveHeading, 3.5, dt);
+    // On a summit, turn slowly to look out over the anchored boat.
+    const sn = seiner();
+    if (summit && idle && sn && dt > 0) {
+      const a = lookAngles(tx, 0, tz, sn.position.x, 0, sn.position.z);
+      foot.yaw = dampAngle(foot.yaw, a.yaw, 2.2, dt);
+    }
     if (snap) foot.focus.set(tx, ty, tz);
     else {
       foot.focus.x = smoothDamp(foot.focus.x, tx, foot.sx, 0.12, dt);
       foot.focus.y = smoothDamp(foot.focus.y, ty, foot.sy, 0.2, dt);
       foot.focus.z = smoothDamp(foot.focus.z, tz, foot.sz, 0.12, dt);
     }
-    orbitPosition(foot.focus.x, foot.focus.y, foot.focus.z, foot.yaw, foot.pitch, foot.dist, orbit);
-    const frac = occlusionFraction(foot.focus.x, foot.focus.y, foot.focus.z, orbit.x, orbit.y, orbit.z, groundY, 0.6, 14);
+    const k = foot.frame ? foot.frameK : 0;
+    const dist = foot.frame ? lerp(foot.dist, foot.frame.dist, k) : foot.dist;
+    let pitch = foot.frame ? lerp(foot.pitch, foot.frame.pitch, k) : foot.pitch;
+    // Foliage, props and the seiner's hull: lift the view over them, else pull in behind the person.
+    gatherFootColliders(foot.focus.x, foot.focus.z, dist + 3);
+    clearOrbit(foot.focus.x, foot.focus.y, foot.focus.z, foot.yaw, pitch, dist, footBlocked, { minT: 2.0, maxPitch: Math.max(pitch, 0.95) }, footClear);
+    const liftWant = footClear.pitch - pitch;
+    foot.lift = snap ? liftWant : damp(foot.lift, liftWant, liftWant > foot.lift ? 0.18 : 0.9, dt);
+    foot.clearPull = snap ? footClear.frac : damp(foot.clearPull, footClear.frac, footClear.frac < foot.clearPull ? 0.08 : 0.7, dt);
+    pitch += foot.lift;
+    orbitPosition(foot.focus.x, foot.focus.y, foot.focus.z, foot.yaw, pitch, dist, orbit);
+    const frac = Math.min(occlusionFraction(foot.focus.x, foot.focus.y, foot.focus.z, orbit.x, orbit.y, orbit.z, groundY, 0.6, 14), foot.clearPull);
     foot.pull = snap ? frac : frac < foot.pull ? damp(foot.pull, frac, 0.06, dt) : damp(foot.pull, frac, 0.6, dt);
-    orbitPosition(foot.focus.x, foot.focus.y, foot.focus.z, foot.yaw, foot.pitch, Math.max(1.2, foot.dist * foot.pull), orbit);
+    orbitPosition(foot.focus.x, foot.focus.y, foot.focus.z, foot.yaw, pitch, Math.max(1.2, dist * foot.pull), orbit);
     desired.pos.set(orbit.x, orbit.y, orbit.z);
     desired.pos.y = Math.max(desired.pos.y, waterY(orbit.x, orbit.z) + 1.2, groundY(orbit.x, orbit.z) + 0.8);
     lookQuat(desired.pos, foot.focus);
-    desired.fov = baseFov;
+    desired.fov = lerp(baseFov, 60, summit || foot.frame?.kind === 'summit' ? k : 0);
     desired.near = 0.3;
     focus.set(tx, tmpV.y, tz);
     return true;
+  }
+
+  // Canopy top above the ground (m) at a point: alder/salmonberry thickets and spruce, from the terrain's landcover.
+  // Cached on a 2 m grid; the queries are too costly to repeat per ray sample every frame.
+  function vegTop(x, z) {
+    const ix = Math.round(x / 2);
+    const iz = Math.round(z / 2);
+    const key = ix * 100003 + iz;
+    let v = vegCache.get(key);
+    if (v !== undefined) return v;
+    const ter = ctx.systems.terrain;
+    v = 0;
+    const surf = ter?.surfaceAt?.(ix * 2, iz * 2);
+    const alder = ter?.alderDensity?.(ix * 2, iz * 2) ?? (surf === 'alder' ? 0.8 : 0);
+    // Spruce crowns come from the published tree colliders when there are any; else dense forest is a solid canopy.
+    if (typeof ter?.collidersNear !== 'function' && (ter?.forestDensity?.(ix * 2, iz * 2) ?? 0) > 0.6) v = 14;
+    else if (alder > 0.3) v = 2.2 + 1.8 * clamp(alder, 0, 1);
+    if (vegCache.size > 4000) vegCache.clear();
+    vegCache.set(key, v);
+    return v;
+  }
+
+  function gatherFootColliders(x, z, r) {
+    footColliders.length = 0;
+    const srcs = [ctx.systems.terrain, ctx.systems.places];
+    for (let i = 0; i < srcs.length; i++) {
+      // Trees are circles around the trunk; their crowns reach ~5 m out, so the query is wider than the orbit.
+      const list = srcs[i]?.collidersNear?.(x, z, r + 6, colliderOut[i]);
+      if (Array.isArray(list)) for (const c of list) footColliders.push(c);
+    }
+    // The seiner: hull to the bulwarks, and the house up to the flying bridge.
+    const s = seiner();
+    if (s?.position && Math.hypot(s.position.x - x, s.position.z - z) < r + 12) {
+      const h = s.heading ?? 0;
+      const fx = Math.sin(h);
+      const fz = -Math.cos(h);
+      const [hullB, house] = hullBoxes;
+      hullB.x = s.position.x;
+      hullB.z = s.position.z;
+      hullB.rot = h;
+      hullB.y1 = s.position.y + 3;
+      house.x = s.position.x + fx * 2.2;
+      house.z = s.position.z + fz * 2.2;
+      house.rot = h;
+      house.y1 = s.position.y + 7.8;
+      footColliders.push(hullB, house);
+    }
+  }
+
+  function footBlocked(x, y, z) {
+    for (let i = 0; i < footColliders.length; i++) {
+      const c = footColliders[i];
+      if (insideCollider(c, x, y, z, 0.35)) return true;
+      // A tall circle is a spruce: its boughs form a cone from ~12% of the height to the tip.
+      if (c?.kind === 'circle' && c.y1 - c.y0 > 5 && y > c.y0 && y < c.y1) {
+        const h = c.y1 - c.y0;
+        const crown = 0.3 * h * clamp((1 - (y - c.y0) / h) / 0.88, 0, 1);
+        const dx = x - c.x;
+        const dz = z - c.z;
+        if (dx * dx + dz * dz < crown * crown * 0.8) return true;
+      }
+    }
+    const top = vegTop(x, z);
+    return top > 0 && y < groundY(x, z) + top + 0.3;
   }
 
   function poseTitle(dt) {

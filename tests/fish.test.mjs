@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { fakeCtx } from './contract.test.mjs';
 import { STUBS } from '../src/systems/stubs.js';
 import { REQUIRED } from '../src/systems/contract.js';
-import { createFishSim, GUARANTEE } from '../src/entities/fish/sim.js';
+import { createFishSim, GUARANTEE, CRUISE_MIN_DEPTH } from '../src/entities/fish/sim.js';
 import { createWorldAdapter } from '../src/entities/fish/world.js';
 import { create as createFish } from '../src/entities/fish.js';
 import { catchTotal, SPECIES, targetPopulation, runIntensity } from '../src/entities/fish/species.js';
@@ -57,6 +57,21 @@ test('population: 12–25 run-driven schools in the water, valid mixes', () => {
   assert.ok(!sim.schools.some((s) => s.species === 'coho'));
 });
 
+test('free schools cruise at least CRUISE_MIN_DEPTH deep where the water allows (shadows under the surface)', () => {
+  const { ctx, sim } = setup();
+  run(sim, ctx, 2);
+  // Shallow-spawning species (pink/coho 1–4 m in config) included: a milling school too (milling swims shallower).
+  const w = openWater(ctx);
+  const a = sim.spawnSchool({ x: w.x, z: w.z, species: 'pink', count: 3000, milling: true, spookable: false });
+  const b = sim.spawnSchool({ x: w.x + 80, z: w.z, species: 'coho', count: 600, spookable: false });
+  run(sim, ctx, 40);
+  for (const s of [a, b, ...sim.schools.filter((q) => ['migrating', 'milling', 'spooked'].includes(q.state))]) {
+    const wd = ctx.heightmap.depthAt(s.position.x, s.position.z);
+    if (wd < CRUISE_MIN_DEPTH + 1.5) continue;
+    assert.ok(s.depth >= CRUISE_MIN_DEPTH - 0.05, `${s.id} ${s.species} ${s.state} at ${s.depth.toFixed(2)} m in ${wd.toFixed(1)} m of water`);
+  }
+});
+
 test('schools migrate: they move, stay off the beach and follow the coast', () => {
   const { ctx, sim } = setup();
   run(sim, ctx, 2);
@@ -74,11 +89,22 @@ test('schools migrate: they move, stay off the beach and follow the coast', () =
   assert.ok(minShore > 5, `a school touched the beach (${minShore.toFixed(1)} m)`);
 });
 
-test('tutorial school: pink, milling, 500–700 m from the spawn, jumpRate ×3, never spooks', () => {
+test('tutorial school: pink, milling, a quarter mile (380–420 m) from the spawn, jumpRate ×3, never spooks', () => {
   const { ctx, sim, spawn } = setup();
   const s = sim.spawnTutorial(spawn.x, spawn.z, spawn.heading);
   const d = Math.hypot(s.position.x - spawn.x, s.position.z - spawn.z);
-  assert.ok(d >= 500 && d <= 700, `distance ${d}`);
+  assert.ok(d >= 380 && d <= 420, `distance ${d}`);
+  // Deep enough that the base seine's first circle does not touch bottom ('Leads on bottom' through the whole set).
+  const need = ctx.config.net.depth + 4;
+  assert.ok(ctx.heightmap.depthAt(s.position.x, s.position.z) >= need, `centre depth ${ctx.heightmap.depthAt(s.position.x, s.position.z)}`);
+  let shallowest = Infinity;
+  for (const r of [20, 40, 60]) {
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * 2 * Math.PI;
+      shallowest = Math.min(shallowest, ctx.heightmap.depthAt(s.position.x + Math.cos(a) * r, s.position.z + Math.sin(a) * r));
+    }
+  }
+  assert.ok(shallowest >= need, `shallowest within 60 m ${shallowest.toFixed(1)} m (need ${need})`);
   assert.equal(s.species, 'pink');
   assert.equal(s.state, 'milling');
   const [lo, hi] = ctx.config.fish.species.pink.jumpsPerMin;
@@ -90,8 +116,8 @@ test('tutorial school: pink, milling, 500–700 m from the spawn, jumpRate ×3, 
   run(sim, ctx, 60);
   assert.equal(s.state, 'milling');
   const d2 = Math.hypot(s.position.x - spawn.x, s.position.z - spawn.z);
-  assert.ok(d2 > 470 && d2 < 740, `drifted to ${d2}`);
-  assert.ok(ctx.heightmap.depthAt(s.position.x, s.position.z) >= 5);
+  assert.ok(d2 > 350 && d2 < 450, `drifted to ${d2}`);
+  assert.ok(ctx.heightmap.depthAt(s.position.x, s.position.z) >= ctx.config.net.depth, 'drifted into shallow water');
 });
 
 test('open-period guarantee: ≥ 2 catchable schools within 1.5 km, spawned ≥ 600 m away and out of view', () => {

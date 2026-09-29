@@ -5,6 +5,8 @@
 //         'returning' (incl. the winch up the ramp) | 'ferry'.
 // Positions are {x, z}; headings follow the world convention (0 = north, clockwise).
 
+import { hullWaypoint } from './hullRoute.js';
+
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const approach = (v, t, tau, dt) => v + (t - v) * (1 - Math.exp(-dt / Math.max(1e-4, tau)));
 const wrap = (a) => {
@@ -25,6 +27,9 @@ export const SKIFF_TUNING = Object.freeze({
   towPull: 0.55, // m/s the seiner is pulled at full strain
   shoreDepth: 0.7, // stop this deep when running the end ashore / landing
   arriveRadius: 2.5,
+  hullHalfLength: 9.3, // seiner hull capsule the skiff steers around (stem to centre, incl. rake)
+  hullHalfBeam: 3.2,
+  hullMargin: 3, // skiff centre to the seiner's side while passing
 });
 
 export function createSkiffController({ tuning = SKIFF_TUNING, emit = () => {} } = {}) {
@@ -51,12 +56,33 @@ export function createSkiffController({ tuning = SKIFF_TUNING, emit = () => {} }
     onArrive: null,
     pending: null, // command issued while the drop animation runs
     phase: '', // sub-phase within a state
+    route: { side: 0 }, // side of the seiner a detour around its hull keeps to
+    waypoint: null, // {x, z} being steered for while going round the hull, else null
+  };
+  const wpOut = { x: 0, z: 0, side: 0 };
+  const wpKeep = { x: 0, z: 0 };
+  const hull = { x: 0, z: 0, heading: 0, halfLength: T.hullHalfLength, halfBeam: T.hullHalfBeam };
+  const hullOf = (sn) => {
+    if (!sn) return null;
+    hull.x = sn.x;
+    hull.z = sn.z;
+    hull.heading = sn.heading ?? 0;
+    hull.halfLength = sn.halfLength ?? T.hullHalfLength;
+    hull.halfBeam = sn.halfBeam ?? T.hullHalfBeam;
+    return hull;
+  };
+  // Where to steer for on the way to (tx, tz): a waypoint round the seiner when the straight run crosses its hull.
+  const steerFor = (tx, tz, sn) => {
+    const wp = sn ? hullWaypoint(s.x, s.z, tx, tz, hullOf(sn), { margin: T.hullMargin, state: s.route }, wpOut) : null;
+    s.waypoint = wp ? ((wpKeep.x = wp.x), (wpKeep.z = wp.z), wpKeep) : null;
+    return wp;
   };
 
   const setState = (st) => {
     if (s.state !== st) {
       const prev = s.state;
       s.state = st;
+      s.route.side = 0;
       emit('skiff:state', { state: st, prev });
     }
   };
@@ -229,7 +255,12 @@ export function createSkiffController({ tuning = SKIFF_TUNING, emit = () => {} }
       const lp = to ? landingPoint(s.x, s.z, to.x, to.z, env?.depthAt, T.shoreDepth) : { x: s.x, z: s.z };
       s.target.x = lp.x;
       s.target.z = lp.z;
-      if (to) s.heading = bearing(s.x, s.z, to.x, to.z);
+      s.route.side = 0;
+      if (to) {
+        // Head off round the anchored seiner when it lies between the skiff and the beach (or the ramp).
+        const wp = steerFor(lp.x, lp.z, env?.seiner);
+        s.heading = wp ? bearing(s.x, s.z, wp.x, wp.z) : bearing(s.x, s.z, to.x, to.z);
+      }
       s.onArrive = onArrive ?? null;
       s.follow = null;
       s.tiePoint = null;
@@ -252,12 +283,22 @@ export function createSkiffController({ tuning = SKIFF_TUNING, emit = () => {} }
       let vx = 0;
       let vz = 0;
 
-      const drive = (tx, tz, maxSpeed, radius = T.arriveRadius) => {
-        const dx = tx - s.x;
-        const dz = tz - s.z;
-        const d = Math.hypot(dx, dz);
+      // avoid: steer round the seiner's hull when it lies across the run (the remaining distance is then the way
+      // round, so the skiff does not slow down at the waypoint).
+      const drive = (tx, tz, maxSpeed, radius = T.arriveRadius, avoid = false) => {
+        const dTarget = Math.hypot(tx - s.x, tz - s.z);
+        let d = dTarget;
+        let sx = tx;
+        let sz = tz;
+        const wp = avoid ? steerFor(tx, tz, sn) : null;
+        if (!avoid) s.waypoint = null;
+        if (wp) {
+          sx = wp.x;
+          sz = wp.z;
+          d = Math.hypot(sx - s.x, sz - s.z) + Math.hypot(tx - sx, tz - sz);
+        }
         if (d > 0.3) {
-          const want = bearing(s.x, s.z, tx, tz);
+          const want = bearing(s.x, s.z, sx, sz);
           const err = wrap(want - s.heading);
           s.heading = wrap(s.heading + clamp(err, -T.turnRate * dt, T.turnRate * dt));
           const align = Math.max(0, Math.cos(err));
@@ -272,7 +313,7 @@ export function createSkiffController({ tuning = SKIFF_TUNING, emit = () => {} }
         vx = fx * s.speed;
         vz = fz * s.speed;
         effortTarget = clamp(s.speed / maxSpeed, 0.15, 1);
-        return d <= radius;
+        return dTarget <= radius;
       };
 
       // Station keeping: bow into the stream, thrust cancels it.
@@ -325,7 +366,7 @@ export function createSkiffController({ tuning = SKIFF_TUNING, emit = () => {} }
         }
 
         case 'holding':
-          if (!s.arrived && drive(s.target.x, s.target.z, T.runSpeed * 0.6)) s.arrived = true;
+          if (!s.arrived && drive(s.target.x, s.target.z, T.runSpeed * 0.6, T.arriveRadius, true)) s.arrived = true;
           if (s.arrived) stationKeep(s.target.x, s.target.z, s.targetEffort);
           strainTarget = 0.25;
           break;
@@ -349,7 +390,7 @@ export function createSkiffController({ tuning = SKIFF_TUNING, emit = () => {} }
 
         case 'tied':
           if (s.phase === 'run') {
-            if (drive(s.target.x, s.target.z, T.runSpeed * 0.7, 1.8)) {
+            if (drive(s.target.x, s.target.z, T.runSpeed * 0.7, 1.8, true)) {
               s.phase = 'tied';
               s.arrived = true;
             }
@@ -372,7 +413,7 @@ export function createSkiffController({ tuning = SKIFF_TUNING, emit = () => {} }
             s.target.z = t.z;
           }
           if (!s.arrived) {
-            if (drive(s.target.x, s.target.z, T.runSpeed * 0.75, 3.2)) {
+            if (drive(s.target.x, s.target.z, T.runSpeed * 0.75, 3.2, true)) {
               s.arrived = true;
               fire();
             }
@@ -397,7 +438,7 @@ export function createSkiffController({ tuning = SKIFF_TUNING, emit = () => {} }
           const tx = bitt.x + fx * T.towLine;
           const tz = bitt.z + fz * T.towLine;
           if (s.phase === 'position') {
-            if (drive(tx, tz, T.runSpeed * 0.7, 4)) s.phase = 'pull';
+            if (drive(tx, tz, T.runSpeed * 0.7, 4, true)) s.phase = 'pull';
             strainTarget = 0.1;
           } else {
             // On the line: hold the tow heading at line's length, dragging the seiner.
@@ -422,7 +463,7 @@ export function createSkiffController({ tuning = SKIFF_TUNING, emit = () => {} }
             // Come up astern, lined up with the ramp.
             const ax = sn.stern.x - fx * 7;
             const az = sn.stern.z - fz * 7;
-            if (drive(ax, az, T.runSpeed, 3)) {
+            if (drive(ax, az, T.runSpeed, 3, true)) {
               s.phase = 'winch';
               s.anim = 0;
               s.animFrom = { x: s.x, z: s.z, heading: s.heading };
@@ -449,7 +490,7 @@ export function createSkiffController({ tuning = SKIFF_TUNING, emit = () => {} }
 
         case 'ferry':
           if (!s.arrived) {
-            if (drive(s.target.x, s.target.z, T.ferrySpeed, 2)) {
+            if (drive(s.target.x, s.target.z, T.ferrySpeed, 2, true)) {
               s.arrived = true;
               s.phase = 'landed';
               fire();

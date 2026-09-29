@@ -22,7 +22,10 @@ export async function create(ctx) {
   function updateBrailer(dt) {
     const s = ctx.systems.seiner;
     const net = ctx.systems.net;
-    const active = core.state === 'brailing' && s?.position && net?.bagCentroid;
+    const set = core.set;
+    const accepted = set?.acceptedLbs ?? 0;
+    // Water hauls and seized catches: nothing to brail, so no brailer.
+    const active = core.state === 'brailing' && accepted > 0 && s?.position && net?.bagCentroid;
     if (!active) {
       brailer.update(dt, null);
       return;
@@ -42,9 +45,18 @@ export async function create(ctx) {
     const d = Math.hypot(dx, dz) || 1;
     const reach = Math.min(d, 8);
     dip.set(s.position.x + (dx / d) * reach, (ctx.systems.water?.heightAt?.(bag.x, bag.z) ?? 0) + 0.2, s.position.z + (dz / d) * reach);
-    const set = core.set;
-    const loaded = set && set.brailDur > 0 ? 1 - Math.min(1, set.brailT / set.brailDur) * 0.7 : 0;
-    brailer.update(dt, { active: true, boomTip: tip, hatch, dip, loaded });
+    // A scoop holds one brailer load; a small catch half-fills it, and the bag thins out as it is brailed.
+    const p = set.brailDur > 0 ? Math.min(1, set.brailT / set.brailDur) : 1;
+    const loaded = Math.min(1, Math.max(0.2, accepted / ctx.config.net.phases.brailLoadLbs)) * (1 - p * 0.55);
+    const r = brailer.update(dt, { active: true, boomTip: tip, hatch, dip, loaded });
+    if (r?.scooped) {
+      const scoops = Math.max(1, Math.ceil(set.brailDur / brailer.cycle));
+      const lbs = Math.min(accepted - (set.brailedLbs ?? 0), accepted / scoops);
+      if (lbs >= 1) {
+        set.brailedLbs = (set.brailedLbs ?? 0) + lbs;
+        ctx.events.emit('fishing:brail', { x: dip.x, z: dip.z, lbs: Math.round(lbs) });
+      }
+    }
   }
 
   const sys = {
@@ -65,6 +77,7 @@ export async function create(ctx) {
     abort: () => core.abort(),
     debug: core.debug,
     core,
+    brailer,
 
     update(dt) {
       core.update(dt);

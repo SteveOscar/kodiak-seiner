@@ -1,7 +1,7 @@
 // The set report card (fishing:setComplete) and the fish ticket (economy:delivered), each a pausing panel.
 
 import { h, clear, button, setText } from './dom.js';
-import { reportHeadline, reportRows, ticketModel } from './lib/logic.js';
+import { escapeSummary, reportHeadline, reportRows, reportValue, ticketModel } from './lib/logic.js';
 import { int, money, duration } from './lib/format.js';
 
 export function createReportPanel(ctx, { close }) {
@@ -53,15 +53,19 @@ export function createReportPanel(ctx, { close }) {
       toggle(rows, list.length === 0);
       clear(totals);
       if (!r?.waterHaul && !r?.cited) {
+        const val = reportValue(r);
+        const approx = val.approx ? '≈ ' : '';
         totals.append(
           stat('Brailed aboard', `${int(r?.totalLbs ?? 0)} lb`),
-          stat('At today’s prices', money(r?.value ?? 0)),
-          stat('Crew share (30%)', money((r?.value ?? 0) * (ctx.config.economy?.crewShare ?? 0.3))),
+          stat(val.label, approx + money(r?.value ?? 0)),
+          stat('Crew share (30%)', approx + money((r?.value ?? 0) * (ctx.config.economy?.crewShare ?? 0.3))),
         );
       }
       clear(extra);
+      const esc = escapeSummary(r);
+      if (esc?.cause) extra.append(h('p.rep-escape', { text: esc.text }));
       const notes = [];
-      if (Number(r?.escaped) > 0) notes.push(`${int(r.escaped)} got away under the leads`);
+      if (esc && !esc.cause) notes.push(esc.text);
       const kings = Number(r?.released?.king) || 0;
       if (kings > 0) notes.push(`${int(kings)} king${kings > 1 ? 's' : ''} released`);
       if (r?.cited) notes.push(`Fine ${money(r.fine ?? 0)} · catch forfeited`);

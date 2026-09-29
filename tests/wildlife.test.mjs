@@ -9,7 +9,7 @@ import { missingMembers } from '../src/systems/contract.js';
 import { resolve } from '../src/data/places.js';
 import { findSites } from '../src/entities/wildlife/sites.js';
 import { composeMatrix, wrapAngle, headingOf } from '../src/entities/wildlife/math.js';
-import { createEncounter, stepEncounter, ENCOUNTER, planFlocks, planBears, seenWell } from '../src/entities/wildlife/behaviour.js';
+import { createEncounter, stepEncounter, canEngage, ENCOUNTER, planFlocks, planBears, seenWell } from '../src/entities/wildlife/behaviour.js';
 import { buildBird, buildHumpback, buildOrca, buildQuadruped, buildSeaLion, buildSeal, buildOtter, buildSnag, QUADS } from '../src/entities/wildlife/shapes.js';
 import { buildBear, BEAR_AGES } from '../src/entities/wildlife/bear.js';
 
@@ -81,21 +81,29 @@ test('composeMatrix matches three.js YXZ Euler with heading convention', () => {
   assert.ok(Math.abs(wrapAngle(3 * Math.PI) - Math.PI) < 1e-9);
 });
 
-test('bear encounter: watch within 30 m, bluff charge at 10 m, retreat, cooldown', () => {
+test('bear encounter: watch within 30 m, bluff charge at 10 m after a visible watch, retreat, cooldown', () => {
   const e = createEncounter();
   const step = (dist, dt = 0.1, t = 0, onFoot = true) => stepEncounter(e, { dist, onFoot, dt, time: t });
   assert.equal(step(60), null);
   assert.equal(step(29), 'watch');
   assert.equal(step(20), null);
-  assert.equal(step(9), 'charge');
+  // Closing to 9 m charges only once the bear has been seen watching for minWatch.
   let change = null;
+  let waited = 0.1;
+  for (let i = 0; i < 40 && !change; i++) {
+    change = step(9);
+    waited += 0.1;
+  }
+  assert.equal(change, 'charge');
+  assert.ok(waited >= ENCOUNTER.minWatch, `watched ${waited.toFixed(1)} s before charging`);
+  change = null;
   for (let i = 0; i < 40 && !change; i++) change = step(5);
   assert.equal(change, 'retreat');
   change = null;
   let t = 0;
   for (let i = 0; i < 400 && !change; i++) change = step(50, 0.1, (t += 0.1));
   assert.equal(change, 'none');
-  assert.equal(step(20, 0.1, t + 1), null, 'no re-engagement during cooldown');
+  assert.equal(step(20, 0.1, t + 1), null, 'no re-engagement from the watch range during cooldown');
   assert.equal(step(20, 0.1, t + ENCOUNTER.cooldown + 1), 'watch');
   // Backing off ends a watch with a retreat.
   assert.equal(step(ENCOUNTER.releaseDist + 5, 0.1, t + 40), 'retreat');
@@ -103,6 +111,84 @@ test('bear encounter: watch within 30 m, bluff charge at 10 m, retreat, cooldown
   const e2 = createEncounter();
   stepEncounter(e2, { dist: 25, onFoot: true, dt: 0.1, time: 0 });
   assert.equal(stepEncounter(e2, { dist: 25, onFoot: false, dt: 0.1, time: 0.1 }), 'retreat');
+});
+
+test('bear encounter: a bear on cooldown re-engages point-blank, always through a visible watch first', () => {
+  const e = createEncounter();
+  e.cooldownUntil = 100; // just ended an encounter
+  const seq = [];
+  // The person walks right up to it while it is on cooldown (8 m, as in the QA run) and stays there.
+  for (let i = 0; i < 40; i++) {
+    const c = stepEncounter(e, { dist: 8, onFoot: true, dt: 0.1, time: 80 + i * 0.1 });
+    if (c) seq.push([c, +(i * 0.1).toFixed(1)]);
+  }
+  assert.equal(seq[0][0], 'watch', 'watches first');
+  const charge = seq.find(([c]) => c === 'charge');
+  assert.ok(charge, 'then charges if the person stays');
+  assert.ok(charge[1] - seq[0][1] >= ENCOUNTER.minWatch - 1e-9, `watch lasted ${(charge[1] - seq[0][1]).toFixed(1)} s`);
+  // On cooldown, further than the re-engage range: left alone (land.js keeps it wary instead).
+  const f = createEncounter();
+  f.cooldownUntil = 100;
+  assert.equal(stepEncounter(f, { dist: 20, onFoot: true, dt: 0.1, time: 80 }), null);
+  assert.equal(canEngage(f, { dist: 20, onFoot: true, time: 80 }), false);
+  assert.equal(canEngage(f, { dist: ENCOUNTER.reengageDist - 1, onFoot: true, time: 80 }), true);
+  // The cooldown running out while the person is already inside charge range still gives a full watch.
+  const g = createEncounter();
+  g.cooldownUntil = 10;
+  assert.equal(stepEncounter(g, { dist: 8.3, onFoot: true, dt: 0.1, time: 10 }), 'watch');
+  assert.equal(stepEncounter(g, { dist: 8.3, onFoot: true, dt: 0.1, time: 10.1 }), null, 'no charge in the same instant');
+});
+
+test('bear encounter: running or turning your back escalates; backing away facing the bear releases it', () => {
+  const run = (opts, secs = 4) => {
+    const e = createEncounter();
+    let dist = opts.from ?? 24;
+    assert.equal(stepEncounter(e, { dist, onFoot: true, dt: 0.1, time: 0 }), 'watch');
+    for (let i = 1; i <= secs * 10; i++) {
+      dist += (opts.speed ?? 0) * 0.1 * (opts.away ?? 1);
+      const c = stepEncounter(e, { dist, onFoot: true, dt: 0.1, time: i * 0.1, speed: opts.speed ?? 0, facingDeg: opts.facingDeg ?? 0 });
+      if (c) return { c, t: i * 0.1, dist };
+    }
+    return { c: null, dist };
+  };
+  // Shift-running away from 24.6 m (the QA run): charged, after the visible watch.
+  const ran = run({ speed: 5.3, facingDeg: 180 });
+  assert.equal(ran.c, 'charge');
+  assert.ok(ran.t >= ENCOUNTER.minWatch - 1e-9);
+  // Walking off with the back turned inside 25 m: charged too.
+  assert.equal(run({ speed: 2, facingDeg: 170, from: 18 }).c, 'charge');
+  // Backing away slowly while facing it: no charge, released past releaseDist.
+  const backed = run({ speed: 1.3, facingDeg: 10 }, 25);
+  assert.equal(backed.c, 'retreat');
+  assert.ok(backed.dist > ENCOUNTER.releaseDist);
+  // Standing still, even with the back turned: only the 10 m rule applies (no charge from 24 m).
+  assert.notEqual(run({ speed: 0, facingDeg: 180 }, 10).c, 'charge');
+  // Running from further than fleeDist is not provocation.
+  const e = createEncounter();
+  stepEncounter(e, { dist: 29, onFoot: true, dt: 0.1, time: 0 });
+  let c = null;
+  for (let i = 1; i <= 30 && !c; i++) c = stepEncounter(e, { dist: 29 + i * 0.5, onFoot: true, dt: 0.1, time: i * 0.1, speed: 5, facingDeg: 180 });
+  assert.notEqual(c, 'charge');
+});
+
+test('bear encounter: a bluff charge from further out runs until the bear pulls up short', () => {
+  const e = createEncounter();
+  e.stage = 'charge';
+  let c = null;
+  let t = 0;
+  // Still closing fast at 12 m after the minimum charge time: keep charging.
+  for (let i = 0; i < 25; i++) {
+    c = stepEncounter(e, { dist: 12, onFoot: false, dt: 0.1, time: (t += 0.1), bearSpeed: 8 });
+    assert.equal(c, null);
+  }
+  c = stepEncounter(e, { dist: 4.2, onFoot: false, dt: 0.1, time: (t += 0.1), bearSpeed: 0.4 });
+  assert.equal(c, 'retreat');
+  // A charge that never pulls up still ends.
+  const f = createEncounter();
+  f.stage = 'charge';
+  c = null;
+  for (let i = 0; i < 60 && !c; i++) c = stepEncounter(f, { dist: 30, onFoot: false, dt: 0.1, time: i * 0.1, bearSpeed: 9 });
+  assert.equal(c, 'retreat');
 });
 
 test('working flocks: about 30% are over bait over time', () => {
@@ -259,6 +345,8 @@ test('system: a person ashore near a bear gets watch, then a bluff charge, then 
   avatar.z = b.position.z;
   step(5);
   const mine = () => events.filter((e) => e.bearId === id);
+  assert.equal(mine().length, 1, 'no charge before the bear has been seen watching for minWatch');
+  step(Math.ceil(ENCOUNTER.minWatch * 30));
   assert.equal(mine()[1]?.stage, 'charge');
   step(120);
   assert.equal(mine()[2]?.stage, 'retreat');

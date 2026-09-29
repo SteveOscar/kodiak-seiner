@@ -12,6 +12,7 @@ import { createWinch } from './winch.js';
 import {
   buildSetReport,
   emptyCatch,
+  emptyEscapes,
   lbsOf,
   roundEstimate,
   sanitizeCatch,
@@ -23,6 +24,9 @@ const TAU = Math.PI * 2;
 const wrapAngle = (a) => ((((a + Math.PI) % TAU) + TAU) % TAU) - Math.PI;
 const headingOf = (vx, vz) => Math.atan2(vx, -vz);
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
+const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+const compassOf = (h) => COMPASS[Math.round((((h * 180) / Math.PI) % 360 + 360) % 360 / 45) % 8];
+const fmtDist = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.max(10, Math.round(m / 10) * 10)} m`);
 
 export function createFishingCore(ctx, { rng }) {
   const { THREE, events, config, heightmap } = ctx;
@@ -32,6 +36,8 @@ export function createFishingCore(ctx, { rng }) {
   const endP = new THREE.Vector3();
   const cur = { x: 0, z: 0 };
   const grad = { x: 0, z: 0 };
+  const cen = { x: 0, z: 0 };
+  const fishInfo = { distance: 0, bearing: 0, compass: 'N', close: false };
   const winch = createWinch();
   const hinted = new Set();
   const citeRng = rng.fork('citation');
@@ -44,6 +50,8 @@ export function createFishingCore(ctx, { rng }) {
   let backT = 0; // Backspace held
   let lastSnagCount = 0;
   let escapeOff = null;
+  let harbourSrc = null;
+  let harbourList = [];
 
   const hud = {
     phase: 'idle',
@@ -74,6 +82,14 @@ export function createFishingCore(ctx, { rng }) {
     abortProgress: 0,
     closedWater: false,
     wheelDanger: 0, // 0..1: stern closing on the corkline
+    // Idle: the nearest school ({distance m, bearing deg, compass, close}) or null; fishClose is null when unknown.
+    nearestFish: null,
+    fishClose: null,
+    payoutSpeed: 0, // m/s of seine going over the stern (smoothed)
+    payoutPace: null, // 'slow' | 'steady' while setting
+    payoutEta: null, // s until the seine is all out at the current pace
+    tideRunning: false, // hauling: current over the corks-under threshold (speeding up the block sinks the corks)
+    valuedAt: null, // tender whose price values the catch (brailing/report)
   };
 
   const newStats = () => ({
@@ -111,8 +127,12 @@ export function createFishingCore(ctx, { rng }) {
       if (netState !== 'stowed') return { ok: false, reason: 'The seine is still in the water' };
       const sk = S().skiff;
       if (sk && sk.state !== 'stowed') return { ok: false, reason: 'The skiff is not aboard' };
+      if (s.mooring?.kind === 'dock') return { ok: false, reason: 'Cast off first' };
       if (s.anchored) return { ok: false, reason: 'Pick up the anchor first' };
       if (s.grounded) return { ok: false, reason: 'Hard aground' };
+      if (holdPlugged()) return { ok: false, reason: 'Hold\'s plugged — deliver first' };
+      const berth = nearBerth(s.position.x, s.position.z);
+      if (berth) return { ok: false, reason: `Too close to ${berth} to set` };
       sternPoint(stern);
       const open = ctx.state.freeExplore || !!S().season?.openerActive?.(stern.x, stern.z);
       if (!open) return { ok: false, reason: closedReason() };
@@ -334,6 +354,104 @@ export function createFishingCore(ctx, { rng }) {
     return sd > 0 && sd <= T.tieOffRange;
   }
 
+  // The hold can't take another brailer load.
+  function holdPlugged() {
+    const eco = S().economy;
+    const cap = Number(eco?.capacityLbs);
+    if (!(cap > 0) || typeof eco?.holdLbs !== 'function') return false;
+    const lbs = Number(safe(() => eco.holdLbs()));
+    return Number.isFinite(lbs) && lbs > cap - config.net.phases.brailLoadLbs;
+  }
+
+  // Name of a tender or harbour close enough that a let-go would set the seine against it, else null.
+  function nearBerth(x, z) {
+    const tenders = S().fleet?.tenders;
+    if (Array.isArray(tenders)) {
+      for (const t of tenders) {
+        if (!t?.position) continue;
+        const gap = Math.hypot(t.position.x - x, t.position.z - z) - (Number(t.radius) || 15);
+        if (gap < T.letGo.tenderClear) return `the ${t.name ?? 'tender'}`;
+      }
+    }
+    const list = S().places?.list;
+    if (Array.isArray(list)) {
+      if (list !== harbourSrc) {
+        harbourSrc = list;
+        harbourList = list.filter((p) => !p?.memorial && (p?.services?.length ?? 0) > 0 && Number.isFinite(p?.dock?.x));
+      }
+      for (const p of harbourList) {
+        if (Math.hypot(p.dock.x - x, p.dock.z - z) < T.letGo.harbourRange) return p.name ?? 'the harbour';
+      }
+    }
+    return null;
+  }
+
+  // Nearest school for the let-go cue: fishInfo (reused), null when none within the search radius, undefined when
+  // the fish system can't say (stubbed or missing: let-go stays unrestricted).
+  function nearestFish(x, z) {
+    const fish = S().fish;
+    if (typeof fish?.nearestSchool !== 'function') return undefined;
+    const r = safe(() => fish.nearestSchool(x, z, T.letGo.search));
+    const sc = r?.school;
+    if (!sc?.position || !Number.isFinite(r.distance)) return null;
+    const h = headingOf(sc.position.x - x, sc.position.z - z);
+    fishInfo.distance = Math.round(r.distance);
+    fishInfo.bearing = Math.round((((h * 180) / Math.PI) % 360 + 360) % 360);
+    fishInfo.compass = compassOf(h);
+    fishInfo.close = r.distance <= T.letGo.fishNear + (Number(sc.radius) || 0);
+    return fishInfo;
+  }
+
+  function findFishLine(info) {
+    return info ? `Jumpers ${fmtDist(info.distance)} ${info.compass} — get within ${T.letGo.fishNear} m to let go` : 'No fish close — look for jumpers';
+  }
+
+  // The catch is valued at the nearest buying tender's price (what a delivery there would pay today).
+  function valuationBuyer() {
+    const p = S().seiner?.position;
+    const list = S().fleet?.tenders;
+    if (!p || !Array.isArray(list)) return null;
+    let best = null;
+    let bd = Infinity;
+    for (const t of list) {
+      if (!t?.position || t.buying === false) continue;
+      const d = Math.hypot(t.position.x - p.x, t.position.z - p.z);
+      if (d < bd) {
+        bd = d;
+        best = t;
+      }
+    }
+    return best ? { id: best.id ?? null, name: best.name ?? null } : null;
+  }
+
+  // Attributes a fishing:escape to a cause. WP-FISH flags gap runs and the harvest's spill over the capture ceiling
+  // (overCorks, independent of the block speed, so not 'corks'); the rest is read from the net's state at the moment
+  // the escape is flushed.
+  function tallyEscape(e) {
+    const esc = set.escapes;
+    const n = e.count;
+    if (typeof e.cause === 'string' && e.cause in esc) return void (esc[e.cause] += n);
+    if (e.viaGap) return void (esc.gap += n);
+    if (e.overCorks) return void (esc.spill += n);
+    if (e.released) return void (set.everClosed ? (esc.leads += n) : (esc.gap += n));
+    const net = S().net;
+    const st = net?.state;
+    if (st === 'paying' || st === 'out') return void (esc.gap += n);
+    if (st === 'hauling' || st === 'brailing') {
+      if (net.hole && !net.corksUnder && (net.hauled ?? 1) < 0.6) esc.hole += n;
+      else esc.corks += n;
+      return;
+    }
+    if (net?.hole) {
+      // Pursed shut, only the hole leaks; before that it adds 25% to the leadline rate.
+      const h = (net.pursed ?? 0) >= 0.98 ? n : Math.round(n * 0.2);
+      esc.hole += h;
+      esc.leads += n - h;
+      return;
+    }
+    esc.leads += n;
+  }
+
   // --- transitions --------------------------------------------------------------------------------------------
 
   // force: skip canSet (debug); confirm: the closed-waters warning was already given.
@@ -387,6 +505,14 @@ export function createFishingCore(ctx, { rng }) {
       skiffHome: false,
       reportT: 0,
       closedEstimate: 0,
+      closeGap: 0,
+      closeReady: false,
+      everClosed: false,
+      escapes: emptyEscapes(),
+      payoutPrev: 0,
+      payoutSpeed: 0,
+      buyer: null,
+      brailedLbs: 0,
     };
     const sk = S().skiff;
     if (sk?.release) safe(() => sk.release());
@@ -429,9 +555,22 @@ export function createFishingCore(ctx, { rng }) {
   function enterHolding() {
     set.holdSeconds = 0;
     set.towTarget = null;
-    S().seiner?.setSpeedLimit?.('fishing', T.speed.holding);
+    set.towAnchor = null;
+    const far = holdingFar();
+    set.closeReady = !far;
+    S().seiner?.setSpeedLimit?.('fishing', far ? T.speed.bringAround : T.speed.holding);
     enter('holding');
-    hint(set.hook ? 'hook' : 'hold');
+    hint(set.hook ? 'hook' : far ? 'bringAround' : 'hold');
+  }
+
+  // A round haul held short of the skiff: the gap has to be closed by the seiner before a close-up. Ready within
+  // close.holdRange; once ready it stays ready out to close.liftGap, because the skiff keeps towing its end
+  // up-current and the prompt must not flicker away under the player's thumb.
+  function holdingFar() {
+    if (!set || set.hook || set.tied) return false;
+    const e = skiffEndXZ();
+    set.closeGap = e ? seinerNear(e.x, e.z) : 0;
+    return set.closeGap > (set.closeReady ? T.close.liftGap : T.close.holdRange);
   }
 
   function startClose() {
@@ -460,6 +599,7 @@ export function createFishingCore(ctx, { rng }) {
     const net = S().net;
     const est = estimate();
     net?.close?.();
+    set.everClosed = true;
     set.closedEstimate = est;
     const poly = net?.polygon?.();
     events.emit('fishing:closedUp', { polygon: poly ? poly.map((p) => ({ x: p.x, z: p.z })) : null, estimate: est });
@@ -528,7 +668,10 @@ export function createFishingCore(ctx, { rng }) {
         ? Math.min(config.net.phases.brailMaxS, Math.max(2, loads * config.net.phases.brailPerLoadS))
         : 2.5;
     set.brailT = 0;
+    set.brailedLbs = 0;
+    set.buyer = valuationBuyer();
     const over = totalFish(set.overflow);
+    set.escapes.overflow = over;
     if (over > 0) {
       setMessage(`Plugged! Let ${fmt(over)} go over the corks`, 6);
       toast(`Plugged! Hold's full — let ${fmt(over)} go over the corks`, 'warn', 6);
@@ -543,7 +686,8 @@ export function createFishingCore(ctx, { rng }) {
     if (!set) return;
     const species = config.fish.species;
     const season = S().season;
-    const priceFor = (k) => safe(() => season?.priceFor?.(k)) ?? species[k]?.price ?? 0;
+    const buyer = set.buyer ?? valuationBuyer();
+    const priceFor = (k) => safe(() => season?.priceFor?.(k, buyer?.id ?? null)) ?? species[k]?.price ?? 0;
     const payload = buildSetReport({
       setNumber: set.number,
       caught: set.aborted ? emptyCatch() : set.harvest ?? emptyCatch(),
@@ -558,6 +702,9 @@ export function createFishingCore(ctx, { rng }) {
       fine: set.fine,
       aborted: set.aborted,
       escaped: set.escaped,
+      escapes: set.escapes,
+      valuedAt: buyer?.name ?? null,
+      valuedAtId: buyer?.id ?? null,
     });
     core.lastSet = payload;
     const st = core.stats;
@@ -619,6 +766,12 @@ export function createFishingCore(ctx, { rng }) {
     return (NT.haul.bagTarget / NT.haul.seconds) * mod * (boost ? NT.haul.boost : 1);
   }
 
+  // Current at the bag strong enough that the block at full speed pulls the corks under (net model rule).
+  function tideRunning() {
+    const net = S().net;
+    return !!net?.closed && (net.currentSpeed ?? 0) > NT.haul.corksUnderCurrent;
+  }
+
   function steerTow(dt) {
     const steer = ctx.input?.axis?.('steer') ?? 0;
     set.towHeading = wrapAngle(set.towHeading + steer * T.towTurnRate * dt);
@@ -671,14 +824,38 @@ export function createFishingCore(ctx, { rng }) {
     switch (core.state) {
       case 'idle': {
         const cs = core.canSet();
+        hud.nearestFish = null;
+        hud.fishClose = null;
         if (cs.ok) {
           sternPoint(stern);
           const closed = isClosedWater(stern.x, stern.z);
           const warned = ctx.time.elapsed <= warnedUntil;
+          const info = s?.position ? nearestFish(s.position.x, s.position.z) : undefined;
+          hud.nearestFish = info ?? null;
+          hud.fishClose = info === undefined ? null : !!info?.close;
+          const noFish = hud.fishClose === false;
+          // The new season's first set: the let-go waits until the tutorial school is close; meanwhile the prompt is
+          // the bearing and distance to the jumpers.
+          if (noFish && tutorialActive() && !ctx.state.freeExplore) {
+            offer({
+              id: 'fishing-find-fish',
+              key: 'action',
+              label: findFishLine(info),
+              onPress: () => {
+                setMessage(findFishLine(info), 4);
+                hint('findFish');
+              },
+            });
+            if (info && info.distance < 700) hint('spot');
+            break;
+          }
+          let label = "Let 'er go!";
+          if (closed && !warned) label = "Let 'er go! (closed waters)";
+          else if (noFish) label = "Let 'er go! (no fish close)";
           offer({
             id: 'fishing-letgo',
             key: 'action',
-            label: closed && !warned ? "Let 'er go! (closed waters)" : "Let 'er go!",
+            label,
             onPress: () => letGo({ confirm: closed && warned }),
           });
           // Only while under way: stopped off a beach, E belongs to "Go ashore".
@@ -699,6 +876,10 @@ export function createFishingCore(ctx, { rng }) {
       }
       case 'setting': {
         s?.setSpeedLimit?.('fishing', T.speed.setting);
+        const pay = net?.payout ?? 0;
+        const inst = Math.max(0, (pay - set.payoutPrev) / dt);
+        set.payoutPrev = pay;
+        set.payoutSpeed += (inst - set.payoutSpeed) * Math.min(1, dt * 1.5);
         const frac = net?.length ? net.payout / net.length : 0;
         const e = skiffEndXZ();
         const dSkiff = e ? seinerNear(e.x, e.z) : Infinity;
@@ -722,37 +903,46 @@ export function createFishingCore(ctx, { rng }) {
         break;
       }
       case 'holding': {
-        s?.setSpeedLimit?.('fishing', T.speed.holding);
+        // A round haul held short of the skiff: run around to it (the tow limit is lifted) before closing up.
+        const far = holdingFar();
+        set.closeReady = !far;
+        s?.setSpeedLimit?.('fishing', far ? T.speed.bringAround : T.speed.holding);
         set.holdSeconds += dt;
-        // An untied skiff tows its end up-current to keep the net open.
+        // An untied skiff tows its end up-current to keep the net open, holding station ~18 m up-current of where its
+        // end lay when the net came tight (re-aimed as the current turns, never walking off across the bay).
         const sk = S().skiff;
         if (!set.tied && sk?.towToward) {
           const e = skiffEndXZ();
           if (e) {
             ctx.tide?.currentAt?.(e.x, e.z, cur);
             const sp = Math.hypot(cur.x, cur.z);
+            set.towAnchor ??= { x: e.x, z: e.z };
             if (!set.towTarget || set.phaseT - (set.towTargetT ?? 0) > 20) {
               const k = sp > 0.02 ? 18 / sp : 0;
-              set.towTarget = { x: e.x - cur.x * k, z: e.z - cur.z * k };
+              set.towTarget = { x: set.towAnchor.x - cur.x * k, z: set.towAnchor.z - cur.z * k };
               set.towTargetT = set.phaseT;
             }
             safe(() => sk.towToward(set.towTarget.x, set.towTarget.z, Math.max(0.3, Math.min(1, sp / 0.35))));
           }
         }
-        offer({ id: 'fishing-close', key: 'action', label: 'Close up!', onPress: startClose });
+        if (!far) {
+          offer({ id: 'fishing-close', key: 'action', label: 'Close up!', onPress: startClose });
+          if (!set.hook && !set.tied) hint('closeReady');
+        }
         if (set.hook && set.tied && !set.tieHinted) set.tieHinted = true;
-        if ((net?.hookHealth ?? 1) < T.hookCollapse && set.holdSeconds > 3) {
+        if (!far && (net?.hookHealth ?? 1) < T.hookCollapse && set.holdSeconds > 3) {
           if (!msg) setMessage("The hook's collapsing — close up!", 3);
           hint('collapse');
         }
         break;
       }
       case 'closing': {
-        s?.setSpeedLimit?.('fishing', T.speed.closing);
         set.closeT += dt;
         const e = skiffEndXZ();
         const d = e ? seinerNear(e.x, e.z) : 0;
         set.closeGap = d;
+        // Running down to meet a far skiff (a hook's beach end) at towing speed would take minutes.
+        s?.setSpeedLimit?.('fishing', d > T.close.liftGap ? T.speed.bringAround : T.speed.closing);
         if (!set.arrived && e && d < T.close.arriveDistance) set.arrived = true;
         // A skiff running its end in from the beach (hook) may take a while: time out only once it is close, so its
         // end never jumps across open water.
@@ -796,7 +986,12 @@ export function createFishingCore(ctx, { rng }) {
         steerTow(dt);
         wheelCheck(dt);
         const held = !!ctx.input?.action?.('interact') || core.debug.auto.haul;
-        offer({ id: 'fishing-haul', key: 'interact', label: 'Hold to speed up the block', hold: true });
+        offer({
+          id: 'fishing-haul',
+          key: 'interact',
+          label: tideRunning() ? "Speed up the block — tide's running, the corks will sink" : 'Hold to speed up the block',
+          hold: true,
+        });
         const rate = set.wheelStall > 0 ? 0 : haulRate(held);
         net?.haul?.(rate);
         if (net?.corksUnder && !msg) setMessage('Corks going under — ease off the block!', 2);
@@ -869,7 +1064,24 @@ export function createFishingCore(ctx, { rng }) {
     }
     const e = set ? skiffEndXZ() : null;
     hud.distanceToSkiff = e && core.state !== 'idle' ? Math.round(seinerNear(e.x, e.z)) : null;
-    hud.closeReady = core.state === 'holding' || (core.state === 'setting' && !!set?.closeReady);
+    hud.closeReady = (core.state === 'holding' || core.state === 'setting') && !!set?.closeReady;
+    if (set && core.state === 'setting') {
+      const sp = set.payoutSpeed;
+      const left = (net?.length ?? 0) - (net?.payout ?? 0);
+      hud.payoutSpeed = +sp.toFixed(2);
+      hud.payoutPace = set.phaseT < 2.5 ? null : sp < T.payoutSlow * T.speed.setting ? 'slow' : 'steady';
+      hud.payoutEta = sp > 0.3 ? Math.round(Math.max(0, left) / sp) : null;
+    } else {
+      hud.payoutSpeed = 0;
+      hud.payoutPace = null;
+      hud.payoutEta = null;
+    }
+    if (core.state !== 'idle') {
+      hud.nearestFish = null;
+      hud.fishClose = null;
+    }
+    hud.tideRunning = core.state === 'hauling' && !set?.aborting && tideRunning();
+    hud.valuedAt = set?.buyer?.name ?? null;
     hud.holdSeconds = set?.holdSeconds ?? 0;
     // In the hook / in the net estimate, refreshed twice a second.
     if (set && (core.state === 'setting' || core.state === 'holding' || core.state === 'closing')) {
@@ -894,7 +1106,7 @@ export function createFishingCore(ctx, { rng }) {
       hud.towHeading = set.towHeading;
       const sim = net?.model?.sim;
       if (sim && sim.count > 2 && s?.position) {
-        const c = sim.centroid();
+        const c = sim.centroid(cen);
         const ax = stern.x - c.x;
         const az = stern.z - c.z;
         const al = Math.hypot(ax, az) || 1;
@@ -936,26 +1148,36 @@ export function createFishingCore(ctx, { rng }) {
   function guidance() {
     if (backT > 0.05) return 'Hold Backspace to abort the set…';
     switch (core.state) {
+      case 'idle':
+        return hud.fishClose === false && tutorialActive() && !ctx.state.freeExplore ? findFishLine(hud.nearestFish) : null;
       case 'setting':
         if (hud.closeReady) return 'Alongside the skiff — close up!';
+        if (hud.payoutPace === 'slow' && hud.payout < 0.9) return 'Paying out slowly — open her up, the winch sets the pace';
         return hud.payout < 0.2 ? 'Paying out — circle the school' : 'Bring her around to the skiff';
       case 'holding':
-        return set?.hook ? 'Holding the hook' : 'Holding — close up when the fish are in';
+        if (set?.hook) return 'Holding the hook';
+        if (!set?.closeReady) return `Bring her around to the skiff — ${fmtDist(set?.closeGap ?? 0)}`;
+        return 'Holding — close up when the fish are in';
       case 'closing':
         return (set?.closeGap ?? 0) > T.close.nearDistance ? 'Closing up — run down to meet the skiff' : 'Closing up — skiff bringing its end';
       case 'pursing':
         return 'Pursing — keep the tension in the green; A/D aim the skiff';
       case 'hauling':
-        return set?.aborting ? 'Hauling back — water haul' : 'Hauling — drying up the bag';
+        if (set?.aborting) return 'Hauling back — water haul';
+        return hud.tideRunning ? "Hauling — tide's running: let the block work, or the corks go under" : 'Hauling — drying up the bag';
       case 'brailing':
-        return `Brailing — ${fmt(hud.brailLbs)} lbs aboard`;
+        // The set panel's count-up carries the pounds; only an empty bag gets a caption.
+        if (set?.cited) return 'Troopers alongside — the catch is seized';
+        return (set?.acceptedLbs ?? 0) > 0 ? null : 'Water haul — nothing to brail';
       default:
         return null;
     }
   }
 
   escapeOff = events.on('fishing:escape', (e) => {
-    if (set && Number.isFinite(e?.count)) set.escaped += e.count;
+    if (!set || !Number.isFinite(e?.count) || e.count <= 0) return;
+    set.escaped += e.count;
+    tallyEscape(e);
   });
   core.dispose = () => escapeOff?.();
   return core;

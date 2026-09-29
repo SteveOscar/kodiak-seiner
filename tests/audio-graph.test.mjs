@@ -259,6 +259,8 @@ const VARIANTS = {
   stinger: [{ rating: 'plugged' }, { rating: 'good' }, { rating: 'fair' }, { rating: 'water haul' }, { rating: 'good', cited: true }],
   sealion: [{ bull: true }, { bull: false }],
   clunk: [{}, { hiss: true }],
+  stampede: [{ members: 12 }, { members: 150 }, {}, { members: NaN }],
+  summit: [{}, { root: 55 }],
 };
 
 test('every sound recipe schedules cleanly and stops all of its sources by its returned end', () => {
@@ -439,7 +441,16 @@ test('director: a whole voyage of frames and events runs clean, bounded and fini
   w.fishing.state = 'hauling';
   frame('play', 4, (t) => (w.net.hauled = Math.min(0.95, t / 4)));
   w.fishing.state = 'brailing';
-  frame('play', 6);
+  w.fishing.hud.acceptedLbs = 9000;
+  // WP-NET's brailer emits one fishing:brail per scoop (every 2.8 s): the dip now, the dump ~1.4 s later.
+  let scoops = 0;
+  frame('play', 6, (t) => {
+    w.fishing.hud.brailProgress = t / 6;
+    if (t >= scoops * 2.8 + 0.5) {
+      scoops++;
+      A.director.event('fishing:brail', { x: 5160, z: -1120, lbs: 3000 });
+    }
+  });
   w.fishing.state = 'report';
   w.net.state = 'hauling';
   frame('play', 1);
@@ -480,6 +491,10 @@ test('director: a whole voyage of frames and events runs clean, bounded and fini
     'sky:lightning': { distance: 1800, x: 6000, z: -1000, intensity: 1 },
     'place:discovered': { id: 'kodiak', kind: 'town' },
     'economy:delivered': {},
+    'fishing:brail': { x: 5160, z: -1120, lbs: 1500 },
+    'wildlife:disturbed': { kind: 'sealion', siteId: 'h1', x: 5600, z: -1115, closed: false },
+    'ui:radioShown': { from: 'ADF&G', channel: '16', tip: false },
+    'player:summit': { placeId: 'pillar-mountain', x: 5200, z: -1200 },
   };
   ctx.state.mode = 'play';
   for (const name of EVENTS) A.director.event(name, payloads[name] ?? {});
@@ -501,6 +516,152 @@ test('director: a whole voyage of frames and events runs clean, bounded and fini
   assert.equal(s.engine.phase === 'running' || s.engine.phase === 'off', true);
 });
 
+// A director on the mock graph with the voyage world, in play mode; frames advance audio time with play time.
+function liveDirector() {
+  const ctx = fakeCtx();
+  const A = stage();
+  const w = world(ctx);
+  A.director = createDirector(ctx, A);
+  ctx.camera.position.set(5150, 12, -1100);
+  ctx.camera.lookAt(5170, 0, -1115);
+  ctx.state.mode = 'play';
+  const frame = (secs, mode = 'play', fn) => {
+    ctx.state.mode = mode;
+    for (let t = 0; t < secs; t += 1 / 60) {
+      A.ac.currentTime += 1 / 60;
+      ctx.time.dt = mode === 'play' ? 1 / 60 : 0;
+      ctx.time.elapsed += ctx.time.dt;
+      fn?.(t);
+      A.director.frame(1 / 60);
+    }
+  };
+  const live = (name) => A.player.voices.list().filter((v) => v.name === name && v.end > A.ac.currentTime);
+  return { ctx, A, w, frame, live };
+}
+
+test('radio: the squelch opens when the UI starts typing the caption, for that caption', () => {
+  const { ctx, A, frame, live } = liveDirector();
+  ctx.systems.ui = { serialize: () => ({ hintsShown: [] }) };
+  const ev = (n, p) => A.director.event(n, p);
+  const long = 'Attention all purse seiners, this is the Alaska Department of Fish and Game with an emergency order for the northeast district.';
+  const tip = 'Circle them — bring her round.';
+  ev('ui:radio', { from: 'Kodiak tender', text: 'Copy.', channel: '10' });
+  assert.equal(live('radio').length, 0, 'ui:radio alone only notes the call');
+  ev('ui:radioShown', { from: 'Kodiak tender', channel: '10', tip: false });
+  assert.equal(live('radio').length, 1, 'plays the moment its caption starts');
+  frame(2);
+  // A routine call queued behind Pete's tip: the UI shows the tip first; audio follows the UI's order and lengths.
+  ev('ui:radio', { from: 'ADF&G', text: long, channel: '16' });
+  ev('ui:hint', { id: 'pete-circle', from: 'Uncle Pete', text: tip });
+  frame(4);
+  assert.equal(live('radio').length, 0, 'nothing plays while the UI holds the captions (no uncaptioned fallback once captions were seen)');
+  const t0 = A.ac.currentTime;
+  ev('ui:radioShown', { from: 'Uncle Pete', channel: '10', tip: true });
+  const vTip = live('radio')[0];
+  assert.ok(vTip, 'the tip plays when shown');
+  assert.ok(Math.abs(vTip.end - (t0 + 0.012 + Math.max(0.6, tip.length / 42) + 0.55 + 0.05)) < 0.02, `tip voice spans its caption (${(vTip.end - t0).toFixed(2)} s)`);
+  frame(tip.length / 42 + 0.6);
+  const t1 = A.ac.currentTime;
+  ev('ui:radioShown', { from: 'ADF&G', channel: '16', tip: false });
+  const vLong = live('radio').find((v) => v.id !== vTip.id);
+  assert.ok(Math.abs(vLong.end - (t1 + 0.012 + long.length / 42 + 0.55 + 0.05)) < 0.02, `routine call spans its own caption (${(vLong.end - t1).toFixed(2)} s)`);
+  // Paused behind a menu, the UI holds captions, and so does audio; back to the title forgets noted calls.
+  ev('ui:radio', { from: 'Coast Guard', text: 'Securité, securité.', channel: '16' });
+  frame(3, 'paused');
+  ev('game:toTitle', {});
+  ctx.state.mode = 'play';
+  ev('ui:radioShown', { from: 'Coast Guard', channel: '16', tip: false });
+  assert.ok(live('radio').length >= 1, 'an unmatched caption still gets a short squelch');
+});
+
+test('radio: with a UI that never reports captions (stub), calls play on their own, queued, only in play time', () => {
+  const { ctx, A, frame, live } = liveDirector();
+  ctx.systems.ui = { serialize: () => ({ hintsShown: [] }) };
+  A.director.event('ui:radio', { from: 'x', text: 'Copy that.' });
+  A.director.event('ui:radio', { from: 'y', text: 'Roger, we will be over after this set.' });
+  frame(3, 'paused');
+  assert.equal(live('radio').length, 0, 'held while paused');
+  frame(1.7);
+  const v = live('radio');
+  assert.equal(v.length, 2, 'both play after the grace period');
+  assert.ok(Math.abs(v[1].start - v[0].start) < 1e-9 && v[1].end > v[0].end + 0.8, 'the second queued behind the first');
+  assert.ok(v[0].end - v[0].start < 1.3, 'in arrival order: the short first call plays first');
+});
+
+test('brailing: dips and dumps follow fishing:brail scoops; a water haul makes no brailer sound', () => {
+  const { A, w, frame, live } = liveDirector();
+  const started = () => A.player.stats().byName;
+  w.fishing.state = 'brailing';
+  w.fishing.hud.acceptedLbs = 0;
+  w.net.state = 'brailing';
+  frame(5);
+  assert.ok(!started()['brail-dip'] && !started()['brail-dump'], 'water haul: no scoops, no brailer');
+  assert.equal(A.director.stats().engine !== undefined, true);
+  w.fishing.hud.acceptedLbs = 4500;
+  const dipAt = A.ac.currentTime;
+  A.director.event('fishing:brail', { x: 5160, z: -1120, lbs: 1500 });
+  const dip = live('brail-dip');
+  const dump = live('brail-dump');
+  assert.equal(dip.length, 1);
+  assert.equal(dump.length, 1);
+  // The dump is scheduled for when the brailer reaches the hatch (~1.4 s after the dip, plus a few ms of travel).
+  assert.ok(dump[0].end - dip[0].start > 1.4, 'the dump lands after the dip');
+  assert.ok(dip[0].start - dipAt < 0.1, 'the dip plays at once');
+  A.director.event('fishing:brail', { x: NaN, z: 0, lbs: 1500 });
+  assert.equal(live('brail-dip').length, 1, 'bad payloads are ignored');
+});
+
+test('stampede: one bounded voice sized to the colony; the haulout roars harder afterwards; summit sting', () => {
+  const { ctx, A, w, frame, live } = liveDirector();
+  ctx.camera.position.set(5500, 12, -1115);
+  frame(0.5);
+  const n0 = A.ac.nodes;
+  A.director.event('wildlife:disturbed', { kind: 'sealion', siteId: 'h1', x: 5600, z: -1115, closed: false });
+  assert.equal(live('stampede').length, 1);
+  const small = A.ac.nodes - n0;
+  assert.ok(small < 110, `a stampede stays CPU-light (${small} nodes)`);
+  A.director.event('wildlife:disturbed', { kind: 'sealion', siteId: 'h1', x: 5600, z: -1115 });
+  assert.equal(live('stampede').length, 1, 'one stampede at a time');
+  frame(9);
+  // The Marmot rookery (150 animals) is a bigger scene than a 30-animal islet, still bounded.
+  ctx.systems.wildlife.sites.haulouts.push({ id: 'marmot', kind: 'rookery', x: 5650, z: -1100, members: new Array(150) });
+  const n1 = A.ac.nodes;
+  A.director.event('wildlife:disturbed', { kind: 'sealion', siteId: 'marmot', x: 5650, z: -1100, closed: true });
+  const big = A.ac.nodes - n1;
+  assert.ok(big < 110 && big >= small, `rookery stampede bigger but bounded (${big} vs ${small} nodes)`);
+  A.director.event('wildlife:disturbed', { kind: 'bird', x: 5650, z: -1100 });
+  frame(9);
+  A.director.event('wildlife:disturbed', { kind: 'sealion', siteId: 'h1', x: 5600, z: -1115, closed: false });
+  // Roaring on the haulout picks up for a while after the stampede (vs an undisturbed twin over the same 30 s).
+  const count = (d) => {
+    let n = 0;
+    const orig = d.A.player.play;
+    d.A.player.play = (name, o) => {
+      if (name === 'sealion') n++;
+      return orig(name, o);
+    };
+    d.frame(30);
+    return n;
+  };
+  const calm = liveDirector();
+  calm.ctx.camera.position.set(5500, 12, -1115);
+  const stirred = { A, frame: (secs) => frame(secs) };
+  const nCalm = count(calm);
+  const nStirred = count(stirred);
+  assert.ok(A.director.stats().haulout !== null);
+  assert.ok(nStirred > nCalm * 1.4, `the herd roars harder after a stampede (${nStirred} vs ${nCalm})`);
+  // Summit sting: one gentle voice on the ui bus; waits for a discovery chord still ringing.
+  const t0 = A.ac.currentTime;
+  A.director.event('place:discovered', { id: 'pillar', kind: 'peak' });
+  A.director.event('player:summit', { placeId: 'pillar' });
+  const s = live('summit');
+  assert.equal(s.length, 1);
+  assert.ok(s[0].end - t0 > 3.2, 'the sting follows the discovery chord');
+  A.director.event('player:summit', { placeId: 'pillar' });
+  assert.equal(live('summit').length, 1, 'never doubled');
+  void w;
+});
+
 test('audio system: unlock under a mock browser builds the graph and routes events', async () => {
   const ctx = fakeCtx();
   world(ctx);
@@ -517,7 +678,10 @@ test('audio system: unlock under a mock browser builds the graph and routes even
     ctx.state.mode = 'play';
     ctx.events.emit('ui:radio', { from: 'x', text: 'Copy that.' });
     ctx.events.emit('ui:radio', { from: 'y', text: 'Roger, we will be over after this set.' });
-    assert.equal(sys.debugState().voices.byName.radio, 2, 'a second call queues behind the first');
+    assert.equal(sys.debugState().voices.byName.radio, undefined, 'calls wait for their captions');
+    ctx.events.emit('ui:radioShown', { from: 'y', channel: '16', tip: false });
+    ctx.events.emit('ui:radioShown', { from: 'x', channel: '16', tip: false });
+    assert.equal(sys.debugState().voices.byName.radio, 2, 'each call plays as its caption starts');
     assert.ok(sys.play('horn', { position: new THREE.Vector3(5170, 8, -1115) }));
     assert.ok(sys.play('ui-click'));
     assert.equal(sys.play('ui-click', { position: { x: NaN, z: 0 } }) === null || true, true);

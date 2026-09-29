@@ -395,44 +395,56 @@ float auroraTrack( float east, float fk, float at ) {
 
 vec3 aurora( vec3 dir ) {
 	float north = - dir.z;
-	if ( dir.y < -0.01 || north < 0.06 ) return vec3( 0.0 );
+	if ( dir.y < 0.0 || north < 0.06 ) return vec3( 0.0 );
 	vec3 acc = vec3( 0.0 );
 	float at = uTime;
 	for ( int k = 0; k < 2; k ++ ) {
 		float fk = float( k );
 		float base = 440.0 + 120.0 * fk;
+		// The far arc meanders less and is fainter, so its lower border never draws a second wavy line under the first.
+		float amp = 1.0 - 0.65 * fk;
 		float t = base / north;
 		for ( int it = 0; it < 4; it ++ ) {
-			float tn = max( base + auroraTrack( dir.x * t, fk, at ), 80.0 ) / north;
+			float tn = max( base + amp * auroraTrack( dir.x * t, fk, at ), 80.0 ) / north;
 			t = mix( t, tn, 0.75 );
 		}
 		float east = dir.x * t;
 		float h = sqrt( 6360.0 * 6360.0 + t * t + 2.0 * 6360.0 * t * dir.y ) - 6360.0;
-		if ( h < 90.0 || h > 420.0 ) continue;
+		if ( h < 60.0 || h > 420.0 ) continue;
 		// Edge-on folds: brightness grows with the sheet's apparent thickness along the ray.
-		float slope = ( auroraTrack( east + 10.0, fk, at ) - auroraTrack( east - 10.0, fk, at ) ) / 20.0;
+		float slope = amp * ( auroraTrack( east + 10.0, fk, at ) - auroraTrack( east - 10.0, fk, at ) ) / 20.0;
 		float cosN = abs( - slope * dir.x + north ) / ( sqrt( 1.0 + slope * slope ) * length( dir.xz ) + 1e-4 );
 		float fold = min( 1.0 / max( cosN, 0.25 ), 3.0 );
 		// Rays: striations drifting along the arc; strong rays make the curtain taller.
 		float r1 = texture2D( uCloudNoise, vec2( east / 150.0 + at * 0.002, 0.31 + fk * 0.13 ) ).a;
 		float r2 = texture2D( uCloudNoise, vec2( east / 42.0 - at * 0.006, 0.71 + fk * 0.09 ) ).g;
 		float r = clamp( r1 * 0.7 + r2 * 0.55 - 0.15, 0.0, 1.0 );
-		float lower = smoothstep( 96.0, 99.5, h );
-		float dh = max( h - 99.5, 0.0 );
+		// The lower border is the brightest part of the curtain and glows softly downward: a hard step from bright
+		// curtain to bare sky reads as a dark mountain ridge standing in front of the aurora.
+		// The far arc has no crisp border at all: it only deepens the glow under the near one.
+		float under = max( 99.0 - h, 0.0 );
+		float sharp = 1.0 - fk;
+		float lower = h >= 99.0 ? 1.0 : sharp * ( 0.72 * exp( - under / 4.5 ) + 0.28 * exp( - under / 14.0 ) ) + fk * exp( - under / 16.0 );
+		float dh = max( h - 99.0, 0.0 );
 		float band = lower * exp( - dh / ( 13.0 + 26.0 * r ) ) * ( 0.45 + 1.1 * r );
+		float fringe = sharp * exp( - dh / 3.0 ) * ( h >= 99.0 ? 1.0 : exp( - under / 3.0 ) ) * ( 0.25 + 0.35 * r );
+		// Thin N2 violet at the very bottom of bright rays only; the glow below the border stays green (a grey or violet
+		// wash under the curtain reads as haze over land).
+		float violet = sharp * exp( - ( h - 97.0 ) * ( h - 97.0 ) / 3.0 ) * smoothstep( 0.35, 0.8, r ) * 0.22;
 		float tall = lower * exp( - dh / 50.0 ) * smoothstep( 0.6, 0.95, r ) * 0.18 * ( 1.0 - smoothstep( 160.0, 230.0, h ) );
 		float red = smoothstep( 150.0, 210.0, h ) * exp( - max( h - 210.0, 0.0 ) / 60.0 ) * smoothstep( 0.45, 0.9, r ) * 0.12;
 		// Brightness patches and gaps along the arc.
 		float along = 0.1 + 0.9 * smoothstep( 0.3, 0.68, texture2D( uCloudNoise, vec2( east / 900.0 + at * 0.0009 + fk * 0.5, 0.41 + fk * 0.2 ) ).r );
 		float pulse = 0.82 + 0.18 * sin( at * 0.37 + east * 0.004 + fk * 2.1 );
-		vec3 gcol = mix( vec3( 0.8, 0.38, 0.85 ), vec3( 0.12, 1.0, 0.42 ), smoothstep( 96.8, 99.0, h ) );
-		vec3 col = gcol * ( band + tall ) + vec3( 0.95, 0.12, 0.32 ) * red;
+		vec3 col = vec3( 0.12, 1.0, 0.42 ) * ( band + tall ) + vec3( 0.45, 1.0, 0.62 ) * fringe + vec3( 0.8, 0.38, 0.85 ) * violet
+			+ vec3( 0.95, 0.12, 0.32 ) * red;
 		// Soft glow of unresolved structure around the curtain.
-		float gh = ( h - 115.0 ) / 32.0;
-		col += vec3( 0.1, 0.9, 0.45 ) * 0.14 * exp( - gh * gh ) * smoothstep( 92.0, 100.0, h );
-		acc += col * along * pulse * fold * ( 1.0 - 0.45 * fk );
+		float gh = ( h - 112.0 ) / 34.0;
+		col += vec3( 0.1, 0.9, 0.45 ) * 0.14 * exp( - gh * gh );
+		acc += col * along * pulse * fold * ( 1.0 - 0.62 * fk );
 	}
-	return acc * uAurora * 0.85 * smoothstep( 0.06, 0.2, north );
+	// Both arcs fade into the horizon haze instead of ending on a line.
+	return acc * uAurora * 0.85 * smoothstep( 0.06, 0.2, north ) * smoothstep( 0.02, 0.17, dir.y );
 }
 #endif
 

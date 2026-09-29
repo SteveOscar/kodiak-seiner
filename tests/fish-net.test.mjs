@@ -223,6 +223,122 @@ test('open net: fish meeting the web are deflected along it; in the hook they mi
   assert.ok(escapes.some((e) => e.schoolId === leaver.id && e.viaGap), 'fishing:escape for the gap');
 });
 
+test('gap escape: a school running out through the gap flees at a sane speed (no teleport)', () => {
+  const env = setup();
+  const { ctx, sim, net, w, escapes } = env;
+  // A deep U open to the north so the centroid sits far from the gap (the old flee vector was divided by the distance
+  // to the gap midpoint, ~0-5 m at exit, instead of its own length, ~60 m here).
+  const A = { x: w.x - 40, z: w.z - 70 };
+  const B = { x: w.x + 40, z: w.z - 70 };
+  net.poly = [A, { x: w.x - 40, z: w.z + 70 }, { x: w.x + 40, z: w.z + 70 }, B];
+  net.gapV = { a: A, b: B, width: 80 };
+  net.state = 'out';
+  const leaver = sim.spawnSchool({ x: w.x + 3, z: w.z - 62, species: 'pink', count: 2000, spookable: false });
+  leaver.radius = 8;
+  let maxV = 0;
+  let maxStep = 0;
+  let px = leaver.position.x;
+  let pz = leaver.position.z;
+  const dt = 1 / 30;
+  run(
+    sim,
+    ctx,
+    30,
+    () => {
+      maxV = Math.max(maxV, Math.hypot(leaver.velocity.x, leaver.velocity.z));
+      maxStep = Math.max(maxStep, Math.hypot(leaver.position.x - px, leaver.position.z - pz));
+      px = leaver.position.x;
+      pz = leaver.position.z;
+    },
+    dt,
+  );
+  assert.ok(escapes.some((e) => e.schoolId === leaver.id && e.viaGap), 'escaped through the gap');
+  assert.ok(Math.abs(Math.hypot(leaver.fleeX, leaver.fleeZ) - 1) < 1e-6, `flee vector length ${Math.hypot(leaver.fleeX, leaver.fleeZ)}`);
+  const v = Math.hypot(leaver.velocity.x, leaver.velocity.z);
+  assert.ok(v < 3, `|velocity| ${v.toFixed(2)} m/s after the gap escape`);
+  assert.ok(maxV < 3, `peak |velocity| ${maxV.toFixed(2)} m/s`);
+  assert.ok(maxStep < 3 * dt + 0.5, `largest per-frame move ${maxStep.toFixed(2)} m`);
+  const fromGap = Math.hypot(leaver.position.x - w.x, leaver.position.z - (w.z - 70));
+  assert.ok(fromGap < 3 * 30 + 20, `ended ${fromGap.toFixed(0)} m from the gap`);
+});
+
+test('steer clamps any flee vector to the species maximum', () => {
+  const env = setup();
+  const { ctx, sim, w } = env;
+  const s = sim.spawnSchool({ x: w.x, z: w.z, species: 'sockeye', count: 500, spookable: false });
+  let maxV = 0;
+  run(sim, ctx, 8, () => {
+    s.state = 'spooked';
+    s.stateUntil = sim.now + 20;
+    s.fleeX = 1500; // an unnormalised vector must not drive the school at km/s
+    s.fleeZ = -800;
+    maxV = Math.max(maxV, Math.hypot(s.velocity.x, s.velocity.z));
+  });
+  assert.ok(maxV < 3, `peak |velocity| ${maxV.toFixed(2)} m/s`);
+  assert.ok(Math.hypot(s.position.x - w.x, s.position.z - w.z) < 3 * 8 + 5);
+});
+
+test('abort of a never-closed set: hauling back an open net releases the hook school, no bag, no fringe loss', () => {
+  const env = setup();
+  const { ctx, sim, net, w, escapes } = env;
+  const A = { x: w.x - 50, z: w.z - 70 };
+  const B = { x: w.x + 50, z: w.z - 70 };
+  net.poly = [A, { x: w.x - 50, z: w.z + 60 }, { x: w.x + 50, z: w.z + 60 }, B];
+  net.gapV = { a: A, b: B, width: 100 };
+  net.state = 'out';
+  net.closed = false;
+  const hook = sim.spawnSchool({ x: w.x, z: w.z + 35, species: 'pink', count: 3000, spookable: false });
+  hook.radius = 10;
+  run(sim, ctx, 3);
+  assert.equal(hook.inHook, true, 'in the hook before the abort');
+  const before = hook.count;
+  // fishing.abort(): the real net switches to 'hauling' with closed = false and pursed = 0.
+  net.state = 'hauling';
+  net.gapV = null;
+  let bagged = false;
+  run(sim, ctx, 7, (t) => {
+    net.hauled = Math.min(1, t / 7);
+    net.poly = [A, { x: w.x - 50 * (1 - net.hauled), z: w.z + 60 }, { x: w.x + 50 * (1 - net.hauled), z: w.z + 60 }, B];
+    if (hook.bag || hook.state === 'trapped' || hook.net) bagged = true;
+  });
+  net.state = 'stowed';
+  net.poly = null;
+  run(sim, ctx, 1);
+  assert.equal(bagged, false, 'an aborted open net must not enclose or bag the school');
+  assert.equal(hook.net, null);
+  assert.notEqual(hook.state, 'trapped');
+  assert.notEqual(hook.state, 'captured');
+  assert.ok(hook.count >= before * 0.97, `lost ${before - hook.count} of ${before} fish`);
+  assert.ok(!escapes.some((e) => e.schoolId === hook.id && e.released), 'nothing was enclosed, so nothing to release');
+});
+
+test('abort after close-up (unpursed): the enclosed school is released when the net is stowed, never trapped', () => {
+  const env = setup();
+  const { ctx, sim, net, w, escapes } = env;
+  const s = sim.spawnSchool({ x: w.x, z: w.z, species: 'pink', count: 3000, spookable: false });
+  s.radius = 12;
+  net.poly = circle(w.x, w.z, 60);
+  net.state = 'closed';
+  net.closed = true;
+  run(sim, ctx, 3);
+  assert.ok(s.net, 'enclosed at close-up');
+  net.state = 'pursing';
+  run(sim, ctx, 2, (t) => (net.pursed = 0.3 * (t / 2)));
+  net.state = 'hauling';
+  let trapped = false;
+  run(sim, ctx, 7, (t) => {
+    net.hauled = Math.min(1, t / 7);
+    net.poly = circle(w.x, w.z, 60 * (1 - 0.8 * net.hauled));
+    if (s.state === 'trapped' || s.bag) trapped = true;
+  });
+  net.state = 'stowed';
+  net.poly = null;
+  run(sim, ctx, 1);
+  assert.equal(trapped, false, 'an unpursed net cannot trap the school');
+  assert.equal(s.net, null);
+  assert.ok(escapes.some((e) => e.schoolId === s.id && e.released));
+});
+
 test('the bag: trapped fish follow the shrinking net and are harvested once', () => {
   const r = scriptedSet({ species: 'pink', ...CLEAN });
   assert.ok(r.got.pink > 0);

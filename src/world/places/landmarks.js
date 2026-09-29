@@ -4,6 +4,7 @@
 import { Builder, WIN, col } from './kit.js';
 import { block, skeletonTower, regMarker, tank } from './structures.js';
 import { faceRot, findLots, marchToWater } from './sites.js';
+import { colBox, colCircle } from './colliders.js';
 
 // Launch Pad 1 with its rolling service structure and umbilical tower, a rocket on the stand, the integration and
 // processing facility, lightning-protection masts and range lights.
@@ -17,6 +18,7 @@ export function buildSpaceport(S, place) {
   S.sites.push({ x: p.x, z: p.z, r: 34 });
   // pad with a flame trench leading away from the stand
   b.box({ ...f, y: g - 2.5 }, 0, 0, 0, 44, 2.9, 40, concrete);
+  colBox(S, f, 0, 0, 44, 40, g - 2.5, g + 0.4);
   b.box(f, 0, 0.4, 0, 10, 0.4, 10, col('#6f6e6a'));
   b.box(f, 0, 0.36, 12, 5, 0.1, 16, col('#3b3a38'), { top: true });
   // umbilical/launch tower: four columns painted in red and white bands, X-braced faces, work platforms, a
@@ -52,6 +54,7 @@ export function buildSpaceport(S, place) {
     }
     b.box(f, tx, y1 - 0.25, 0, 2 * hw + 1.2, 0.35, 2 * hw + 1.2, k % 2 ? red : steel);
   }
+  colBox(S, f, tx, 0, 2 * hw + 1.2, 2 * hw + 1.2, g, g + TH + 3.9);
   // hammerhead crane and lightning mast
   b.box(f, tx, TH + 0.4, 0, 2.2, 2.4, 2.2, dark);
   b.box(f, tx + 3, TH + 2.8, 0, 16, 1.1, 1.2, red);
@@ -61,7 +64,8 @@ export function buildSpaceport(S, place) {
   S.glows.push(...[P(tx, TH + 13, 0), P(tx + 10.8, TH + 3.6, 0)].map((q) => ({ x: q[0], y: q[1], z: q[2], color: '#ff2a1a', intensity: 7, size: 1.6, period: 3, flashes: 1, phase: 1.2 })));
   // swing arms to the rocket
   for (const y of [12, 19, 25]) b.box(f, tx + 5.5, y, 0, 5.8, 0.7, 1.4, red);
-  // rocket on the stand
+  // rocket on the stand (fins reach r 1.6)
+  colCircle(S, p.x, p.z, 1.6, g, g + 30.3);
   b.cylinder(f, 0, 0.8, 0, 1.25, 1.25, 20, 12, white, { top: false });
   b.cylinder(f, 0, 20.8, 0, 1.3, 1.3, 4.5, 12, white, { top: false });
   b.lathe(f, 0, 25.3, 0, [[1.3, 0], [1.1, 2.2], [0.6, 4], [0, 5]], 12, white);
@@ -73,6 +77,7 @@ export function buildSpaceport(S, place) {
   }
   // rolling service structure parked back on its rails
   b.box({ ...f, y: g + 0.4 }, 0, 0, -30, 18, 32, 16, col('#e3e5e4'), { win: WIN.none });
+  colBox(S, f, 0, -30, 18, 16.2, g - 2, g + 32.4);
   b.box({ ...f, y: g + 0.4 }, 0, 0, -21.9, 14, 26, 0.2, col('#9aa3a8'), { top: false });
   for (let i = -3; i <= 3; i++) b.box({ ...f, y: g + 0.4 }, i * 2.6, 0, -38.05, 0.35, 32, 0.12, col('#b9bdbf'), { top: false });
   b.box({ ...f, y: g + 29 }, 0, 0, -21.85, 18.2, 1.2, 0.12, col('#2c5aa0'), { top: false });
@@ -89,6 +94,7 @@ export function buildSpaceport(S, place) {
     const gy = S.H(q[0], q[2]);
     S.sites.push({ x: q[0], z: q[2], r: 5 });
     b.cylinder({ x: q[0], z: q[2], rot: 0, y: gy - 2.2 }, 0, 0, 0, 0.35, 0.12, 49.2, 6, steel);
+    colCircle(S, q[0], q[2], 0.35, gy - 2.2, gy + 47);
     S.glows.push({ x: q[0], y: gy + 47.5, z: q[2], color: '#ff2a1a', intensity: 6, size: 1.6, period: 3, flashes: 1, phase: 0 });
   }
   // integration and processing facility + range control
@@ -102,6 +108,7 @@ export function buildSpaceport(S, place) {
   for (const [lx, lz] of [[22, 0], [-22, 0]]) {
     const q = P(lx, 0, lz);
     b.box({ x: q[0], z: q[2], rot: p.rot, y: g }, 0, 0, 0, 0.4, 16, 0.4, steel);
+    colCircle(S, q[0], q[2], 0.28, g, g + 16);
     S.glows.push({ x: q[0], y: g + 16.3, z: q[2], color: '#fff2da', intensity: 5, size: 2.2 });
   }
   return { pad: p };
@@ -125,11 +132,14 @@ export function buildFort(S, place) {
       const r = 7;
       const p0 = Builder.xf(f, Math.cos(a) * r, 0, Math.sin(a) * r, [0, 0, 0]);
       const p1 = Builder.xf(f, Math.cos(a2) * r, 0, Math.sin(a2) * r, [0, 0, 0]);
-      b.box({ x: (p0[0] + p1[0]) / 2, z: (p0[2] + p1[2]) / 2, rot: faceRot(p1[0] - p0[0], p1[2] - p0[2]), y: g - 2 }, 0, 0, 0, 0.9, 3.1, 3.2, conc);
+      const seg = { x: (p0[0] + p1[0]) / 2, z: (p0[2] + p1[2]) / 2, rot: faceRot(p1[0] - p0[0], p1[2] - p0[2]), y: g - 2 };
+      b.box(seg, 0, 0, 0, 0.9, 3.1, 3.2, conc);
+      colBox(S, seg, 0, 0, 0.9, 3.2, g - 2, g + 1.1);
     }
     b.cylinder(f, 0, 0, 0, 6.5, 6.5, 2.2, 14, col('#6d6c66'));
     // gun: carriage + 8-inch barrel pointing seaward
     b.box(f, 0, 2.2, 0, 3.2, 1.6, 4.2, col('#4d5249'));
+    colBox(S, f, 0, 0.1, 3.8, 4.4, g, g + 3.4);
     b.box(f, 0, 2.6, 1.9, 3.8, 2.4, 0.3, col('#56604f'));
     const q0 = Builder.xf(f, 0, 4.4, 0.2, [0, 0, 0]);
     const q1 = Builder.xf(f, 0, 5.4, 10.5, [0, 0, 0]);
@@ -142,6 +152,7 @@ export function buildFort(S, place) {
     const f = { x: l.x, z: l.z, rot: l.rot, y: g - 2.2 };
     // earth-covered concrete bunker with a dark doorway
     b.box(f, 0, 0, 0, 16, 5.6, 11, conc);
+    colBox(S, f, 0, 0, 16, 11, g - 2.2, g + 5.6);
     b.gable({ ...f, y: 0 }, 0, g + 3.4, 0, 18, 13, 2.2, col('#4e7a3c'), col('#4e7a3c'), { overhang: 0.6, soffit: false });
     b.box(f, 0, 2.2, 5.52, 2.6, 2.8, 0.06, col('#1c1c1a'), { top: false });
   }
@@ -156,6 +167,7 @@ export function buildLight(S, place) {
   S.glows.push({ x: lantern.x, y: lantern.y, z: lantern.z, color: L.color, intensity: 10, size: 4.5, period: L.period, flashes: L.flashes, phase: (place.x * 0.37) % L.period });
   // lighthouse keepers' shed at the foot of the tower
   S.b.box({ x: p.x, z: p.z, rot: p.rot, y: S.H(p.x, p.z) - 2 }, 0, 0, -4.5, 3.2, 4.6, 2.6, col('#e9e6dc'));
+  colBox(S, { x: p.x, z: p.z, rot: p.rot }, 0, -4.5, 3.2, 2.6, S.H(p.x, p.z) - 2, S.H(p.x, p.z) + 2.6);
   return lantern;
 }
 

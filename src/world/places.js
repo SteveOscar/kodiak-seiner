@@ -16,6 +16,7 @@ import { buildKodiak, buildCoastGuard, TURBINE, KODIAK_LAYOUT } from './places/c
 import { buildVillage, buildCannery, buildHatchery } from './places/village.js';
 import { buildSpaceport, buildFort, buildLight, buildMarkers, BUOYS } from './places/landmarks.js';
 import { createRng } from '../core/rng.js';
+import { createColliderGrid } from './places/colliders.js';
 
 export const LAYOUT_SEED = 1985;
 
@@ -41,7 +42,7 @@ export async function create(ctx) {
   const H = (x, z) => ctx.systems.terrain?.heightAt?.(x, z) ?? ctx.heightmap.heightAt(x, z);
   // The settlement layout uses a fixed seed, not the game seed: FOOTPRINTS in src/data/places.js (which clear
   // vegetation under buildings) were generated from this exact layout and must match it for every ?seed=.
-  const S = { b: null, H, hm: ctx.heightmap, rng: createRng(LAYOUT_SEED).fork('places-layout'), smoke: [], glows: [], sites: [] };
+  const S = { b: null, H, hm: ctx.heightmap, rng: createRng(LAYOUT_SEED).fork('places-layout'), smoke: [], glows: [], sites: [], colliders: [] };
   const builders = new Map();
   const chunk = (name) => {
     if (!builders.has(name)) builders.set(name, new Builder());
@@ -154,6 +155,9 @@ export async function create(ctx) {
     bb.box({ x: 0, z: 0, rot: 0 }, 0, 3.9, 0, 0.35, 0.35, 0.35, col('#2a2c2e'));
   }
   const buoyMat = createPlainMaterial(ctx, { vertexColors: true, roughness: 0.55 });
+  for (const q of buoyList) S.colliders.push({ kind: 'circle', x: q.x, z: q.z, r: 0.9, y0: -1.6, y1: 4.1 });
+  // Solid volumes of everything above, bucketed once (see places/colliders.js for the shapes).
+  const colliderGrid = createColliderGrid(S.colliders);
   const reds = buoyList.filter((q) => q.c === 'R');
   const greens = buoyList.filter((q) => q.c === 'G');
   const nunMesh = new T.InstancedMesh(nunB.geometry(), buoyMat, Math.max(1, reds.length));
@@ -264,6 +268,12 @@ export async function create(ctx) {
     ...api,
     group,
 
+    // Solid props near (x, z): circles and oriented boxes (world m, heading-convention rot, y0..y1) whose footprint
+    // lies within `radius`. Pass `out` to reuse an array.
+    collidersNear(x, z, radius = 0, out) {
+      return colliderGrid.near(x, z, radius, out);
+    },
+
     update(dt) {
       updateLighting();
       if (turbineState.length) updateTurbines(dt);
@@ -289,6 +299,7 @@ export async function create(ctx) {
         turbines: turbines.length,
         buoys: buoyList.length,
         markers: markerCount,
+        colliders: colliderGrid.items.length,
         night: +pu.uNight.value.toFixed(2),
         nav: +pu.uNav.value.toFixed(2),
         failures,

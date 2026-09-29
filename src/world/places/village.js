@@ -4,6 +4,7 @@ import { Builder, WIN, col, shade } from './kit.js';
 import { house, block, church, shed, pileDeck, tank, boat, float, PALETTE } from './structures.js';
 import { findLots, marchToWater, faceRot } from './sites.js';
 import { pier } from './harbor.js';
+import { colBox, colCircle } from './colliders.js';
 
 // Church styles per village (all Russian Orthodox; the domes differ).
 export const CHURCHES = {
@@ -129,6 +130,7 @@ export function buildCannery(S, place, o = {}) {
   for (const lx of [-W * 0.4, 0, W * 0.4]) {
     const p = Builder.xf(f, lx, deckY + 6.5, D / 2 - 1, [0, 0, 0]);
     S.b.box({ x: p[0], z: p[2], rot, y: deckY }, 0, 0, 0, 0.18, 6.5, 0.18, col('#44484a'));
+    colCircle(S, p[0], p[2], 0.12, deckY, deckY + 6.5);
     S.glows?.push({ x: p[0], y: p[1], z: p[2], color: '#ffd7a0', intensity: 4, size: 1.3 });
   }
   // pier out to the dock when the plant stops short of deep water
@@ -162,6 +164,7 @@ export function buildHatchery(S, place, o = {}) {
     const p = Builder.xf(f, 18 + i * 3.4, 0, 0, [0, 0, 0]);
     const h = S.H(p[0], p[2]);
     S.b.box({ x: p[0], z: p[2], rot: s.rot, y: h - 2.2 }, 0, 0, 0, 2.6, 3.0, 22, col('#9a9a94'));
+    colBox(S, { x: p[0], z: p[2], rot: s.rot }, 0, 0, 2.6, 22, h - 2.2, h + 0.8);
     S.b.box({ x: p[0], z: p[2], rot: s.rot, y: h + 0.75 }, 0, 0, 0, 2.0, 0.1, 21, col('#2c5563'));
   }
   if (o.pens) {

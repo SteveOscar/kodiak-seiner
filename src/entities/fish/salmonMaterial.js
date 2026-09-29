@@ -141,7 +141,8 @@ void main() {
     beatAmp = mix(beatAmp, 2.4, thrash);
   }
   centre += lp;
-  if (thrash <= 0.0) centre.y = min(centre.y, -0.3);
+  // Only the bag breaks the surface; free-swimming fish stay a metre down even at the top of a thick school.
+  if (thrash <= 0.0) centre.y = min(centre.y, -1.0);
   float dist = distance(centre, cameraPosition);
 #ifdef LOD_NEAR
   if (dist > uLodDist) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
@@ -370,6 +371,12 @@ void main() {
   // Sunlight reaching the fish through the water above it.
   vec3 sunAtt = exp(-uWaterAbsorb * max(0.0, -vWorldPos.y) * 1.25);
   vec3 sun = uSunRadiance * sunAtt * step(0.0, L.y);
+#ifdef SCHOOL
+  // Cruising schools are shadows under the surface: the broken, scattered sun reaching them is weak and cold (the
+  // warm low sun must not paint them orange). The drying bag (vWet) keeps full sun for the money shot.
+  float school = under * (1.0 - clamp(vWet * 3.0, 0.0, 1.0));
+  sun *= mix(vec3(1.0), vec3(0.45, 0.58, 0.64), school);
+#endif
   float NoL = max(dot(N, L), 0.0);
   float NoV = max(dot(N, V), 1e-3);
   vec3 H = normalize(L + V);
@@ -395,6 +402,12 @@ void main() {
   // attenuation of kodiak_underwater.
   float haze = 1.0 - exp(-max(0.0, -vWorldPos.y) * 0.22);
   col = mix(col, uWaterScatter * (0.6 + 0.8 * uEnvScale), haze * 0.55);
+#ifdef SCHOOL
+  // Soft blue-green shadows rather than lit objects: toward a darkened water-column colour with depth, which keeps
+  // them readable (darker than the water around them) over both turquoise shallows and deep water.
+  float deep = (1.0 - exp(-max(0.0, -vWorldPos.y) * 0.6)) * school;
+  col = mix(col, uWaterScatter * 0.55, deep * 0.5);
+#endif
   gl_FragColor = vec4(col, 1.0);
   #include <kodiak_underwater_fragment>
   #include <fog_fragment>

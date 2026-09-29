@@ -87,24 +87,61 @@ export function beachGravel(seabed) {
   }
 }
 
-// Brailer cycle crossings between two elapsed times (s since brailing began). The brailer (WP-NET) dips into the
-// bag at phase ~0.2 and dumps over the hatch at ~0.72 of a 2.8 s cycle. → ['dip' | 'dump', ...] in order.
-export function brailEvents(prevT, t, cycle = 2.8, dipAt = 0.2, dumpAt = 0.72) {
-  const out = [];
-  if (!(t > prevT) || !(cycle > 0)) return out;
-  const marks = [
-    [dipAt, 'dip'],
-    [dumpAt, 'dump'],
-  ];
-  const c0 = Math.floor(prevT / cycle);
-  const c1 = Math.floor(t / cycle);
-  for (let c = c0; c <= c1 && out.length < 8; c++) {
-    for (const [ph, name] of marks) {
-      const at = (c + ph) * cycle;
-      if (at > prevT && at <= t) out.push(name);
-    }
+// One brailer scoop from WP-NET's fishing:brail {x, z, lbs}. The event fires as the brailer dips into the bag (phase
+// ~0.19 of its cycle) and the brailer dumps over the hatch at ~0.70. loadLbs is a full brailer load and progress (0..1
+// through brailing) thins the bag. → { dipVolume, dumpCount (salmon thumping into the hold), dumpDelay (s) }
+export function brailScoop({ lbs = 0, loadLbs = 1500, progress = 0, cycle = 2.8 } = {}) {
+  const k = clamp((Number(lbs) || 0) / Math.max(1, Number(loadLbs) || 1500), 0.15, 1);
+  const thin = 1 - 0.45 * clamp(Number(progress) || 0, 0, 1);
+  const c = Number(cycle) > 0 ? Number(cycle) : 2.8;
+  return {
+    dipVolume: 0.6 + 0.35 * k,
+    dumpCount: Math.round(clamp(3 + 15 * k * thin, 3, 18)),
+    dumpDelay: clamp((0.7 - 0.19) * c, 0.4, 3),
+  };
+}
+
+// The brailer whip's hydraulic demand, seconds after the last scoop: hoisting the full bag out and swinging it over
+// the hatch (to ~0.62 of the cycle), else idling. → rate for hydraulicParams
+export function brailWhipRate(sinceScoop, cycle = 2.8) {
+  const c = Number(cycle) > 0 ? Number(cycle) : 2.8;
+  return sinceScoop >= 0 && sinceScoop < 0.43 * c ? 0.75 : 0.18;
+}
+
+// A disturbed haulout stampeding into the sea (wildlife:disturbed): a burst of roars and barks from the herd while
+// bodies plunge in, scaled by the colony (a haulout is 8-35 animals, the Marmot rookery ~150).
+// → { roars: [{ t, bull, rate }], plunges: [{ t, size }], chorus 0..1, dur (s), level }
+export function stampedePlan(members = 16, r = Math.random) {
+  const n = clamp(Number(members) || 16, 3, 200);
+  const crowd = clamp(Math.sqrt(n / 20), 0.5, 2.6);
+  const roarN = Math.round(clamp(2 + n / 15, 3, 5));
+  const plungeN = Math.round(clamp(3 + n / 12, 4, 8));
+  const dur = clamp(3.5 + crowd * 1.6, 4, 8);
+  const roars = [];
+  for (let i = 0; i < roarN; i++) roars.push({ t: (i / roarN) * dur * 0.55 + r() * 0.35, bull: i === 0 || r() < 0.3, rate: 0.88 + 0.3 * r() });
+  const plunges = [];
+  // Bodies hit the water from ~0.4 s, densest early (the rush off the rocks), a few stragglers late.
+  for (let i = 0; i < plungeN; i++) plunges.push({ t: 0.4 + Math.pow(r(), 1.6) * dur * 0.7, size: 1.4 + 1.4 * r() });
+  plunges.sort((a, b) => a.t - b.t);
+  return { roars, plunges, chorus: clamp(0.35 + 0.25 * crowd, 0.35, 1), dur, level: clamp(0.65 + 0.12 * crowd, 0.65, 0.95) };
+}
+
+// A call the UI starts to caption (ui:radioShown {from, channel, tip}) matched to the ui:radio / ui:hint that queued it;
+// the UI reorders (Pete's tips jump routine traffic). Oldest pending call from the same sender with the same tip flag,
+// preferring the same channel. pending: [{ from, channel, tip }] → index or -1.
+export const radioChannel = (c, fallback = '16') => String(c ?? fallback).replace(/^ch\s*/i, '');
+export function matchRadio(pending, shown) {
+  if (!Array.isArray(pending) || !shown) return -1;
+  const from = String(shown.from || 'VHF');
+  const ch = radioChannel(shown.channel);
+  let best = -1;
+  for (let i = 0; i < pending.length; i++) {
+    const p = pending[i];
+    if (!p || p.from !== from || !!p.tip !== !!shown.tip) continue;
+    if (p.channel === ch) return i;
+    if (best < 0) best = i;
   }
-  return out;
+  return best;
 }
 
 // Seconds from a lightning flash to its thunder (sound travels ~3 s/km), capped so a far strike still reads as one.

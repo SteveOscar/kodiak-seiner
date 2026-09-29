@@ -1,13 +1,33 @@
-// The fleet board: eight named Kodiak seiners whose season gross advances each fishing period. Pure module.
+// The fleet board: eight named Kodiak seiners whose season gross advances each fishing period, and the season-goal
+// ladder paced on the same rate. Pure module.
 //
-// A "competent" player grosses about COMPETENT_DAILY per fishing day at an average point in the runs (the season
-// goals in config.economy are paced on it). Fleet boats fish at `rate` × that — around 0.8× on average, the
-// highliner 1.2× — scaled by how strong the runs are that day, with day-to-day luck and the odd breakdown.
+// A "competent" player grosses about COMPETENT_DAILY per fishing day at an average point in the runs. Fleet boats fish
+// at `rate` × that — around 0.8× on average, the highliner 1.2× — scaled by how strong the runs are that day
+// (seasonFactor: 0.78 on Jul 6, ~1.3 at the pink peak, 0.36 on the last period), with day-to-day luck and the odd
+// breakdown.
+//
+// Calibration (QA run qa/season/r3e, a scripted skipper at 1× time on build 4adc2d4): one set takes ~2 real minutes
+// (setting 52 s, closing 8.5 s, pursing 16 s, hauling 32 s, brail + report 17 s) plus ~1.5–3 minutes running to the
+// next school (0.5–1.7 km apart), so ~3.9 real minutes a set. It made 4 good sets between 06:00 and 21:30 on Jul 6
+// (15.5 real minutes): 41,881 lb, $12,923 — $16.6k at an average run day. A competent human makes about three good
+// sets a period (~0.75× the script): $12,500 at an average run day, ~$9.8k on Jul 6. A period is 16 real minutes
+// open (1 game minute per real second) plus deliveries and moves: MINUTES_PER_PERIOD ≈ 17.5 (SPEC 8.1: 12 fishing
+// days ≈ 3.5 h). The goals below land for that competent player near SPEC 8.3's times — $15k after ~1.4 periods
+// (~25 min), $65k after ~5.1 periods (~1.5 h), $120k after ~8.6 periods (~2.5 h); the scripted skipper reaches them
+// at ~20 min, ~70 min and ~2 h. On Jul 6 the top boat's median day is ~$11.7k (the script's $12.9k is highliner pace).
 
 import { keyedRandom } from './market.js';
 import { runStrength } from './calendar.js';
 
-export const COMPETENT_DAILY = 7500;
+export const COMPETENT_DAILY = 12500;
+export const MINUTES_PER_PERIOD = 17.5;
+
+// Season goals on stats.seasonGross (labels as in config.economy.goals; the thresholds here are authoritative).
+export const SEASON_GOALS = [
+  { gross: 15000, label: 'Covered the grub and fuel bill', minutes: 25 },
+  { gross: 65000, label: 'Permit loan paid off', minutes: 90 },
+  { gross: 120000, label: 'Made the boat payment', minutes: 150 },
+];
 export const AVG_PRICE = 0.42; // $/lb across a typical Kodiak seine catch, for turning dollars into radio pounds
 
 export const FLEET = [
@@ -34,6 +54,19 @@ export function seasonFactor(config, day) {
   const days = config.season.fishingDays;
   const mean = days.reduce((a, d) => a + rawValue(config, d), 0) / Math.max(1, days.length);
   return mean > 0 ? rawValue(config, day) / mean : 1;
+}
+
+// What a competent player has grossed after `minutes` of real play (MINUTES_PER_PERIOD per fishing period, in order).
+export function competentGrossAfter(config, minutes, perPeriod = MINUTES_PER_PERIOD) {
+  let periods = Math.max(0, minutes / perPeriod);
+  let gross = 0;
+  for (const d of config.season.fishingDays) {
+    if (periods <= 0) break;
+    const part = Math.min(1, periods);
+    gross += COMPETENT_DAILY * seasonFactor(config, d) * part;
+    periods -= part;
+  }
+  return gross;
 }
 
 // Deterministic gross for one boat on one fishing day.

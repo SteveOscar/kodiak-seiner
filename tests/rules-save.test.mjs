@@ -182,7 +182,7 @@ test('fast travel: preview cost = chart nm ÷ cruising knots; fuel at 60% load; 
   assert.ok(w.offer('deliver'));
 });
 
-test('fast travel: to a harbour arrives tied up; refused mid-set, ashore, skiff out, low fuel', async () => {
+test('fast travel: to a harbor arrives tied up; refused mid-set, ashore, skiff out, low fuel', async () => {
   const w = await makeWorld();
   const { ctx, economy } = w;
   const travel = w.season.travel;

@@ -12,7 +12,7 @@ import { Herd } from './herd.js';
 import { buildQuadruped, QUADS } from './shapes.js';
 import { buildBear } from './bear.js';
 import { clamp, damp, dampAngle, wrapAngle, headingOf, noise1, TAU, lerp, smoothstep, hash01 } from './math.js';
-import { planBears, createEncounter, stepEncounter, ENCOUNTER } from './behaviour.js';
+import { planBears, createEncounter, stepEncounter, canEngage, ENCOUNTER } from './behaviour.js';
 
 export function createLand(env) {
   const { ctx, rng, sites, fx, mats } = env;
@@ -206,7 +206,16 @@ export function createLand(env) {
     let targetHead = 0.1;
     let targetRear = 0;
     let targetLie = 0;
-    switch (a.state) {
+    const wary = waryOf(a, t);
+    if (wary) {
+      a.pounce = null;
+      a.speed = damp(a.speed, 0, 4, dt);
+      const av = person.av;
+      a.heading = dampAngle(a.heading, headingOf(av.x - a.position.x, av.z - a.position.z), 1.2, dt);
+      targetHead = -0.12;
+      a.headYaw = 0.2 * Math.sin(t * 0.9 + a.seed * 7);
+    }
+    if (!wary) switch (a.state) {
       case 'fishing': {
         // Wade into the shallows at the mouth, stand watching the water, lunge now and then.
         if (!s.wade) {
@@ -460,30 +469,45 @@ export function createLand(env) {
     }
     if (change !== 'none') ctx.events.emit('bear:encounter', { stage: change, bearId: b.id, x: b.position.x, z: b.position.z });
   }
-  function updateEncounter(dt, t) {
+  // The person on foot as the bears see them: position, ground speed and which way they face.
+  const person = { av: null, onFoot: false, speed: 0 };
+  function readPerson() {
     const av = ctx.game?.avatar?.();
-    const onFoot = ctx.state.control === 'foot' && av?.control === 'foot' && ctx.state.mode === 'play';
+    person.av = av ?? null;
+    person.onFoot = ctx.state.control === 'foot' && av?.control === 'foot' && ctx.state.mode === 'play';
+    const v = person.onFoot ? ctx.systems.player?.velocity : null;
+    person.speed = v && Number.isFinite(v.x) ? Math.hypot(v.x, v.z) : 0;
+    return person;
+  }
+  // Degrees the person faces away from bear b (0 = looking straight at it, 180 = back turned).
+  function facingAway(b, av) {
+    if (!av || !Number.isFinite(av.heading)) return 0;
+    return (Math.abs(wrapAngle(headingOf(b.position.x - av.x, b.position.z - av.z) - av.heading)) * 180) / Math.PI;
+  }
+  function updateEncounter(dt, t) {
+    const { av, onFoot, speed } = readPerson();
     const distTo = (b) => (av ? Math.hypot(b.position.x - av.x, b.position.z - av.z) : Infinity);
     let primary = null;
     for (const b of [...engaged]) {
-      const change = stepEncounter(b.enc, { dist: distTo(b), onFoot, dt, time: t });
+      const change = stepEncounter(b.enc, { dist: distTo(b), onFoot, dt, time: t, speed, facingDeg: facingAway(b, av), bearSpeed: b.speed ?? 0 });
       if (change) applyStage(b, change, av);
       if (b.enc.stage === 'none') engaged.delete(b);
       else if (b.enc.stage === 'watch' || b.enc.stage === 'charge') primary = b;
     }
     if (!primary && onFoot) {
+      // The nearest bear that would engage: one resting on its cooldown further off does not shield another.
       let nearest = null;
       let nd = Infinity;
       for (const b of bears) {
         if (!b.enc || !b.active || engaged.has(b)) continue;
         const d = distTo(b);
-        if (d < nd) {
+        if (d < nd && canEngage(b.enc, { dist: d, onFoot, time: t })) {
           nd = d;
           nearest = b;
         }
       }
       if (nearest) {
-        const change = stepEncounter(nearest.enc, { dist: nd, onFoot, dt, time: t });
+        const change = stepEncounter(nearest.enc, { dist: nd, onFoot, dt, time: t, speed, facingDeg: facingAway(nearest, av) });
         if (change === 'watch') {
           engaged.add(nearest);
           applyStage(nearest, change, av);
@@ -492,6 +516,14 @@ export function createLand(env) {
       }
     }
     encounterBear = primary ?? [...engaged][0] ?? null;
+  }
+
+  // A bear that has just ended an encounter stays wary while the person is still around: it stops what it is doing,
+  // keeps its head up and turns to keep them in view (no event; it re-engages with a watch if they walk right up).
+  function waryOf(a, t) {
+    const enc = a.enc;
+    if (!enc || enc.stage !== 'none' || t >= enc.cooldownUntil || !person.onFoot || !person.av) return false;
+    return Math.hypot(a.position.x - person.av.x, a.position.z - person.av.z) < ENCOUNTER.watchDist;
   }
 
   // ------------------------------------------------------------------------------------------------ deer, goats, fox
@@ -600,6 +632,7 @@ export function createLand(env) {
   function update(dt, cam, rangeMul = 1) {
     const t = ctx.time.elapsed;
     const av = ctx.game?.avatar?.();
+    readPerson();
     for (const b of bears) {
       const d = Math.hypot(b.position.x - cam.x, b.position.z - cam.z);
       const da = av ? Math.hypot(b.position.x - av.x, b.position.z - av.z) : Infinity;

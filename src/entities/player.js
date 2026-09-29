@@ -16,7 +16,7 @@
 // animation in player/anim.js, the figure in player/model.js.
 
 import * as THREE from 'three';
-import { FOOT_RULES, findLanding, stepOffPoint, dryPointAhead, perchPoint, onSummit, isHilltop, slopeBand } from './player/rules.js';
+import { FOOT_RULES, findLanding, stepOffPoint, dryPointAhead, perchPoint, onSummit, isHilltop, slopeBand, bearPenalty, besideBow, PERCH } from './player/rules.js';
 import { FOOT_TUNING, createFootState, placeFoot, stepFoot, standable } from './player/controller.js';
 import { createAnimator, createPose, animate } from './player/anim.js';
 import { buildDeckhand } from './player/model.js';
@@ -41,6 +41,13 @@ const TUNE = Object.freeze({
   searchMove: 6, // or when the boat has moved this far
   perchEvery: 0.5,
   summitIdle: 2.5, // seconds standing still on a hilltop before the summit framing is suggested
+  chargeHoldMin: 1.25, // s of a bluff charge shown before the fade (the bear lunges in and stops short)
+  chargeHoldMax: 3.2, // longest wait for a charge from further out to stop short
+  chargeShake: 0.5, // cameraRig.shake as the bear pulls up
+  backAwaySpeed: 1.3, // m/s backing away from a watching bear (facing it)
+  backAwayCone: 1.4, // rad: moves within this of "directly away from the bear" back away facing it
+  bearLandingClear: 55, // m: landings closer than this to a bear score down
+  disembarkWalk: 7, // s: longest walk up to dry ground at the end of the landing cutscene
 });
 
 const FRAMING = Object.freeze({
@@ -49,12 +56,20 @@ const FRAMING = Object.freeze({
   summit: Object.freeze({ kind: 'summit', dist: 9, pitch: 0.16 }),
 });
 
+// Back at the skiff on the beach after a bluff charge.
 const QUIPS = [
-  "Easy — easy. She's just bluffing. Come on back to the skiff, nice and slow.",
-  "Saw that from the skiff. That sow means it. Let's give her the beach for a while.",
-  'You okay? She came out of the alders like a freight train. Stay near the water a bit.',
+  "Easy — easy. That was a bluff. Stay by the skiff a minute, nice and slow.",
+  "Saw that from the skiff. That bear means it. Let's give it the beach for a while.",
+  'You okay? It came out of the alders like a freight train. Stay near the water a bit.',
   "Whoa. That's close enough for one day. Bears own this beach — we're just visiting.",
   "Heart still going? Mine isn't. Next time we sing on the way through the brush.",
+];
+// Put straight back aboard (a bear too close to the landing, or the skiff gone): the shore trip is over.
+const QUIPS_ABOARD = [
+  "Got you. That bear owns the landing today — we're done ashore here. Try another beach.",
+  "Hauled you in over the bow like a brailer full of humpies. Nobody's going back to that beach.",
+  "That's it, you're aboard. Bear's standing right on our landing — pick another spot.",
+  "Skiff's up and you're aboard. Next time we let the bears have the river mouth.",
 ];
 
 export async function create(ctx) {
@@ -103,6 +118,38 @@ export async function create(ctx) {
   };
   const coarseH = (x, z) => ctx.heightmap.heightAt(x, z);
 
+  // Solid props and buildings: WP-PLACES and WP-TERRAIN publish collidersNear(x, z, r) (see controller.js for the
+  // shape). Merged per query into one reused array; either system may be a stub without it.
+  const colliderBuf = [];
+  const colliderScratch = { places: [], terrain: [] }; // passed as `out` so the providers reuse arrays
+  const colliderWarned = new Set();
+  function collidersNear(x, z, r) {
+    colliderBuf.length = 0;
+    for (const name of ['places', 'terrain']) {
+      const src = ctx.systems[name];
+      if (typeof src?.collidersNear !== 'function') continue;
+      let list;
+      try {
+        list = src.collidersNear(x, z, r, colliderScratch[name]);
+      } catch (err) {
+        // Another package's query failing must not take the walker down; report it once.
+        if (!colliderWarned.has(name)) {
+          colliderWarned.add(name);
+          console.warn(`[player] ${name}.collidersNear failed:`, err?.message ?? err);
+        }
+        continue;
+      }
+      if (Array.isArray(list)) for (let i = 0; i < list.length; i++) colliderBuf.push(list[i]);
+    }
+    return colliderBuf;
+  }
+  const footEnv = { heightAt: terrainH, dt: 0, seaLevel: 0, boundary: 7600, colliders: collidersNear };
+  function envFor(dt) {
+    footEnv.dt = dt;
+    footEnv.boundary = ctx.config.world?.boundary ?? 7600;
+    return footEnv;
+  }
+
   let phase = 'aboard';
   let active = false;
   let ownsCutscene = false;
@@ -115,6 +162,7 @@ export async function create(ctx) {
   let snapCamera = false;
   let lastStepCount = 0;
   let watch = null; // { bearId, x, z, until }
+  let charge = null; // { bearId, t, shook, fading }: a bluff charge playing out before the fade
   let perchTimer = 0;
   const perchDone = new Map(); // placeId -> day
   let summits = null;
@@ -151,13 +199,32 @@ export async function create(ctx) {
     return best;
   }
 
+  // Adult bears near the anchorage (cubs stay with their mothers), for scoring landings down near them.
+  function bearsNear(x, z, r) {
+    const out = [];
+    for (const b of ctx.systems.wildlife?.bears ?? []) {
+      const p = b?.position;
+      if (!p || b.mother || !Number.isFinite(p.x)) continue;
+      if ((p.x - x) ** 2 + (p.z - z) ** 2 < r * r) out.push(p);
+    }
+    return out;
+  }
+
   function runSearch(x, z) {
     const surfaceAt = ctx.systems.terrain?.surfaceAt;
+    const bears = bearsNear(x, z, 150 + TUNE.bearLandingClear + 20);
     const res = findLanding(x, z, {
       heightAt: coarseH,
       shoreDistance: ctx.heightmap.shoreDistance,
       exclude: excludeFn(),
       surfaceAt: surfaceAt ? (px, pz) => surfaceAt(px, pz) : null,
+      penalty: bears.length
+        ? (px, pz) => {
+          let d = Infinity;
+          for (const b of bears) d = Math.min(d, Math.hypot(b.x - px, b.z - pz));
+          return bearPenalty(d, { clear: TUNE.bearLandingClear });
+        }
+        : null,
     });
     if (res.ok) {
       const l = res.landing;
@@ -322,7 +389,7 @@ export async function create(ctx) {
         next();
         return info;
       }
-      stepFoot(foot, { mx: dx / d * Math.min(1, d), mz: dz / d * Math.min(1, d), run: false, jump: false }, { heightAt: terrainH, dt, seaLevel: 0 }, FOOT_TUNING, FOOT_RULES);
+      stepFoot(foot, { mx: dx / d * Math.min(1, d), mz: dz / d * Math.min(1, d), run: false, jump: false }, envFor(dt), FOOT_TUNING, FOOT_RULES);
       info.fromController = true;
       return info;
     }
@@ -350,6 +417,7 @@ export async function create(ctx) {
     ferry = null;
     script = null;
     watch = null;
+    charge = null;
     placeRide();
     ui()?.hint?.('foot-controls', 'On foot: W A S D walk (relative to the camera), Shift runs, Space jumps. Walk back to the skiff and press E to return to the boat.');
     // A beat on the ramp, then the skiff drops off the stern.
@@ -408,8 +476,39 @@ export async function create(ctx) {
     });
   }
 
+  // Walk segment from the board point to the first dry, standable ground up the beach (plus a couple of metres), angled
+  // a little off the skiff's axis toward the higher side so the follow camera ends up off the skiff's quarter instead
+  // of looking down its length past the bow.
+  function upBeachSegment() {
+    const h = skiffHeading();
+    const bp = boardPoint();
+    const probe = (a, t) => terrainH(bp.x + Math.sin(a) * t, bp.z - Math.cos(a) * t);
+    const side = probe(h + 0.45, 5) >= probe(h - 0.45, 5) ? 1 : -1;
+    const dirs = [h + side * 0.45, h, h - side * 0.45];
+    // The landing itself is dry by construction: fall back to heading for it (a skiff nosed in at an angle).
+    if (landing && Math.hypot(landing.x - bp.x, landing.z - bp.z) > 0.5) dirs.push(headingOf(landing.x - bp.x, landing.z - bp.z));
+    let target = null;
+    for (const a of dirs) {
+      const ux = Math.sin(a);
+      const uz = -Math.cos(a);
+      const p = dryPointAhead(terrainH, bp.x, bp.z, ux, uz, { maxAhead: 24, extra: 2.2 });
+      if (!p) continue;
+      const d = Math.hypot(p.x - bp.x, p.z - bp.z);
+      // At least ~3.5 m clear of the bow when the beach allows it.
+      if (d < 3.5 && terrainH(bp.x + ux * 3.5, bp.z + uz * 3.5) >= 0.15) target = { x: bp.x + ux * 3.5, z: bp.z + uz * 3.5 };
+      else target = p;
+      if (standable(terrainH, target.x, target.z) && terrainH(target.x, target.z) >= 0.15) break;
+      target = null;
+    }
+    if (!target && landing && Math.hypot(landing.x - bp.x, landing.z - bp.z) < 24) target = { x: landing.x, z: landing.z };
+    target ??= { x: bp.x + Math.sin(h) * 2.6, z: bp.z - Math.cos(h) * 2.6 };
+    const dist = Math.hypot(target.x - bp.x, target.z - bp.z);
+    return { kind: 'walkTo', to: target, maxT: Math.min(TUNE.disembarkWalk, 1.5 + dist / 1.6) };
+  }
+
   function beginDisembark() {
     setPhase('disembark');
+    const upBeach = upBeachSegment();
     const bow = bowLocal(new THREE.Vector3());
     const inside = new THREE.Vector3(0, seatLocal(tmpV).y, bow.z + 0.75);
     const bowTop = new THREE.Vector3(0, bow.y + 0.02, bow.z + 0.28);
@@ -438,16 +537,8 @@ export async function create(ctx) {
         },
         { kind: 'call', fn: () => placeFoot(foot, position.x, position.z, foot.heading, terrainH) },
         { kind: 'wait', dur: 0.15 },
-        // A few steps up the beach, clear of the bow, so the camera settles behind the deckhand.
-        {
-          kind: 'walkTo',
-          to: (() => {
-            const h = skiffHeading();
-            const bp = boardPoint();
-            return { x: bp.x + Math.sin(h) * 2.6, z: bp.z - Math.cos(h) * 2.6 };
-          })(),
-          maxT: 2,
-        },
+        // Up the beach to dry ground, clear of the bow, so the player starts ashore rather than in the shallows.
+        upBeach,
       ],
       onDone: () => {
         setPhase('foot');
@@ -560,6 +651,7 @@ export async function create(ctx) {
     script = null;
     ferry = null;
     watch = null;
+    charge = null;
     landing = null;
     s?.lockControls?.('player', false);
     setControl('boat');
@@ -580,6 +672,7 @@ export async function create(ctx) {
     script = null;
     ferry = null;
     watch = null;
+    charge = null;
     landing = null;
     seiner()?.lockControls?.('player', false);
     if (wasActive || ctx.state.control !== 'boat') setControl('boat');
@@ -606,9 +699,39 @@ export async function create(ctx) {
       if (phase !== 'foot' || ctx.state.mode !== 'play') return;
       const b = bearById(e.bearId);
       watch = { bearId: e.bearId, x: b?.position?.x ?? e.x ?? foot.x, z: b?.position?.z ?? e.z ?? foot.z, until: ctx.time.elapsed + 6 };
-      startRetreat();
+      startCharge(e.bearId);
     } else if (stage === 'retreat') {
       if (watch && (watch.bearId === e.bearId || !e.bearId)) watch.until = ctx.time.elapsed + 1.5;
+    }
+  }
+
+  // A bluff charge plays out before the fade: the deckhand freezes (startled, turning to face it) while the bear lunges
+  // in and pulls up short, with a small camera shake as it stops; then fade, and he is back at the skiff.
+  function startCharge(bearId) {
+    enterCutscene();
+    setPhase('retreat');
+    script = null;
+    charge = { bearId, t: 0, shook: false, fading: false };
+    ctx.systems.cameraRig?.shake?.(TUNE.chargeShake * 0.4);
+  }
+
+  function updateCharge(dt) {
+    if (!charge || charge.fading) return;
+    charge.t += dt;
+    const b = bearById(charge.bearId);
+    const bx = b?.position?.x;
+    const bz = b?.position?.z;
+    const d = Number.isFinite(bx) ? Math.hypot(bx - foot.x, bz - foot.z) : Infinity;
+    if (Number.isFinite(d) && d > 0.5) foot.heading = dampHeading(foot.heading, headingOf(bx - foot.x, bz - foot.z), dt, 6);
+    const pulledUp = Number.isFinite(d) && d < 7.5 && (b?.speed ?? 0) < 2.5 && charge.t > 0.5;
+    if (!charge.shook && (pulledUp || (Number.isFinite(d) && d < 6))) {
+      charge.shook = true;
+      ctx.systems.cameraRig?.shake?.(TUNE.chargeShake);
+    }
+    const over = !b || b.state === 'retreat' || pulledUp;
+    if ((charge.t >= TUNE.chargeHoldMin && over) || charge.t >= TUNE.chargeHoldMax) {
+      charge.fading = true;
+      startRetreat();
     }
   }
 
@@ -622,6 +745,7 @@ export async function create(ctx) {
       holdS: 0.75,
       outS: 1.1,
       onBlack: () => {
+        charge = null;
         const sk = skiff();
         const bp = sk?.state === 'ferry' ? boardPoint() : null;
         const near = bp ? ctx.systems.wildlife?.nearestBear?.(bp.x, bp.z) : null;
@@ -630,17 +754,18 @@ export async function create(ctx) {
           returnAboardNow({ keepFade: true });
           return;
         }
-        // Back at the skiff on dry beach just above the bow, looking out at it.
-        const ux = Math.sin(bp.heading);
-        const uz = -Math.cos(bp.heading);
-        const dryP = dryPointAhead(terrainH, bp.x, bp.z, ux, uz);
-        let px = dryP?.x ?? bp.x + ux * 1.6;
-        let pz = dryP?.z ?? bp.z + uz * 1.6;
+        // Back beside the skiff's bow (inside the "Back to the boat" radius), on the driest ground there, looking out
+        // at the skiff.
+        const h = skiffHeading();
+        const bow = bowWorld(tmpV);
+        const spot = besideBow(terrainH, bow.x, bow.z, Math.sin(h), -Math.cos(h));
+        let px = spot?.x ?? bp.x;
+        let pz = spot?.z ?? bp.z;
         if (!standable(terrainH, px, pz)) {
           px = bp.x;
           pz = bp.z;
         }
-        placeFoot(foot, px, pz, wrap(bp.heading + Math.PI), terrainH);
+        placeFoot(foot, px, pz, headingOf(bow.x - px, bow.z - pz), terrainH);
         syncFromFoot();
         watch = null;
         snapCamera = true;
@@ -648,7 +773,8 @@ export async function create(ctx) {
       onDone: () => {
         if (!backToBoat) setPhase('foot');
         leaveCutscene();
-        ctx.systems.ui?.radio?.('Skiffman', QUIPS[Math.floor(quipRng.next() * QUIPS.length)], '10');
+        const lines = backToBoat ? QUIPS_ABOARD : QUIPS;
+        ctx.systems.ui?.radio?.('Skiffman', lines[Math.floor(quipRng.next() * lines.length)], '10');
       },
     });
   }
@@ -672,9 +798,16 @@ export async function create(ctx) {
       const r = p.radius ?? 200;
       if ((p.x - foot.x) ** 2 + (p.z - foot.z) ** 2 > (r + 400) ** 2) continue;
       if (!c.summit) c.summit = perchPoint(coarseH, p);
-      if (!onSummit(foot.x, foot.y, foot.z, c.summit)) continue;
+      if (!onSummit(foot.x, foot.y, foot.z, c.summit)) {
+        c.dwell = 0;
+        continue;
+      }
       const day = ctx.clock?.day ?? 0;
       if (perchDone.get(p.id) === day) continue;
+      // Earned by standing up there a few seconds, after the place itself has been discovered.
+      c.dwell = (c.dwell ?? 0) + TUNE.perchEvery;
+      const known = disc.isDiscovered?.(p.id) ?? true;
+      if (c.dwell < PERCH.dwell || (!known && c.dwell < PERCH.dwell * 3)) continue;
       perchDone.set(p.id, day);
       disc.addPerch(p.id);
       events.emit('player:summit', { placeId: p.id, x: c.summit.x, z: c.summit.z });
@@ -702,9 +835,12 @@ export async function create(ctx) {
   }
 
   // Camera-relative move vector from WASD / left stick.
-  const moveCmd = { mx: 0, mz: 0, run: false, jump: false };
+  const moveCmd = { mx: 0, mz: 0, run: false, jump: false, face: undefined, maxSpeed: undefined };
+  const STAND = Object.freeze({ mx: 0, mz: 0, run: false, jump: false });
   let drive = null; // QA override: { mx, mz (world), run, jump }
   function readMove() {
+    moveCmd.face = undefined;
+    moveCmd.maxSpeed = undefined;
     if (drive) {
       moveCmd.mx = drive.mx ?? 0;
       moveCmd.mz = drive.mz ?? 0;
@@ -735,6 +871,31 @@ export async function create(ctx) {
     return moveCmd;
   }
 
+  // While a bear watches, walking (not running) away from it backs off slowly, still facing it: the field advice the
+  // hint gives. Running turns the deckhand's back, which the bear reads as flight (wildlife escalates to a charge).
+  function watchingBear() {
+    if (!watch) return null;
+    const enc = ctx.systems.wildlife?.encounter;
+    if (enc && enc.bearId === watch.bearId && enc.stage === 'watch') watch.until = Math.max(watch.until, ctx.time.elapsed + 1);
+    if (ctx.time.elapsed >= watch.until) return null;
+    const b = bearById(watch.bearId);
+    return { x: b?.position?.x ?? watch.x, z: b?.position?.z ?? watch.z };
+  }
+  function backAway(cmd) {
+    const b = watchingBear();
+    const m = Math.hypot(cmd.mx, cmd.mz);
+    if (!b || cmd.run || m < 0.05) return cmd;
+    const ax = foot.x - b.x;
+    const az = foot.z - b.z;
+    const al = Math.hypot(ax, az);
+    if (al < 0.5) return cmd;
+    const cos = (cmd.mx * ax + cmd.mz * az) / (m * al);
+    if (cos < Math.cos(TUNE.backAwayCone)) return cmd;
+    cmd.face = wrap(headingOf(cmd.mx, cmd.mz) + Math.PI);
+    cmd.maxSpeed = TUNE.backAwaySpeed;
+    return cmd;
+  }
+
   // Ground height under a foot placed at (lat, fwd) in the body frame, relative to the root.
   const groundAt = (lat, fwdOff) => {
     const h = foot.heading;
@@ -752,6 +913,7 @@ export async function create(ctx) {
   const animIn = {
     dt: 0, speed: 0, slopeDeg: 0, onGround: true, vy: 0, jumped: false, landed: false, landSpeed: 0, sliding: false,
     depth: 0, turnRate: 0, mode: 'free', lookYaw: null, lookPitch: 0, boatRoll: 0, boatPitch: 0, scrambling: false,
+    reverse: false,
   };
 
   function lookTarget() {
@@ -876,12 +1038,13 @@ export async function create(ctx) {
       if (ride) placeRide();
       mode = ride ? 'ride' : 'free';
     } else if (phase === 'retreat') {
+      updateCharge(dt);
       mode = fader.alpha > 0.5 ? 'free' : 'startled';
-      stepFoot(foot, { mx: 0, mz: 0 }, { heightAt: terrainH, dt, seaLevel: 0 });
+      stepFoot(foot, STAND, envFor(dt));
     } else if (phase === 'foot') {
       const playing = ctx.state.mode === 'play';
-      const cmd = playing ? readMove() : { mx: 0, mz: 0, run: false, jump: false };
-      stepFoot(foot, cmd, { heightAt: terrainH, dt, seaLevel: 0, boundary: ctx.config.world.boundary ?? 7600 });
+      const cmd = playing ? backAway(readMove()) : STAND;
+      stepFoot(foot, cmd, envFor(dt));
       if (foot.boundary && ctx.time.elapsed - boundaryToastAt > 10) {
         boundaryToastAt = ctx.time.elapsed;
         ui()?.toast?.('Edge of the chart — time to turn back.', { kind: 'warn', duration: 4 });
@@ -935,9 +1098,10 @@ export async function create(ctx) {
       animIn.landed = foot.landed;
       animIn.landSpeed = foot.landSpeed;
       animIn.sliding = foot.sliding;
-      animIn.slopeDeg = foot.speed > 0.1 ? foot.slopeDeg : 0;
+      animIn.slopeDeg = foot.speed > 0.1 ? (foot.reverse ? -foot.slopeDeg : foot.slopeDeg) : 0;
       animIn.depth = ride ? 0 : foot.depth;
     }
+    animIn.reverse = !ride && !!foot.reverse && !(info && !info.fromController);
     animIn.turnRate = clamp(turn, -6, 6);
     if (ride && sk?.object3d) {
       sk.object3d.getWorldQuaternion(tmpQ);

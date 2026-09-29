@@ -448,7 +448,7 @@ export async function create(ctx) {
       reflection = createReflection({ THREE, renderer, scene, camera: ctx.camera, scale: reflScale });
       surfaceUniforms.uReflTex.value = reflection.texture;
       surfaceUniforms.uReflDepth.value = reflection.depthTexture;
-      ctx.pipeline.onResize(() => reflection?.resize());
+      ctx.pipeline.onResize(resizeReflection);
     }
     // Every REFLECTION_INTERVAL frames: the shader projects through the matrix the image was rendered with, so an older
     // reflection stays registered under camera rotation, and a few frames of camera travel are ~1 px of parallax
@@ -464,6 +464,8 @@ export async function create(ctx) {
     }
     const sky = ctx.systems.sky;
     const ok = reflection.render([sky?.sunLight, sky?.hemiLight]);
+    // render() re-matches the target to the drawing buffer, which may replace the depth texture.
+    surfaceUniforms.uReflDepth.value = reflection.depthTexture;
     reflValid = ok;
     for (let i = 0; i < 16; i++) lastReflCam[i] = camM[i];
     u.x = ok ? amount : 0;
@@ -473,6 +475,16 @@ export async function create(ctx) {
   const lastReflCam = new Float64Array(16);
   let reflFrame = 0;
   let reflValid = false;
+  // Resize (window or dynamic resolution): the target gets a new depth texture, and the old image is gone, so the
+  // surface stops using it until the next reflection render (the next beforeRender, if reflections are active).
+  function resizeReflection() {
+    if (!reflection) return;
+    if (reflection.resize()) {
+      surfaceUniforms.uReflDepth.value = reflection.depthTexture;
+      surfaceUniforms.uRefl.value.x = 0;
+      reflValid = false;
+    }
+  }
 
   const sys = {
     mesh,
@@ -670,7 +682,16 @@ export async function create(ctx) {
   // QA: direct access to the secondary passes (timing probes).
   sys.qaPasses = {
     field: (parts) => field && field.render(fieldCentre(tmpF).x, fieldCentre(tmpF).z, queue, 1 / 60, parts),
-    reflection: () => reflection && reflection.render([ctx.systems.sky?.sunLight, ctx.systems.sky?.hemiLight]),
+    reflection: () => {
+      if (!reflection) return null;
+      const ok = reflection.render([ctx.systems.sky?.sunLight, ctx.systems.sky?.hemiLight]);
+      surfaceUniforms.uReflDepth.value = reflection.depthTexture;
+      return ok;
+    },
+    // Framebuffer completeness and attachment sizes of the planar reflection target (null before its first use), and
+    // whether the surface samples the target's current depth texture.
+    reflectionStatus: () =>
+      reflection && { ...reflection.status(), uniformDepthCurrent: surfaceUniforms.uReflDepth.value === reflection.depthTexture },
   };
   let mainRendered = false;
   ctx.pipeline.afterRender(() => {

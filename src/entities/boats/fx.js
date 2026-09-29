@@ -7,7 +7,12 @@ import { createSoftSprite } from './textures.js';
 
 let spriteTex = null;
 let glowTex = null;
-const sprite = () => (spriteTex ??= createSoftSprite(64, { falloff: 1.6 }));
+const softTex = new Map();
+const sprite = (falloff = 1.6) => {
+  if (falloff === 1.6) return (spriteTex ??= createSoftSprite(64, { falloff }));
+  if (!softTex.has(falloff)) softTex.set(falloff, createSoftSprite(64, { falloff }));
+  return softTex.get(falloff);
+};
 const glowSprite = () => (glowTex ??= createSoftSprite(64, { falloff: 2.6 }));
 
 const _v = new THREE.Vector2();
@@ -20,6 +25,7 @@ export function projScale(renderer, camera) {
 
 const PARTICLE_VS = /* glsl */ `
 uniform float uScale;
+uniform vec2 uNearFade;
 attribute float aSize;
 attribute float aAlpha;
 attribute vec3 aColor;
@@ -33,6 +39,8 @@ void main() {
   gl_PointSize = clamp(aSize * uScale / max(0.1, -mvPosition.z), 0.0, 400.0);
   // Sub-pixel particles fade instead of shimmering.
   vAlpha = aAlpha * clamp(gl_PointSize / 1.5, 0.0, 1.0);
+  // Optional fade for particles right in front of the lens (a puff drifting past the camera must not blot the view).
+  if (uNearFade.y > 0.0) vAlpha *= smoothstep(uNearFade.x, uNearFade.y, -mvPosition.z);
   gl_PointSize = max(gl_PointSize, 1.5);
   vColor = aColor;
   #include <fog_vertex>
@@ -55,7 +63,9 @@ void main() {
 }`;
 
 // Pool of world-space particles. emit() returns false when full (oldest are not recycled: effects are short-lived).
-export function createParticlePool(ctx, { max = 256, renderOrder = 200, blending = THREE.NormalBlending, name = 'particles' } = {}) {
+// falloff: sprite edge softness (higher = softer, smaller core); nearFade: [from, to] metres from the camera over which
+// particles fade in (off by default).
+export function createParticlePool(ctx, { max = 256, renderOrder = 200, blending = THREE.NormalBlending, name = 'particles', falloff = 1.6, nearFade = null } = {}) {
   const pos = new Float32Array(max * 3);
   const size = new Float32Array(max);
   const alpha = new Float32Array(max);
@@ -81,7 +91,7 @@ export function createParticlePool(ctx, { max = 256, renderOrder = 200, blending
   geo.setAttribute('aColor', aColor);
   geo.setDrawRange(0, 0);
   const mat = new THREE.ShaderMaterial({
-    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uScale: { value: 600 }, uMap: { value: null }, uLight: { value: new THREE.Color(1, 1, 1) } }]),
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uScale: { value: 600 }, uMap: { value: null }, uLight: { value: new THREE.Color(1, 1, 1) }, uNearFade: { value: new THREE.Vector2(0, 0) } }]),
     vertexShader: PARTICLE_VS,
     fragmentShader: PARTICLE_FS,
     transparent: true,
@@ -89,7 +99,8 @@ export function createParticlePool(ctx, { max = 256, renderOrder = 200, blending
     blending,
     fog: true,
   });
-  mat.uniforms.uMap.value = sprite();
+  mat.uniforms.uMap.value = sprite(falloff);
+  if (nearFade) mat.uniforms.uNearFade.value.set(nearFade[0], nearFade[1]);
   const points = new THREE.Points(geo, mat);
   points.frustumCulled = false;
   points.renderOrder = renderOrder;

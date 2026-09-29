@@ -22,6 +22,8 @@ export function createWorldAdapter(ctx, { netOverride = () => null } = {}) {
     depthAt: (x, z) => hm.depthAt(x, z),
     seabedAt: (x, z) => hm.seabedAt?.(x, z) ?? 'sand',
     nearestWater: (x, z, minShore = 60) => hm.nearestWater(x, z, { minShore, maxRadius: 1500 }),
+    // The seine's web depth (upgrades via economy.modifiers; the net re-reads it only while stowed).
+    netDepth: () => sys.economy?.modifiers?.netDepth ?? sys.net?.depth ?? ctx.config?.net?.depth ?? 16,
     currentAt: (x, z, out) => ctx.tide?.currentAt?.(x, z, out) ?? ((out.x = 0), (out.z = 0), out),
     tideState: () => ctx.tide?.state?.() ?? { flow: 0, stage: 'slack', hoursToSlack: 3 },
     tidePeriod: () => ctx.tide?.period ?? 12.42,

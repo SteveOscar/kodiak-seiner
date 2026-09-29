@@ -40,7 +40,8 @@ export const SEINER_TUNING = Object.freeze({
   bumpSpeed: 0.7, // m/s: slower contacts don't emit a collision
   boundary: 7600,
   boundaryHard: 7950,
-  boundaryPush: 0.05, // m/s of push per metre past the boundary
+  boundaryPush: 0.05, // m/s of inward drift per metre past the boundary (up to 3 m/s)
+  boundaryRamp: 30, // m past the boundary by which all outward way is cancelled
   anchorScope: 26, // m of rode from the bow to the anchor
   anchorYawTau: 7,
 });
@@ -240,6 +241,23 @@ export function stepHull(s, cmd, env, dt, T = SEINER_TUNING) {
     }
     s.yawRate = approach(s.yawRate, clamp(yawWant, -0.12, 0.12), 1.5, dt);
   }
+  // Past the soft boundary the helm is taken over: the bow swings round toward the middle of the chart (at any speed)
+  // until it points back inside, then the helm is the player's again.
+  const overX0 = Math.abs(s.x) - T.boundary;
+  const overZ0 = Math.abs(s.z) - T.boundary;
+  if (overX0 > 0 || overZ0 > 0) {
+    let nx = overX0 > 0 ? Math.sign(s.x) : 0;
+    let nz = overZ0 > 0 ? Math.sign(s.z) : 0;
+    const nl = Math.hypot(nx, nz) || 1;
+    nx /= nl;
+    nz /= nl;
+    if (fx0 * nx + fz0 * nz > -0.6) {
+      const want = Math.atan2(-s.x, s.z);
+      const err = wrapAngle(want - s.heading);
+      s.yawRate = approach(s.yawRate, clamp(err * 1.5, -T.turnRate, T.turnRate), 0.5, dt);
+      s.rudder = clamp(err, -1, 1);
+    }
+  }
   s.heading = wrapAngle(s.heading + s.yawRate * dt);
 
   // Lateral slip in turns (stern skids outboard).
@@ -264,16 +282,21 @@ export function stepHull(s, cmd, env, dt, T = SEINER_TUNING) {
     vz += cmd.external.z;
   }
 
-  // Soft world boundary.
+  // Soft world boundary: the outward way is cancelled (a quarter at the line, all of it `boundaryRamp` metres past)
+  // and a gentle inward set added, so however fast the boat arrives it never reaches the hard wall.
   s.beyondBoundary = false;
   for (const axis of ['x', 'z']) {
     const p = s[axis];
     const over = Math.abs(p) - T.boundary;
     if (over > 0) {
       s.beyondBoundary = true;
-      const push = Math.min(3, over * T.boundaryPush) * -Math.sign(p);
-      if (axis === 'x') vx += push;
-      else vz += push;
+      const out = Math.sign(p);
+      const inward = Math.min(3, 0.4 + over * T.boundaryPush);
+      const k = clamp(0.25 + over / (T.boundaryRamp ?? 30), 0, 1);
+      const v = axis === 'x' ? vx : vz;
+      const dv = -(Math.max(0, v * out) * k + inward) * out;
+      if (axis === 'x') vx += dv;
+      else vz += dv;
     }
   }
 
@@ -411,9 +434,17 @@ export function stepHull(s, cmd, env, dt, T = SEINER_TUNING) {
       }
     }
   }
+  // Hard wall (only reachable by teleporting past the soft line): no way on into it.
   const hard = T.boundaryHard;
-  s.x = clamp(s.x, -hard, hard);
-  s.z = clamp(s.z, -hard, hard);
+  const hx = clamp(s.x, -hard, hard);
+  const hz = clamp(s.z, -hard, hard);
+  if (hx !== s.x || hz !== s.z) {
+    if (hx !== s.x && dispX * Math.sign(s.x) > 0) dispX = 0;
+    if (hz !== s.z && dispZ * Math.sign(s.z) > 0) dispZ = 0;
+    s.x = hx;
+    s.z = hz;
+    s.speed = approach(s.speed, 0, 0.6, dt);
+  }
   s.vx = dispX / dt;
   s.vz = dispZ / dt;
 

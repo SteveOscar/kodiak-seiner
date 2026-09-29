@@ -464,3 +464,146 @@ test('light pools pack only the lit slots, keeping each slot’s colour', () => 
   assert.equal(geo.instanceCount, 1);
   assert.ok(Math.abs(geo.attributes.aColor.array[0] - 0.5) < 1e-6);
 });
+
+// ------------------------------------------------------------------------------------------------ QA fixes
+import { hullWaypoint, hullClearance } from '../src/entities/boats/hullRoute.js';
+
+// Runs the skiff until `done()` and returns the closest its centre came to the seiner's hull surface.
+function closestPass(k, env, seconds, done = () => false) {
+  const hull = { x: env.seiner.x, z: env.seiner.z, heading: env.seiner.heading, halfLength: 9.3, halfBeam: 3.2 };
+  let min = Infinity;
+  for (let t = 0; t < seconds && !done(); t += 1 / 60) {
+    k.step(1 / 60, env);
+    min = Math.min(min, hullClearance(k.s.x, k.s.z, hull));
+  }
+  return min;
+}
+
+test('skiff: the ferry goes round an anchored seiner lying bow-on to the beach, out and back', () => {
+  const k = createSkiffController();
+  const sn = seinerAt(0, 0, 0); // bow north, the beach dead ahead
+  const env = skiffEnv(sn, { current: () => ({ x: 0, z: 0 }), depthAt: (x, z) => (z < -80 ? -2 : 8) });
+  let landed = 0;
+  k.ferry({ x: 0, z: 14.5 }, { x: 0, z: -95 }, () => landed++, env);
+  const out = closestPass(k, env, 60, () => landed > 0);
+  assert.equal(landed, 1, 'landed');
+  assert.ok(out > 1.2, `kept clear of the hull on the way in: ${out.toFixed(2)} m`);
+  assert.ok(k.s.z < -70, `at the beach: ${k.s.z.toFixed(1)}`);
+  let back = 0;
+  k.ferry(null, { x: 0, z: 16 }, () => back++, env);
+  const home = closestPass(k, env, 60, () => back > 0);
+  assert.equal(back, 1, 'back astern');
+  assert.ok(home > 1.2, `kept clear of the hull on the way back: ${home.toFixed(2)} m`);
+  let stowed = 0;
+  k.returnTo(() => stowed++);
+  closestPass(k, env, 30, () => stowed > 0);
+  assert.equal(k.s.state, 'stowed');
+});
+
+test('skiff: closing to the far quarter goes round the stern, and returnTo from ahead goes round the hull', () => {
+  const k = createSkiffController();
+  const sn = seinerAt(0, 0, Math.PI / 2); // heading east
+  const env = skiffEnv(sn, { current: () => ({ x: 0, z: 0 }) });
+  k.release(env);
+  stepSkiff(k, env, 2);
+  k.holdAt(0, -40); // off the port side
+  stepSkiff(k, env, 30);
+  let arrived = 0;
+  // Starboard quarter: 6.5 m aft, 4.6 m out to starboard (south when heading east).
+  const pass = (() => {
+    k.closeTo({ x: -6.5, z: 4.6 }, () => arrived++);
+    return closestPass(k, env, 40, () => arrived > 0);
+  })();
+  assert.equal(arrived, 1);
+  assert.ok(pass > 1.0, `closing kept off the hull: ${pass.toFixed(2)} m`);
+  k.holdAt(40, 0); // dead ahead
+  stepSkiff(k, env, 30);
+  let back = 0;
+  k.returnTo(() => back++);
+  const ret = closestPass(k, env, 60, () => k.s.phase === 'winch');
+  assert.ok(ret > 1.0, `returnTo kept off the hull: ${ret.toFixed(2)} m`);
+  stepSkiff(k, env, 5);
+  assert.equal(back, 1);
+});
+
+test('hull route: direct when clear, a waypoint on one side when the run crosses the hull, sticky side', () => {
+  const hull = { x: 0, z: 0, heading: 0, halfLength: 9.3, halfBeam: 3.2 };
+  assert.equal(hullWaypoint(20, 30, 20, -30, hull), null, 'a run well off the side is direct');
+  const st = { side: 0 };
+  const wp = hullWaypoint(0, 20, 0, -60, hull, { state: st });
+  assert.ok(wp && Math.abs(wp.x) > 6, `detours abeam: ${JSON.stringify(wp)}`);
+  assert.ok(st.side === 1 || st.side === -1);
+  const again = hullWaypoint(0.4 * -st.side, 19, 0, -60, hull, { state: st });
+  assert.equal(Math.sign(again.x), Math.sign(wp.x), 'keeps its side when the choice is close');
+  assert.ok(hullWaypoint(-5.5, 6, 5.5, 6, hull), 'crossing under the stern quarter is blocked');
+  assert.equal(hullWaypoint(-12, 7, -4.6, 6.5, hull), null, 'coming alongside the quarter from outboard is direct');
+});
+
+test('world boundary: full ahead past the soft line turns the boat back inside instead of pinning it on the wall', () => {
+  const s = createHullState(-4500, 7650, Math.PI); // heading south toward the edge
+  s.speed = 12;
+  let maxZ = s.z;
+  const T = { ...SEINER_TUNING, boundary: 7850, boundaryHard: 7950 };
+  for (let t = 0; t < 90; t += 1 / 60) {
+    stepHull(s, cmd({ throttle: 1 }), calm, 1 / 60, T);
+    maxZ = Math.max(maxZ, s.z);
+  }
+  assert.ok(maxZ < 7950 - 5, `never reached the hard wall: ${maxZ.toFixed(1)}`);
+  assert.ok(s.z < 7850, `back inside the chart: ${s.z.toFixed(1)}`);
+  assert.ok(Math.cos(s.heading) > 0.3, `heading back north-ish: ${((s.heading * 180) / Math.PI).toFixed(0)} deg`);
+  assert.ok(s.speed > 6, 'still under way, and moving: the speed readout matches the motion');
+  const vz = s.vz;
+  assert.ok(vz < -3, `moving inward at ${vz.toFixed(2)} m/s`);
+});
+
+test('world boundary: a boat put past the hard wall has no way on into it', () => {
+  const s = createHullState(0, 7990, Math.PI);
+  s.speed = 10;
+  const T = { ...SEINER_TUNING, boundary: 7850, boundaryHard: 7950 };
+  stepHull(s, cmd({ throttle: 1 }), calm, 1 / 60, T);
+  assert.ok(s.z <= 7950 && s.vz <= 0, `clamped and not moving out: z ${s.z.toFixed(1)} vz ${s.vz.toFixed(2)}`);
+});
+
+import { crowsnestFrame, crowsnestCeiling, clearOrbit, insideCollider } from '../src/render/camera/rigMath.js';
+
+test('crow’s nest: framing a wide set stays under the cloud deck by tilting and widening, never climbing', () => {
+  assert.equal(crowsnestCeiling(300), 115, "partly: under the mist banks");
+  assert.equal(crowsnestCeiling(114), 94, 'overcast: 20 m under the deck');
+  assert.equal(crowsnestCeiling(undefined), 115, "no sky: the plain cap");
+  assert.equal(crowsnestCeiling(40), 45, 'never below 45 m');
+  const small = crowsnestFrame({ across: 60, along: 60, pitch: 0.9, ceiling: 115, floor: 60 });
+  assert.ok(Math.abs(small.height - 60) < 1 && small.pitch === 0.9 && small.fov === 55, 'a small set keeps the default pose');
+  for (const [across, along] of [[200, 200], [320, 150], [500, 300]]) {
+    for (const ceiling of [115, 94, 72]) {
+      const f = crowsnestFrame({ across, along, pitch: 0.9, fovDeg: 55, aspect: 16 / 9, ceiling, floor: 60 });
+      assert.ok(f.height <= ceiling + 1e-6, `${across}x${along} under ${ceiling}: ${f.height.toFixed(1)}`);
+      assert.ok(f.pitch >= 0.52 - 1e-9 && f.pitch <= 0.9 && f.fov >= 55 && f.fov <= 70, 'tilt and zoom in range');
+    }
+  }
+  const wide = crowsnestFrame({ across: 320, along: 150, pitch: 0.9, ceiling: 94, floor: 60 });
+  assert.ok(wide.pitch < 0.9, 'tilts toward the horizon first');
+  // The same set framed without a ceiling would climb.
+  assert.ok(crowsnestFrame({ across: 320, along: 150, pitch: 0.9, ceiling: 1e4, floor: 60 }).height > 94);
+  // A long straight line laid away from the camera: the oblique view puts the look point nearer than its middle.
+  const line = crowsnestFrame({ across: 40, along: 300, pitch: 0.9, ceiling: 94, floor: 60 });
+  assert.ok(line.height <= 94 && line.shift < 0, `line: h ${line.height.toFixed(0)} shift ${line.shift.toFixed(0)}`);
+  // A player who zoomed out past the ceiling keeps their own height.
+  assert.ok(crowsnestFrame({ across: 50, along: 50, pitch: 0.9, ceiling: 94, floor: 200 }).height >= 199);
+});
+
+test('foot camera: lifts over (or pulls in from) solid things along the orbit; colliders by shape', () => {
+  const box = { kind: 'box', x: 0, z: 6, hx: 3, hz: 1, rot: 0, y0: 0, y1: 4 };
+  assert.ok(insideCollider(box, 2.5, 1, 6.5) && !insideCollider(box, 0, 5, 6) && !insideCollider(box, 0, 1, 9), 'box extents');
+  const turned = { ...box, rot: Math.PI / 2 };
+  assert.ok(insideCollider(turned, 0.5, 1, 8.5) && !insideCollider(turned, 2.5, 1, 6), 'box rotation follows the heading');
+  assert.ok(insideCollider({ kind: 'circle', x: 0, z: 0, r: 1, y0: 0, y1: 2 }, 0.9, 1, 0) && !insideCollider({ kind: 'circle', x: 0, z: 0, r: 1, y0: 0, y1: 2 }, 0.9, 3, 0));
+  // Camera orbit looking north (yaw 0) sits south (+z) of the focus: a wall 6 m behind the person.
+  const blocked = (x, y, z) => insideCollider(box, x, y, z, 0.3);
+  const lifted = clearOrbit(0, 1.6, 0, 0, 0.3, 10, blocked);
+  assert.ok(lifted.pitch > 0.3 && lifted.frac === 1, `lifted over the wall: ${lifted.pitch.toFixed(2)}`);
+  const tall = { ...box, y1: 40 };
+  const pulled = clearOrbit(0, 1.6, 0, 0, 0.3, 10, (x, y, z) => insideCollider(tall, x, y, z, 0.3));
+  assert.ok(pulled.frac < 0.6 && pulled.pitch === 0.3, `pulled in before a tall wall: ${pulled.frac}`);
+  const free = clearOrbit(0, 1.6, 0, 0, 0.3, 10, () => false);
+  assert.ok(free.frac === 1 && free.pitch === 0.3, 'clear view unchanged');
+});

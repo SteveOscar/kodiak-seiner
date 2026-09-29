@@ -32,11 +32,12 @@ export async function create(ctx) {
   stake.name = 'tie-stake';
   scene.add(stake);
   const spray = createParticlePool(ctx, { max: 160, renderOrder: 203, name: 'skiff-spray' });
-  const smoke = createParticlePool(ctx, { max: 60, renderOrder: 204, name: 'skiff-exhaust' });
+  const smoke = createParticlePool(ctx, { max: 60, renderOrder: 204, name: 'skiff-exhaust', falloff: 2.6, nearFade: [1.5, 6] });
   const glow = createGlowSet(ctx, [{ pos: model.points.light.toArray(), color: 0xfff2dc, size: 0.45, intensity: 1.4 }], { parent: group, name: 'skiff-light' });
 
   const tmp = new THREE.Vector3();
   const tmp2 = new THREE.Vector3();
+  const bagPoint = { x: 0, z: 0 };
   const qA = new THREE.Quaternion();
   const qB = new THREE.Quaternion();
   const mountPos = new THREE.Vector3();
@@ -197,22 +198,22 @@ export async function create(ctx) {
         gravity: 9,
       });
     }
-    // Exhaust: puffs when the skiffman opens the throttle, haze under load.
+    // Exhaust: a light blue-grey diesel haze, a little denser when the skiffman opens the throttle or works hard.
     const opening = Math.max(0, s.effort - prevEffort) / Math.max(dt, 1e-3);
     prevEffort = s.effort;
     if (inWater) {
-      smokeAcc += (1 + s.effort * 6) * dt + (opening > 0.4 ? 3 : 0);
+      smokeAcc += (1 + s.effort * 6) * dt + (opening > 0.4 ? 2 : 0);
       group.updateMatrixWorld(true);
       const top = tmp.copy(model.points.stack).applyMatrix4(group.matrixWorld);
       while (smokeAcc >= 1) {
         smokeAcc -= 1;
-        const dark = opening > 0.4 || s.effort > 0.7;
-        const g = dark ? 0.08 : 0.4;
+        const heavy = opening > 0.4 || s.effort > 0.7;
+        const g = 0.55 + Math.random() * 0.1;
         smoke.emit({
           x: top.x, y: top.y, z: top.z,
-          vx: s.vx, vy: 1.4 + s.effort * 1.5, vz: s.vz,
-          life: 1.8 + Math.random(), size0: 0.15, size1: dark ? 1.4 : 0.9,
-          alpha: dark ? 0.45 : 0.12, color: [g, g, g], drag: 0.8, buoyancy: 0.2,
+          vx: s.vx + (Math.random() - 0.5) * 0.3, vy: 1.2 + s.effort * 1.2, vz: s.vz + (Math.random() - 0.5) * 0.3,
+          life: 1.1 + Math.random() * 0.6, size0: 0.2, size1: heavy ? 1.5 : 1.0,
+          alpha: heavy ? 0.14 : 0.07, color: [g * 0.94, g * 0.98, g * 1.06], drag: 0.9, buoyancy: 0.25,
         });
       }
     }
@@ -304,10 +305,20 @@ export async function create(ctx) {
       const sn = seiner();
       let follow = null;
       if (target && (target === sn?.object3d || target === sn)) {
-        // Bring the end to the seiner's stern quarter on whichever side the skiff is.
+        // Bring the end to the seiner's stern quarter on the net's side (where the bag lies), so the corkline closes
+        // without wrapping the hull; the skiff goes round the seiner if it is on the other side. Without a net, the
+        // quarter on the skiff's own side.
         const side = (() => {
           const rx = Math.cos(sn.heading);
           const rz = Math.sin(sn.heading);
+          const net = ctx.systems.net;
+          const bag = net?.state && net.state !== 'stowed' ? net.bagCentroid?.(bagPoint) : null;
+          if (bag && Number.isFinite(bag.x) && Number.isFinite(bag.z)) {
+            const lat = (bag.x - sn.position.x) * rx + (bag.z - sn.position.z) * rz;
+            if (Math.abs(lat) > 1) return lat > 0 ? 1 : -1;
+          }
+          const body = net?.bodySide ?? net?.side;
+          if (net?.state && net.state !== 'stowed' && (body === 1 || body === -1)) return body;
           return (s.x - sn.position.x) * rx + (s.z - sn.position.z) * rz >= 0 ? 1 : -1;
         })();
         const off = new THREE.Vector3(side * 4.6, 0, 6.5);

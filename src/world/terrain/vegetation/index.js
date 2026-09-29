@@ -24,8 +24,7 @@ import {
 import { bakeImpostors, createImpostorMaterial, createImpostorTile } from './impostor.js';
 import { createKelpLayer } from './kelp.js';
 import { smoothstep } from '../landcover.js';
-
-const TREE_CELL = 7;
+import { createPlacement, TREE_CELL, BOULDER_CELL, DRIFT_CELL } from './placement.js';
 
 // Merge variant geometries (non-indexed, same attributes) into one, for single-draw layers.
 function mergeVariants(list) {
@@ -45,9 +44,11 @@ function mergeVariants(list) {
   return out;
 }
 
-export function createVegetation({ ctx, surface, landcover, heightmap, demAt, texel, isDeveloped, sunScale, seed }) {
+export function createVegetation({ ctx, surface, landcover, heightmap, demAt, texel, isDeveloped, sunScale, seed, placement = null }) {
   const { scene, camera, uniforms, quality, renderer } = ctx;
   const q = quality?.vegetation ?? 1;
+  // Spruce, boulders and driftwood come from the shared placement (the terrain colliders use the same one).
+  const place = placement ?? createPlacement({ surface, landcover, heightmap, demAt, texel, isDeveloped, seed, q });
   const rand = cellRandom(seed);
   const dev = (x, z) => (isDeveloped ? isDeveloped(x, z) : false);
   const group = new THREE.Group();
@@ -57,19 +58,7 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
 
   // ---- Sitka spruce: one placement function shared by the 3D and impostor layers so they swap in place.
   const spruceRange = { near: 48 * Math.min(1.15, 0.75 + 0.25 * q), far: q < 0.5 ? 1500 : 2300 };
-  function spruceAt(ix, iz, push, exact) {
-    const x = (ix + 0.12 + 0.76 * rand(ix, iz, 1)) * TREE_CELL;
-    const z = (iz + 0.12 + 0.76 * rand(ix, iz, 2)) * TREE_CELL;
-    const fd = landcover.forestFast(x, z, demAt, texel);
-    if (fd <= 0.02) return;
-    if (rand(ix, iz, 3) > fd * Math.min(1, 0.6 + 0.4 * q) * 0.94) return;
-    if (dev(x, z)) return;
-    const hgt = (8.5 + 8.5 * rand(ix, iz, 4)) * (0.5 + 0.5 * fd) * (rand(ix, iz, 9) < 0.08 ? 0.5 : 1);
-    const y = exact ? surface.heightAt(x, z) - 0.25 : demAt(x, z) - 0.6;
-    if (y < 0.4) return;
-    const yaw = rand(ix, iz, 5) * Math.PI * 2;
-    push(x, y, z, hgt, Math.cos(yaw), Math.sin(yaw), (rand(ix, iz, 6) - 0.5) * 2, rand(ix, iz, 7));
-  }
+  const spruceAt = place.spruceAt;
 
   const branchMap = new THREE.CanvasTexture(spruceBranchTexture(256));
   branchMap.colorSpace = THREE.SRGBColorSpace;
@@ -472,7 +461,6 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
     group.add(L.mesh);
     return L;
   });
-  const BOULDER_CELL = 5.5;
   const boulderSplit = [new Float32Array(5000 * 11), new Float32Array(5000 * 11)];
   const boulderAt = { x: NaN, z: NaN };
   function splitBoulders(cx, cz) {
@@ -496,30 +484,7 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
       capacity: 5000,
       generate(tx, tz, x0, z0, size, push) {
         for (let iz = Math.floor(z0 / BOULDER_CELL); iz < Math.floor((z0 + size) / BOULDER_CELL); iz++) {
-          for (let ix = Math.floor(x0 / BOULDER_CELL); ix < Math.floor((x0 + size) / BOULDER_CELL); ix++) {
-            const r0 = rand(ix, iz, 71);
-            if (r0 > 0.35) continue;
-            const x = (ix + rand(ix, iz, 72)) * BOULDER_CELL;
-            const z = (iz + rand(ix, iz, 73)) * BOULDER_CELL;
-            const sd = heightmap.shoreDistance(x, z);
-            if (sd > 40 || sd < -400) continue;
-            const s = landcover.sample(x, z);
-            let p = 0;
-            let big = 1;
-            if (s.h > -2.8 && s.h < 2.4 && sd > -30) {
-              const rocky = smoothstep(0.08, 0.5, s.s);
-              p = 0.05 + 0.3 * rocky;
-              big = 0.7 + rocky;
-            } else if (s.h >= 2.4) {
-              const score = landcover.rockScore(x, z, s.h, s.s, s.sd, 0);
-              p = 0.006 + 0.08 * smoothstep(1.1, 1.4, score) * (1 - smoothstep(1.5, 1.7, score));
-            }
-            if (r0 > p || dev(x, z)) continue;
-            const r = (0.35 + Math.pow(rand(ix, iz, 74), 2.2) * 1.6) * big;
-            const yaw = rand(ix, iz, 75) * Math.PI * 2;
-            const y = surface.heightAt(x, z) - r * 0.28;
-            push(x, y, z, r, Math.cos(yaw), Math.sin(yaw), (rand(ix, iz, 76) - 0.5) * 1.6, 0, 0.8 + rand(ix, iz, 77) * 0.5, 0.7 + rand(ix, iz, 78) * 0.4, 0.8 + rand(ix, iz, 79) * 0.5);
-          }
+          for (let ix = Math.floor(x0 / BOULDER_CELL); ix < Math.floor((x0 + size) / BOULDER_CELL); ix++) place.boulderAt(ix, iz, push);
         }
       },
   });
@@ -531,14 +496,13 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
     },
   });
 
-  // ---- Driftwood along the upper beach, lying with the shore.
+  // ---- Driftwood on the storm line of gravel and sand beaches, lying with the shore (placement.js driftAt).
   const driftMat = createInstancedMaterial({ uniforms, sunScale, fade: [0, 0, 220, 270], fadeMode: 'shrink', nonUniform: true, tintAmount: 0.25, name: 'driftwood', lambert: true, grain: [2.5, 0.18, 0.08, 1, 1] });
   const driftLayers = [driftwoodGeometry(seed + 81), driftwoodGeometry(seed + 82, { rootWad: true })].map((g, i) => {
     const L = createInstancedLayer({ geometry: g, material: driftMat.material, depthMaterial: driftMat.depthMaterial, capacity: 2500, name: `driftwood-${i}`, nonUniform: true, castShadow: true });
     group.add(L.mesh);
     return L;
   });
-  const DRIFT_CELL = 6;
   const grad = { x: 0, z: 0 };
   const driftScatter = createTileScatter({
     name: 'driftwood',
@@ -548,30 +512,7 @@ export function createVegetation({ ctx, surface, landcover, heightmap, demAt, te
     capacity: 5000,
     generate(tx, tz, x0, z0, size, push) {
       for (let iz = Math.floor(z0 / DRIFT_CELL); iz < Math.floor((z0 + size) / DRIFT_CELL); iz++) {
-        for (let ix = Math.floor(x0 / DRIFT_CELL); ix < Math.floor((x0 + size) / DRIFT_CELL); ix++) {
-          const r0 = rand(ix, iz, 91);
-          if (r0 > 0.6) continue;
-          const x = (ix + rand(ix, iz, 92)) * DRIFT_CELL;
-          const z = (iz + rand(ix, iz, 93)) * DRIFT_CELL;
-          const sd = heightmap.shoreDistance(x, z);
-          if (sd > 2 || sd < -40) continue;
-          const h = surface.heightAt(x, z);
-          if (h < 0.75 || h > 2.4) continue;
-          const s = landcover.sample(x, z);
-          if (s.s > 0.4 || dev(x, z)) continue;
-          // Logs pile up on the storm line, most thickly below the spruce forests they came from.
-          const p = 0.16 + 0.34 * s.spruce;
-          if (r0 > p) continue;
-          heightmap.shoreGradient(x, z, grad);
-          const along = Math.atan2(-grad.x, grad.z);
-          const yaw = along + (rand(ix, iz, 94) - 0.5) * 0.9;
-          const len = 3.5 + rand(ix, iz, 95) ** 1.5 * 10;
-          const k = 0.6 + rand(ix, iz, 96) * 0.8;
-          const rad = len * DRIFT_R0 * k;
-          const wad = rand(ix, iz, 97) < 0.25 ? 1 : 0;
-          // Half-settled into the gravel.
-          push(x, h + rad * 0.45, z, len, Math.cos(yaw), Math.sin(yaw), (rand(ix, iz, 98) - 0.5) * 1.2, wad, 1, k, k);
-        }
+        for (let ix = Math.floor(x0 / DRIFT_CELL); ix < Math.floor((x0 + size) / DRIFT_CELL); ix++) place.driftAt(ix, iz, push);
       }
     },
   });

@@ -99,18 +99,24 @@ export function createBrailer(ctx) {
   for (let i = 0; i < FISH + SPILL; i++) offsets.push([rng.next(), rng.next(), rng.next(), rng.next()]);
   let t = 0;
   let lastSplash = -1;
+  const result = { scooped: false }; // reused return value
 
   const brailer = {
     group,
-    // opts: { active, loaded (0..1 how full the seine bag still is), boomTip, hatch, dip (Vector3s) }
+    cycle: CYCLE,
+    // opts: { active, loaded (0..1 how full each scoop is; 0 = an empty bag, no fish), boomTip, hatch, dip (Vector3s) }
+    // → { scooped } (true on the frame the brailer dips into the bag).
     update(dt, opts) {
       const active = !!opts?.active && opts.boomTip && opts.hatch && opts.dip;
       group.visible = !!active;
       line.mesh.visible = !!active;
       fish.visible = !!active;
+      result.scooped = false;
       if (!active) {
         t = 0;
-        return;
+        lastSplash = -1;
+        fish.count = 0;
+        return result;
       }
       t += dt;
       pixel.value = (2 * Math.tan((ctx.camera.fov * Math.PI) / 360)) / Math.max(200, ctx.renderer?.domElement?.clientHeight || 720);
@@ -142,7 +148,8 @@ export function createBrailer(ctx) {
       const sway = Math.sin(t * 2.2) * 0.12;
       pos.x += sway;
       const full = ph >= 0.2 && ph < 0.76 ? smooth(0.2, 0.3, ph) * (1 - smooth(0.7, 0.76, ph)) : 0;
-      const load = full * Math.max(0.25, Math.min(1, opts.loaded ?? 1));
+      const fill = Math.max(0, Math.min(1, opts.loaded ?? 1));
+      const load = full * fill;
       group.position.copy(pos);
       const dx = tip.x - pos.x;
       const dz = tip.z - pos.z;
@@ -156,6 +163,7 @@ export function createBrailer(ctx) {
       if (ph > 0.18 && ph < 0.3 && lastSplash !== cycleN) {
         lastSplash = cycleN;
         w?.stamp?.(dip.x, dip.z, 1.6, 0.8, 'ripple');
+        result.scooped = fill > 0;
       }
       if (ph > 0.15 && ph < 0.42) w?.stamp?.(dip.x, dip.z, 2.2, 0.8, 'foam');
 
@@ -185,9 +193,10 @@ export function createBrailer(ctx) {
           fish.setMatrixAt(n++, m);
         }
       }
-      if (ph >= 0.68 && ph < 0.9) {
+      if (fill > 0 && ph >= 0.68 && ph < 0.9) {
         const k = (ph - 0.68) / 0.22;
-        for (let i = 0; i < SPILL; i++) {
+        const nSpill = Math.round(SPILL * Math.min(1, fill * 1.3));
+        for (let i = 0; i < nSpill; i++) {
           const o = offsets[FISH + i];
           const tt = k - o[0] * 0.35;
           if (tt <= 0 || tt >= 1) continue;
@@ -205,6 +214,7 @@ export function createBrailer(ctx) {
       }
       fish.count = n;
       fish.instanceMatrix.needsUpdate = true;
+      return result;
     },
   };
   return brailer;

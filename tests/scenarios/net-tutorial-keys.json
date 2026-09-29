@@ -13,7 +13,7 @@
   "wait": 2500
  },
  {
-  "eval": "(() => {\n  const K = __KODIAK__, S = K.systems;\n  const wrap = (a) => ((((a + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI;\n  const hdg = (vx, vz) => Math.atan2(vx, -vz);\n  const p0 = S.seiner.position;\n  const sc = S.fish.nearestSchool(p0.x, p0.z, 1500).school;\n  const R = 58;\n  const dx = sc.position.x - p0.x, dz = sc.position.z - p0.z, d = Math.hypot(dx, dz);\n  const ux = dx / d, uz = dz / d;\n  const P = { x: sc.position.x - uz * R, z: sc.position.z + ux * R };\n  const pos = () => S.seiner.position;\n  const fwd = () => ({ x: Math.sin(S.seiner.heading), z: -Math.cos(S.seiner.heading) });\n  const F = () => S.fishing;\n  const band = () => F().hud.tensionBand;\n  window.__T = {\n    school: sc, P, R,\n    // Follow the approach line through P (parallel to spawn → school): heading correction from cross-track error.\n    aErr: () => {\n      const p = pos();\n      const ct = (p.x - P.x) * -uz + (p.z - P.z) * ux;\n      return wrap(hdg(ux, uz) - Math.atan(ct / 40) - S.seiner.heading);\n    },\n    distP: () => (P.x - pos().x) * ux + (P.z - pos().z) * uz,\n    abeam: () => { const f = fwd(); return (sc.position.x - pos().x) * f.x + (sc.position.z - pos().z) * f.z < 3; },\n    cErr: () => {\n      const p = pos(), cx = sc.position.x, cz = sc.position.z;\n      const ddx = p.x - cx, ddz = p.z - cz, dd = Math.hypot(ddx, ddz) || 1;\n      const k = Math.max(-0.8, Math.min(0.8, (dd - R) / 25));\n      return wrap(hdg(ddz / dd - (ddx / dd) * k, -ddx / dd - (ddz / dd) * k) - S.seiner.heading);\n    },\n    done: () => F().hud.closeReady || F().state !== 'setting',\n    st: () => F().state,\n    tHi: () => F().state !== 'pursing' || F().hud.tension > band()[0] + (band()[1] - band()[0]) * 0.68,\n    tLo: () => F().state !== 'pursing' || F().hud.tension < band()[0] + (band()[1] - band()[0]) * 0.3,\n    view: (mode) => {\n      if (K.systemStatus.cameraRig === 'ok') { K.camera(null); S.cameraRig.setMode(mode); return 'rig:' + mode; }\n      F().debug.cam(mode === 'crowsnest' ? 'crow' : mode); return 'debug:' + mode;\n    },\n  };\n  return JSON.stringify({ school: [Math.round(sc.position.x), Math.round(sc.position.z), sc.count, sc.species], P, d: Math.round(d) });\n})()"
+  "eval": "(() => {\n  const K = __KODIAK__, S = K.systems;\n  const wrap = (a) => ((((a + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI;\n  const hdg = (vx, vz) => Math.atan2(vx, -vz);\n  const p0 = S.seiner.position;\n  const sc = S.fish.nearestSchool(p0.x, p0.z, 1500).school;\n  const R = 58;\n  const dx = sc.position.x - p0.x, dz = sc.position.z - p0.z, d = Math.hypot(dx, dz);\n  const ux = dx / d, uz = dz / d;\n  const P = { x: sc.position.x - uz * R, z: sc.position.z + ux * R };\n  const pos = () => S.seiner.position;\n  const fwd = () => ({ x: Math.sin(S.seiner.heading), z: -Math.cos(S.seiner.heading) });\n  const F = () => S.fishing;\n  const band = () => F().hud.tensionBand;\n  // Metres to go until the school is abeam; armed once it has been well ahead (it may start astern of the spawn).\n  let armed = false;\n  let pauseT = 0;\n  const along = () => {\n    const f = fwd(), a = (sc.position.x - pos().x) * f.x + (sc.position.z - pos().z) * f.z;\n    if (a > 30) armed = true;\n    return armed ? a : 1e4;\n  };\n  window.__T = {\n    school: sc, P, R,\n    // Tangent guidance on the live school: the heading whose track passes it R metres to port (then the circle turns\n    // left around it), re-aimed from wherever the boat is, so a slow turn or a nudge off a tender never misses it.\n    aErr: () => {\n      const p = pos(), bx = sc.position.x - p.x, bz = sc.position.z - p.z, d = Math.hypot(bx, bz) || 1;\n      return wrap(hdg(bx, bz) + Math.asin(Math.min(1, R / d)) - S.seiner.heading);\n    },\n    distP: along,\n    abeam: () => along() < 3,\n    letGo: () => K.ctx.interact.current.action?.id === 'fishing-letgo',\n    cErr: () => {\n      const p = pos(), cx = sc.position.x, cz = sc.position.z;\n      const ddx = p.x - cx, ddz = p.z - cz, dd = Math.hypot(ddx, ddz) || 1;\n      const k = Math.max(-0.8, Math.min(0.8, (dd - R) / 25));\n      return wrap(hdg(ddz / dd - (ddx / dd) * k, -ddx / dd - (ddz / dd) * k) - S.seiner.heading);\n    },\n    done: () => F().hud.closeReady || F().state !== 'setting',\n    // Heading error to the skiff end (bringing her around when the net ran out short of it).\n    kErr: () => {\n      const g = K.systems.net.gap?.();\n      if (!g) return 0;\n      const p = pos();\n      return wrap(hdg(g.a.x - p.x, g.a.z - p.z) - S.seiner.heading);\n    },\n    ready: () => F().hud.closeReady && K.ctx.interact.current.action?.id === 'fishing-close',\n    // True once ms real milliseconds have passed since the first call of a wait.\n    pause: (ms) => {\n      const n = performance.now();\n      if (!pauseT) pauseT = n;\n      if (n - pauseT < ms) return false;\n      pauseT = 0;\n      return true;\n    },\n    st: () => F().state,\n    tHi: () => F().state !== 'pursing' || F().hud.tension > band()[0] + (band()[1] - band()[0]) * 0.68,\n    tLo: () => F().state !== 'pursing' || F().hud.tension < band()[0] + (band()[1] - band()[0]) * 0.3,\n    view: (mode) => {\n      if (K.systemStatus.cameraRig === 'ok') { K.camera(null); S.cameraRig.setMode(mode); return 'rig:' + mode; }\n      F().debug.cam(mode === 'crowsnest' ? 'crow' : mode); return 'debug:' + mode;\n    },\n  };\n  return JSON.stringify({ school: [Math.round(sc.position.x), Math.round(sc.position.z), sc.count, sc.species], P, d: Math.round(d) });\n})()"
  },
  {
   "eval": "__T.view('chase')"
@@ -47,7 +47,7 @@
   "down": true
  },
  {
-  "until": "__T.aErr() < 0.01",
+  "until": "__T.aErr() < 0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -59,7 +59,7 @@
   "down": true
  },
  {
-  "until": "__T.aErr() > -0.01",
+  "until": "__T.aErr() > -0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -75,7 +75,7 @@
   "down": true
  },
  {
-  "until": "__T.aErr() < 0.01",
+  "until": "__T.aErr() < 0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -87,7 +87,7 @@
   "down": true
  },
  {
-  "until": "__T.aErr() > -0.01",
+  "until": "__T.aErr() > -0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -103,7 +103,7 @@
   "down": true
  },
  {
-  "until": "__T.aErr() < 0.01",
+  "until": "__T.aErr() < 0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -115,7 +115,7 @@
   "down": true
  },
  {
-  "until": "__T.aErr() > -0.01",
+  "until": "__T.aErr() > -0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -131,7 +131,7 @@
   "down": true
  },
  {
-  "until": "__T.aErr() < 0.01",
+  "until": "__T.aErr() < 0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -143,7 +143,7 @@
   "down": true
  },
  {
-  "until": "__T.aErr() > -0.01",
+  "until": "__T.aErr() > -0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -168,7 +168,7 @@
   "down": true
  },
  {
-  "until": "__T.aErr() < 0.01",
+  "until": "__T.aErr() < 0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -180,7 +180,7 @@
   "down": true
  },
  {
-  "until": "__T.aErr() > -0.01",
+  "until": "__T.aErr() > -0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -196,7 +196,7 @@
   "down": true
  },
  {
-  "until": "__T.aErr() < 0.01",
+  "until": "__T.aErr() < 0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -208,7 +208,7 @@
   "down": true
  },
  {
-  "until": "__T.aErr() > -0.01",
+  "until": "__T.aErr() > -0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -224,7 +224,7 @@
   "down": true
  },
  {
-  "until": "__T.aErr() < 0.01",
+  "until": "__T.aErr() < 0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -236,7 +236,7 @@
   "down": true
  },
  {
-  "until": "__T.aErr() > -0.01",
+  "until": "__T.aErr() > -0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -276,7 +276,7 @@
   "down": true
  },
  {
-  "until": "__T.aErr() < 0.01",
+  "until": "__T.aErr() < 0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -288,7 +288,35 @@
   "down": true
  },
  {
-  "until": "__T.aErr() > -0.01",
+  "until": "__T.aErr() > -0.01 || __T.abeam()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.distP() < 100",
+  "timeout": 90000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() < 0.01 || __T.abeam()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() > -0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -304,7 +332,7 @@
   "down": true
  },
  {
-  "until": "__T.aErr() < 0.01",
+  "until": "__T.aErr() < 0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -316,7 +344,35 @@
   "down": true
  },
  {
-  "until": "__T.aErr() > -0.01",
+  "until": "__T.aErr() > -0.01 || __T.abeam()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.distP() < 60",
+  "timeout": 90000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() < 0.01 || __T.abeam()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() > -0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -332,7 +388,7 @@
   "down": true
  },
  {
-  "until": "__T.aErr() < 0.01",
+  "until": "__T.aErr() < 0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -344,7 +400,35 @@
   "down": true
  },
  {
-  "until": "__T.aErr() > -0.01",
+  "until": "__T.aErr() > -0.01 || __T.abeam()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.distP() < 25",
+  "timeout": 90000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() < 0.01 || __T.abeam()",
+  "timeout": 40000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.aErr() > -0.01 || __T.abeam()",
   "timeout": 40000
  },
  {
@@ -354,6 +438,10 @@
  {
   "until": "__T.abeam()",
   "timeout": 90000
+ },
+ {
+  "until": "__T.letGo()",
+  "timeout": 20000
  },
  {
   "state": "letgo"
@@ -1506,7 +1594,459 @@
   "timeout": 40000
  },
  {
-  "until": "__KODIAK__.systems.fishing.hud.closeReady || __KODIAK__.systems.fishing.state === 'holding'",
+  "until": "__T.ready() || __KODIAK__.systems.fishing.state === 'holding'",
+  "timeout": 120000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() < 0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() > -0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.ready() || __T.pause(1500)",
+  "timeout": 10000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() < 0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() > -0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.ready() || __T.pause(1500)",
+  "timeout": 10000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() < 0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() > -0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.ready() || __T.pause(1500)",
+  "timeout": 10000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() < 0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() > -0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.ready() || __T.pause(1500)",
+  "timeout": 10000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() < 0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() > -0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.ready() || __T.pause(1500)",
+  "timeout": 10000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() < 0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() > -0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.ready() || __T.pause(1500)",
+  "timeout": 10000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() < 0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() > -0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.ready() || __T.pause(1500)",
+  "timeout": 10000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() < 0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() > -0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.ready() || __T.pause(1500)",
+  "timeout": 10000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() < 0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() > -0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.ready() || __T.pause(1500)",
+  "timeout": 10000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() < 0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() > -0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.ready() || __T.pause(1500)",
+  "timeout": 10000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() < 0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() > -0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.ready() || __T.pause(1500)",
+  "timeout": 10000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() < 0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() > -0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.ready() || __T.pause(1500)",
+  "timeout": 10000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() < 0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() > -0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.ready() || __T.pause(1500)",
+  "timeout": 10000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() < 0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() > -0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.ready() || __T.pause(1500)",
+  "timeout": 10000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() < 0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() > -0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.ready() || __T.pause(1500)",
+  "timeout": 10000
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() < 0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "key": "KeyA",
+  "down": true
+ },
+ {
+  "until": "__T.kErr() > -0.02 || __T.ready()",
+  "timeout": 20000
+ },
+ {
+  "key": "KeyA",
+  "up": true
+ },
+ {
+  "until": "__T.ready() || __T.pause(1500)",
+  "timeout": 10000
+ },
+ {
+  "until": "__T.ready()",
   "timeout": 120000
  },
  {

@@ -275,7 +275,7 @@ test('upgrades: buy at the Kodiak yard; tiers raise modifiers; max tier stops', 
   const { ctx, economy: e } = w;
   e.addCash(100000, 'test');
   assert.equal(e.buy('sonar'), false);
-  assert.match(e.lastBuyError, /Kodiak harbour/);
+  assert.match(e.lastBuyError, /Kodiak harbor/);
   ctx.systems.seiner.setMooring({ kind: 'dock', placeId: 'kodiak' });
   const purchases = [];
   ctx.events.on('economy:purchase', (p) => purchases.push(p));
@@ -325,13 +325,15 @@ test('goals on seasonGross toast once and emit economy:goal', async () => {
   const goals = [];
   ctx.events.on('economy:goal', (g) => goals.push(g.label));
   ctx.clock.set(12, 0);
+  const first = e.goals()[0].gross;
   e.addCatch({ sockeye: 1500 });
   e.deliver(ctx.systems.fleet.tenders[0]);
-  assert.ok(e.stats.seasonGross >= 10000 * 0.85, `${e.stats.seasonGross}`);
-  if (e.stats.seasonGross < 10000) {
+  assert.deepEqual(goals, [], 'not yet');
+  while (e.stats.seasonGross < first) {
     e.addCatch({ sockeye: 400 });
     e.deliver(ctx.systems.fleet.tenders[0]);
   }
+  assert.ok(e.stats.seasonGross < e.goals()[1].gross);
   assert.deepEqual(goals, ['Covered the grub and fuel bill']);
   e.addCatch({ pink: 100 });
   e.deliver(ctx.systems.fleet.tenders[0]);
@@ -356,7 +358,7 @@ test('Highliner: first on the fleet board at the close of the sixth period or la
   assert.equal(goals.length, 1);
 });
 
-test('economy: tie up at a harbour snaps to the dock, moors, autosaves', async () => {
+test('economy: tie up at a harbor snaps to the dock, moors, autosaves', async () => {
   const w = await makeWorld();
   const { ctx, economy: e } = w;
   const kodiak = ctx.systems.places.get('kodiak');

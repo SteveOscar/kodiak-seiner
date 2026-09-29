@@ -558,9 +558,14 @@ void main() {
     vec3 nv = ( viewMatrix * vec4( N - vec3( 0.0, 1.0, 0.0 ), 0.0 ) ).xyz;
     vec2 ruv = rp.xy / rp.w + nv.xy * uRefl.z;
     float calm = 1.0 - smoothstep( 0.05, 0.22, rough );
-    if ( calm > 0.0 && all( greaterThan( ruv, vec2( 0.001 ) ) ) && all( lessThan( ruv, vec2( 0.999 ) ) ) ) {
+    // The image carries a guard band past the screen edges (reflection.js); lookups that the normal tilt pushes
+    // into its outer margin fade the mirror out instead of switching to the sky abruptly (a speckled seam).
+    vec2 redge = min( ruv, 1.0 - ruv );
+    float inside = smoothstep( 0.0, 0.02, min( redge.x, redge.y ) );
+    if ( calm * inside > 0.0 ) {
       // Depth is not filterable: soften the silhouette with a 4-tap mask (reduced-resolution target).
       vec2 tx = 0.75 / vec2( textureSize( uReflDepth, 0 ) );
+      ruv = clamp( ruv, tx, 1.0 - tx );
       vec4 dq = vec4(
         textureLod( uReflDepth, ruv + vec2( - tx.x, - tx.y ), 0.0 ).r,
         textureLod( uReflDepth, ruv + vec2( tx.x, - tx.y ), 0.0 ).r,
@@ -568,7 +573,7 @@ void main() {
         textureLod( uReflDepth, ruv + vec2( tx.x, tx.y ), 0.0 ).r );
       vec4 hq = uRefl.y > 0.5 ? step( vec4( 1e-7 ), dq ) : step( dq, vec4( 0.9999999 ) );
       float hit = dot( hq, vec4( 0.25 ) );
-      refl = mix( refl, textureLod( uReflTex, ruv, 0.0 ).rgb, hit * calm * uRefl.x );
+      refl = mix( refl, textureLod( uReflTex, ruv, 0.0 ).rgb, hit * calm * inside * uRefl.x );
     }
   }
 

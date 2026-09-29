@@ -32,6 +32,11 @@ export function createNetModel(ctx, rng) {
   const closeFromA = { x: 0, z: 0 };
   const closeFromB = { x: 0, z: 0 };
   const inv = new THREE.Matrix4();
+  // Scratch results reused every frame: polygon(), gap() and centroids are read many times per frame during a set.
+  const cen = { x: 0, z: 0 };
+  const gapA = { x: 0, z: 0 };
+  const gapB = { x: 0, z: 0 };
+  const gapOut = { a: gapA, b: gapB, width: 0 };
   const buntLocal = { r: HALF_BEAM + 1.1, f: -6.5 }; // seiner-frame offset of the skiff end after close-up
 
   // World-space attachment points, recomputed every update from the seiner pose.
@@ -155,7 +160,7 @@ export function createNetModel(ctx, rng) {
     close() {
       if (model.state === 'stowed' || model.closed) return;
       if (model.state === 'paying') sim.holdEnd();
-      const c = sim.centroid();
+      const c = sim.centroid(cen);
       const s = sys_().seiner;
       crossA = false;
       if (s?.position) {
@@ -241,6 +246,7 @@ export function createNetModel(ctx, rng) {
       model.hookHealth = 1;
       model.hauledMetres = 0;
       model.shoreTie = null;
+      // A fresh array: a consumer may still hold the last set's polygon for a frame.
       polyCache = [];
       model.corkline.length = 0;
       purseCmd = 0;
@@ -366,7 +372,7 @@ export function createNetModel(ctx, rng) {
       model.rockFraction = bc.rockFraction;
 
       // Current at the net (for corks going under while hauling).
-      const c = sim.centroid();
+      const c = sim.centroid(cen);
       env.currentAt(c.x, c.z, cur);
       model.currentSpeed = Math.hypot(cur.x, cur.z);
 
@@ -383,13 +389,17 @@ export function createNetModel(ctx, rng) {
       return polyCache.length >= 3 ? polyCache : null;
     },
 
+    // The returned object is reused: read it in the same frame.
     gap() {
       if (model.state === 'stowed' || model.closed || sim.count < 1) return null;
-      const a = { x: sim.x[0], z: sim.z[0] };
       const last = sim.count - 1;
       const paying = model.state === 'paying';
-      const b = paying ? { x: sim.tailX, z: sim.tailZ } : { x: sim.x[last], z: sim.z[last] };
-      return { a, b, width: Math.hypot(a.x - b.x, a.z - b.z) };
+      gapA.x = sim.x[0];
+      gapA.z = sim.z[0];
+      gapB.x = paying ? sim.tailX : sim.x[last];
+      gapB.z = paying ? sim.tailZ : sim.z[last];
+      gapOut.width = Math.hypot(gapA.x - gapB.x, gapA.z - gapB.z);
+      return gapOut;
     },
 
     containsPoint(x, z) {
@@ -437,7 +447,7 @@ export function createNetModel(ctx, rng) {
         return;
       }
     }
-    const c = sim.centroid();
+    const c = sim.centroid(cen);
     model.snagPoint.x = c.x;
     model.snagPoint.z = c.z;
   }
@@ -525,7 +535,8 @@ export function createNetModel(ctx, rng) {
     const tail = model.state === 'paying' && sim.tailActive;
     const m = tail ? c + 1 : c;
     while (polyPool.length < m) polyPool.push({ x: 0, z: 0 });
-    polyCache = polyPool.slice(0, m);
+    polyCache.length = m;
+    for (let i = 0; i < m; i++) polyCache[i] = polyPool[i];
     for (let i = 0; i < c; i++) {
       polyCache[i].x = sim.x[i];
       polyCache[i].z = sim.z[i];

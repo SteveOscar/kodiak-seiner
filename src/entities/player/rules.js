@@ -93,7 +93,7 @@ export const LANDING = Object.freeze({
 // Searches for the best walkable beach reachable in a straight skiff run from (x, z).
 //
 // opts: { heightAt(x, z) (sea level 0), shoreDistance?(x, z) (fast reject), reach, exclude?(x, z) -> bool,
-//         surfaceAt?(x, z) -> string (rock is penalised) }
+//         surfaceAt?(x, z) -> string (rock is penalised), penalty?(x, z) -> extra score (e.g. a bear close by) }
 // Returns { ok: true, landing } or { ok: false, reason: 'none' | 'steep' | 'excluded' }, where
 // landing = { x, z, y (beach height), shoreX, shoreZ (waterline), distance (from the boat), heading (boat to beach),
 //             slopeDeg (beach), score }.
@@ -160,7 +160,8 @@ export function findLanding(x, z, opts) {
     const beachDeg = Math.max(beach, lateral);
     if (beachDeg > R.beachDeg || inland > R.inlandDeg) continue;
     const surface = surfaceAt ? surfaceAt(bx, bz) : null;
-    const score = tDry + beachDeg * 1.5 + inland * 0.6 + (surface === 'rock' ? 45 : 0) + (surface === 'forest' ? 10 : 0);
+    const extra = opts.penalty ? opts.penalty(bx, bz) : 0;
+    const score = tDry + beachDeg * 1.5 + inland * 0.6 + (surface === 'rock' ? 45 : 0) + (surface === 'forest' ? 10 : 0) + (Number.isFinite(extra) ? extra : 0);
     if (!best || score < best.score) {
       best = { x: bx, z: bz, y: by, shoreX: x + ux * tWater, shoreZ: z + uz * tWater, distance: tDry, heading: a, slopeDeg: beachDeg, inlandDeg: inland, surface, score };
     }
@@ -191,6 +192,39 @@ export function dryPointAhead(heightAt, x, z, ux, uz, { maxAhead = 16, dry = 0.1
     return heightAt(qx, qz) >= dry ? { x: qx, z: qz } : { x: px, z: pz };
   }
   return null;
+}
+
+// Landing score penalty for a bear near the beach: nothing beyond `clear` metres, rising steeply closer in, so a beach
+// ~50 m from a fishing bear loses to any reasonable alternative but is still used when it is the only one.
+export function bearPenalty(distance, { clear = 55, weight = 3 } = {}) {
+  return Number.isFinite(distance) && distance < clear ? (clear - distance) * weight : 0;
+}
+
+// A standable spot right beside the skiff's bow (within `maxDist`), preferring dry ground up the beach: where the
+// deckhand is put back after a bear's bluff charge, inside the "Back to the boat" radius. Samples a fan ahead of the
+// bow; returns { x, z } or null.
+export function besideBow(heightAt, bowX, bowZ, ux, uz, { maxDist = 3.4, dry = 0.15, kneeDepth = FOOT_RULES.kneeDepth } = {}) {
+  let best = null;
+  let bestScore = -Infinity;
+  for (let r = 1; r <= maxDist + 1e-6; r += 0.6) {
+    for (const ang of [0, 0.35, -0.35, 0.75, -0.75, 1.2, -1.2]) {
+      const c = Math.cos(ang);
+      const s = Math.sin(ang);
+      const dx = ux * c - uz * s;
+      const dz = ux * s + uz * c;
+      const x = bowX + dx * r;
+      const z = bowZ + dz * r;
+      const h = heightAt(x, z);
+      if (h < -kneeDepth * 0.6) continue;
+      // Dry ground wins; then the least wading; then straight ahead and a little further up.
+      const score = (h >= dry ? 10 : 0) + Math.min(h, 1.5) * 2 - Math.abs(ang) * 0.6 + r * 0.15;
+      if (score > bestScore) {
+        bestScore = score;
+        best = { x, z };
+      }
+    }
+  }
+  return best;
 }
 
 // True when a walker at height y on (x, z) stands on a local high point: the ground `r` metres away is at least
@@ -237,16 +271,22 @@ export function findSummit(heightAt, cx, cz, radius = 150, step = 16) {
   return { x: bx, z: bz, h: bh };
 }
 
-// Spotting perch for a place: peaks use their summit, viewpoints the marked spot itself.
+// Spotting perch for a place: peaks use their summit; viewpoints the marked spot itself (within ~18 m) or the local
+// high point just behind it (within 40 m of the marker), so stepping off a skiff nearby does not count.
+export const PERCH = Object.freeze({ peakRadius: 32, peakDrop: 5, viewRadius: 18, viewDrop: 3, viewHillReach: 40, dwell: 2.5 });
 export function perchPoint(heightAt, place) {
-  if (place.kind === 'peak') return { ...findSummit(heightAt, place.x, place.z, Math.min(160, Math.max(60, place.radius ?? 150))), radius: 32, drop: 5 };
-  return { x: place.x, z: place.z, h: heightAt(place.x, place.z), radius: 45, drop: 4 };
+  if (place.kind === 'peak') return { ...findSummit(heightAt, place.x, place.z, Math.min(160, Math.max(60, place.radius ?? 150))), radius: PERCH.peakRadius, drop: PERCH.peakDrop };
+  const hill = findSummit(heightAt, place.x, place.z, PERCH.viewHillReach, 8);
+  return { x: place.x, z: place.z, h: heightAt(place.x, place.z), radius: PERCH.viewRadius, drop: PERCH.viewDrop, alt: { x: hill.x, z: hill.z, h: hill.h } };
 }
 
-// True when a walker at (x, y, z) stands on the summit: close to the top and nearly as high.
+// True when a walker at (x, y, z) stands on the summit (or the viewpoint's alternative high point): close to the top
+// and nearly as high.
 export function onSummit(x, y, z, summit, { radius = summit?.radius ?? 32, drop = summit?.drop ?? 5 } = {}) {
   if (!summit) return false;
-  return Math.hypot(x - summit.x, z - summit.z) <= radius && y >= summit.h - drop;
+  if (Math.hypot(x - summit.x, z - summit.z) <= radius && y >= summit.h - drop) return true;
+  const a = summit.alt;
+  return !!a && Math.hypot(x - a.x, z - a.z) <= radius && y >= a.h - drop;
 }
 
 export { clamp };

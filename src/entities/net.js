@@ -16,6 +16,7 @@ export async function create(ctx) {
   const buntFrom = new THREE.Vector3();
   const tail = new THREE.Vector3();
   const shoreEnd = new THREE.Vector3();
+  const bagCen = { x: 0, z: 0 };
   let foamTick = 0;
 
   const frame = {
@@ -120,7 +121,7 @@ export async function create(ctx) {
     const hauling = model.state === 'hauling' || model.state === 'brailing';
     if (hauling && c >= 3) {
       // The bag boils with fish as it dries up.
-      const cen = model.bagCentroid();
+      const cen = model.bagCentroid(bagCen);
       const r = Math.sqrt(Math.max(1, model.area) / Math.PI);
       const k = Math.min(1, Math.max(0, (model.hauled - 0.6) / 0.3));
       if (k > 0) w.stamp(cen.x, cen.z, Math.min(12, Math.max(2, r * 0.55)), 0.1 + 0.3 * k, 'foam');

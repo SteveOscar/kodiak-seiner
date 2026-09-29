@@ -5,7 +5,7 @@
 
 import * as cal from './data/calendar.js';
 import { buildWeatherPlan, presetAt, segmentKey, forecastFor } from './data/weather.js';
-import { priceFor as priceRule, keyedRandom, spokenPrice, formatMoney, fuelPriceAt } from './data/market.js';
+import { priceFor as priceRule, keyedRandom, spokenPrice, spokenDollars, formatMoney, fuelPriceAt } from './data/market.js';
 import { speciesMixAt } from './data/runs.js';
 import { FLEET, createBoard, creditThrough, boardRows, serializeBoard, restoreBoard } from './data/fleetBoard.js';
 import { LINES, FROM, CHANNELS, WELCOME, WELCOME_NONE, EXPLORE_WELCOME } from './data/radioLines.js';
@@ -24,6 +24,17 @@ const FALLBACK = {
 // Below go ashore (40) — closed days are for exploring, and a beach landing should win near shore — and below
 // deliver / tie-up (60); above "Drop anchor" (30).
 const WAIT_PRIORITY = 35;
+// Sleep leads E at anchor. Tied up at a harbor with services it ranks below Sell (68), Fuel up (67) and Harbor
+// services (64) — the harbor panel has its own Sleep and Wait buttons — but above Tie up / Deliver (60).
+const SLEEP_PRIORITY = 70;
+const SLEEP_AT_HARBOR_PRIORITY = 62;
+// Before the first set of a season, ambient chatter comes this many times less often (Uncle Pete is teaching).
+const TUTORIAL_AMBIENT_SCALE = 3;
+// Seconds a coaching tip holds routine radio traffic: the UI's card life (typing + reading + 3 s) plus a margin.
+const tipHoldSeconds = (text) => {
+  const n = String(text ?? '').length;
+  return Math.min(21, Math.min(16, n / 42 + 2.8 + n / 60) + 3 + 1.5);
+};
 // How a place is said on the radio: "City of Kodiak" → "Kodiak", "Awa'uq (Refuge Rock)" → "Awa'uq".
 const spokenName = (n) => String(n).replace(/^City of /, '').replace(/\s*\(.*\)\s*$/, '');
 const COMPASS8 = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
@@ -50,6 +61,7 @@ export async function create(ctx) {
   let welcomeAt = null;
   let peteCount = 0;
   let peteNextAt = 0;
+  let noaaDeferredDay = null;
   const announced = new Set();
   const mixCache = new Map();
   const districtCache = new Map();
@@ -284,6 +296,8 @@ export async function create(ctx) {
       dogc: () => spokenPrice(priceFor('chum', tid)),
       silverc: () => spokenPrice(priceFor('coho', tid)),
       fuel: () => formatMoney(fuelPriceAt({ isTender: true }, config.economy), true),
+      towFee: () => spokenDollars(config.economy.towCost),
+      towTotal: () => spokenDollars(ctx.systems.economy?.towQuote?.()?.total ?? config.economy.towCost),
       weekday: dateOf(clock.day).weekday,
       date: dateOf(clock.day).label,
       ...extra,
@@ -336,6 +350,17 @@ export async function create(ctx) {
     return compose(category);
   }
 
+  // The first set of a season is Uncle Pete's tutorial (fishing's ui:hint tips). Until it is done — setNumber ≥ 1 and
+  // fishing idle again — on a fishing day the radio keeps routine traffic down: no morning/opener chatter, NOAA and
+  // Coast Guard broadcasts wait, ambient lines come TUTORIAL_AMBIENT_SCALE× less often.
+  function firstSetPending() {
+    if (ctx.state.freeExplore) return false;
+    const f = ctx.systems.fishing;
+    if (typeof f?.setNumber !== 'number') return false;
+    return f.setNumber < 1 || (f.setNumber === 1 && (f.state ?? 'idle') !== 'idle');
+  }
+  const tutorialQuiet = () => firstSetPending() && cal.isFishingDay(config, clock.day);
+
   // Other systems may queue rate-limited radio through the season: season.radioSay({from, text, channel}, opts).
   function radioSay(msg, opts = {}) {
     if (!msg?.text) return false;
@@ -354,8 +379,11 @@ export async function create(ctx) {
   function announcePeriod(period, reminder, delay = 0) {
     const d = dateOf(period.day);
     const except = exceptText(period.closed);
+    const openNow = clock.day === period.day && clock.hours >= config.time.openerStart;
     const text = reminder
-      ? `Fish and Game Kodiak reminds all purse seiners: the Kodiak Management Area opens at 6 a.m. today${except}, until 10 p.m.`
+      ? openNow
+        ? `Fish and Game Kodiak reminds all purse seiners: the Kodiak Management Area is open to purse seining today${except}, until 10 p.m.`
+        : `Fish and Game Kodiak reminds all purse seiners: the Kodiak Management Area opens at 6 a.m. today${except}, until 10 p.m.`
       : `Attention all Kodiak purse seiners, this is Fish and Game Kodiak. By emergency order, all districts of the Kodiak Management Area${except} will open to purse seining from 6 a.m. until 10 p.m. ${d.long}.`;
     const last = period.day === config.season.fishingDays[config.season.fishingDays.length - 1];
     const then = {
@@ -392,8 +420,9 @@ export async function create(ctx) {
     if (!top.length) return;
     const lbs = (n) => Math.round(n).toLocaleString('en-US');
     const parts = top.map((b) => `${b.name} ${lbs(b.last.lbs)}`);
+    // The tender reads everyone's pounds to the nearest hundred, the player's too.
     const mine = ctx.systems.economy?.stats?.daily?.[day]?.lbs ?? 0;
-    if (mine > 0) parts.push(`${ctx.systems.seiner?.boatName ?? 'Northern Dawn'} ${lbs(mine)}`);
+    if (mine > 0) parts.push(`${ctx.systems.seiner?.boatName ?? 'Northern Dawn'} ${lbs(Math.max(100, Math.round(mine / 100) * 100))}`);
     radio.push({ from: t.name, text: `${t.name} with the daily deliveries: ${parts.join(', ')}. Thanks, fleet — see you next period.`, channel: tenderChannel(t) }, { priority: 3, ttl: 600 });
   }
 
@@ -402,6 +431,7 @@ export async function create(ctx) {
     const h = clock.hours;
     const day = clock.day;
     const explore = ctx.state.freeExplore;
+    const tutorial = tutorialQuiet();
     const once = (key, fn) => {
       if (announced.has(key)) return;
       announced.add(key);
@@ -414,20 +444,35 @@ export async function create(ctx) {
       if (today && h >= 4.5 && h < 6.5 && !announced.has(`eve:${day}`)) once(`eve:${day}`, () => announcePeriod(today, true));
       if (today && h >= 22.3 && h < 23.8) once(`report:${day}`, () => fleetReport(day));
       if (today && h >= 21 && h < 21.5) once(`hourleft:${day}`, () => say('evening', {}, { priority: 1, ttl: 60 }));
-      if (today && h >= 5.6 && h < 6) once(`morning:${day}`, () => say('morning', {}, { priority: 1, ttl: 40 }));
+      if (today && h >= 5.6 && h < 6 && !tutorial) once(`morning:${day}`, () => say('morning', {}, { priority: 1, ttl: 40 }));
     }
-    if (h >= 6.25 && h < 9) once(`noaa:${day}:am`, () => noaaBroadcast('am'));
-    if (h >= 17.5 && h < 20.5) once(`noaa:${day}:pm`, () => noaaBroadcast('pm'));
+    // During the first set NOAA and the Coast Guard wait; the morning forecast then runs late (until noon).
+    if (tutorial && h >= 6.25 && h < 9) noaaDeferredDay = day;
+    if (!tutorial && h >= 6.25 && h < (noaaDeferredDay === day ? 12 : 9)) once(`noaa:${day}:am`, () => noaaBroadcast('am'));
+    if (!tutorial && h >= 17.5 && h < 20.5) once(`noaa:${day}:pm`, () => noaaBroadcast('pm'));
     const uscgHour = 9 + keyedRandom(miscSeed, `uscg:${day}`) * 9;
-    if (keyedRandom(miscSeed, `uscg-on:${day}`) < 0.7 && h >= uscgHour && h < uscgHour + 1.5) once(`uscg:${day}`, uscgBroadcast);
+    if (!tutorial && keyedRandom(miscSeed, `uscg-on:${day}`) < 0.7 && h >= uscgHour && h < uscgHour + 1.5) once(`uscg:${day}`, uscgBroadcast);
     if (announced.size > 400) {
       for (const k of [...announced].slice(0, 200)) announced.delete(k);
     }
   }
 
+  // Pete's word on the opener, from the clock: "Opener's at six." before 05:50, then "Six o'clock's coming up.", then
+  // "We're open." (the welcome can land late when the radio is busy).
+  function openerWords() {
+    const p = seiner()?.position;
+    if (openerActive(p?.x, p?.z)) return { opener: "We're open.", go: "We're open — go get 'em." };
+    const n = nextOpener(p?.x, p?.z);
+    if (!n) return { opener: "Season's over.", go: 'Go have a look.' };
+    if (n.day !== clock.day) return { opener: `Next opener's ${dateOf(n.day).weekday}.`, go: `Next opener's ${dateOf(n.day).weekday} — go have a look.` };
+    if (n.inHours <= 1 / 6) return { opener: "Six o'clock's coming up.", go: "Six o'clock's coming up — get ready." };
+    return { opener: "Opener's at six.", go: "Opens at six — go get 'em." };
+  }
+
   function tutorialWelcome() {
     const s = ctx.systems.seiner;
     const me = s?.boatName ?? 'Northern Dawn';
+    const words = openerWords();
     if (ctx.state.freeExplore) {
       radio.push({ from: FROM.pete, text: fillTemplate(EXPLORE_WELCOME[0], { me }), channel: CHANNELS.fleet }, { priority: 5, ttl: 60 });
       return;
@@ -439,7 +484,7 @@ export async function create(ctx) {
       .filter((o) => o.d < 1500)
       .sort((a, b) => (a.sc.species === 'pink' ? 0 : 1) - (b.sc.species === 'pink' ? 0 : 1) || a.d - b.d)[0] : null;
     if (!school) {
-      radio.push({ from: FROM.pete, text: fillTemplate(WELCOME_NONE[0], { me }), channel: CHANNELS.fleet }, { priority: 5, ttl: 60 });
+      radio.push({ from: FROM.pete, text: fillTemplate(WELCOME_NONE[0], { me, opener: words.opener }), channel: CHANNELS.fleet }, { priority: 5, ttl: 60 });
       return;
     }
     const dx = school.sc.position.x - p.x;
@@ -448,10 +493,11 @@ export async function create(ctx) {
     const dir = COMPASS8[Math.round((((brg * 180) / Math.PI + 360) % 360) / 45) % 8];
     let rel = (((brg - (s.heading ?? 0)) * 180) / Math.PI + 540) % 360 - 180;
     const relText = Math.abs(rel) < 25 ? 'dead ahead' : Math.abs(rel) > 155 ? 'right behind you' : `off your ${rel > 0 ? 'starboard' : 'port'} ${Math.abs(rel) < 70 ? 'bow' : Math.abs(rel) < 115 ? 'beam' : 'quarter'}`;
-    // Boats and fish are real size, so Pete judges distance by eye in real miles, not chart miles.
+    // Boats and fish are real size, so Pete judges distance by eye in real miles, not chart miles: ~400 m is "a
+    // quarter mile", 500–1,000 m "half a mile".
     const nm = school.d / 1852;
-    const dist = nm < 0.2 ? 'a couple hundred yards' : nm < 0.4 ? 'a quarter mile' : nm < 0.75 ? 'half a mile' : nm < 1.25 ? 'about a mile' : `${Math.round(nm)} miles`;
-    const text = fillTemplate(WELCOME[Math.floor(radioRng.next() * WELCOME.length)], { me, dist, dir, rel: relText });
+    const dist = nm < 0.15 ? 'a couple hundred yards' : nm < 0.27 ? 'a quarter mile' : nm < 0.75 ? 'half a mile' : nm < 1.25 ? 'about a mile' : `${Math.round(nm)} miles`;
+    const text = fillTemplate(WELCOME[Math.floor(radioRng.next() * WELCOME.length)], { me, dist, dir, rel: relText, opener: words.opener, go: words.go });
     radio.push({ from: FROM.pete, text, channel: CHANNELS.fleet }, { priority: 8, ttl: 90 });
   }
 
@@ -549,7 +595,8 @@ export async function create(ctx) {
     if (!idle) return;
     const p = s.position;
     if (s.mooring) {
-      if (canSleep().ok) ctx.interact.offer({ id: 'sleep', label: 'Sleep until morning', key: 'interact', priority: 70, onPress: sleep });
+      const harbor = s.mooring.kind === 'dock' && (ctx.systems.places?.get?.(s.mooring.placeId)?.services?.length ?? 0) > 0;
+      if (canSleep().ok) ctx.interact.offer({ id: 'sleep', label: 'Sleep until morning', key: 'interact', priority: harbor ? SLEEP_AT_HARBOR_PRIORITY : SLEEP_PRIORITY, onPress: sleep });
       const w = canWait();
       if (w.ok) {
         const d = dateOf(w.opener.day);
@@ -561,6 +608,8 @@ export async function create(ctx) {
     const depth = heightmap.depthAt(p.x, p.z);
     if (depth < 3 || depth > 70) return;
     if (!ctx.state.freeExplore && openerActive(p.x, p.z) && clock.hours < 21) return;
+    // Before the first set of a season the fish are the point; the half hour before the opener is no time to anchor.
+    if (tutorialQuiet() && clock.hours < 21) return;
     ctx.interact.offer({ id: 'anchor', label: 'Drop anchor', key: 'interact', priority: 30, onPress: dropAnchor });
   }
 
@@ -590,7 +639,7 @@ export async function create(ctx) {
     }
     if (nowDay !== null) {
       events.emit('opener:start', { day: nowDay });
-      say('openerStart', {}, { priority: 3, ttl: 30, delay: 1.5 });
+      if (!tutorialQuiet()) say('openerStart', {}, { priority: 3, ttl: 30, delay: 1.5 });
     }
     openDay = nowDay;
     if (!open) checkSeasonEnd();
@@ -620,12 +669,14 @@ export async function create(ctx) {
       applyWeather(0);
       creditBoard();
       welcomeAt = e?.newGame ? radio.time + 3.5 : null;
-      // On a new season Pete's welcome comes first; Fish and Game's opening reminder follows it.
+      // On a new season Pete's welcome comes first; Fish and Game's opening reminder and its closed-waters follow-up
+      // come straight after it, so both are done before six and the opener belongs to Pete's tips.
       const today = cal.periodOn(config, clock.day);
       if (e?.newGame && !ctx.state.freeExplore && today && clock.hours < 6.5) {
         announced.add(`eve:${clock.day}`);
-        announcePeriod(today, true, 16);
+        announcePeriod(today, true, 12);
       }
+      noaaDeferredDay = null;
       peteCount = 0;
       peteNextAt = radio.time + 150;
     }),
@@ -670,6 +721,19 @@ export async function create(ctx) {
         const line = LINES.goal[Math.min(LINES.goal.length - 1, e.index)];
         radio.push({ from: FROM.pete, text: fillTemplate(line, tokens()), channel: CHANNELS.fleet }, { priority: 4, delay: 4, ttl: 120 });
       }
+    }),
+    // A coaching tip on the radio (ui:hint with a speaker): hold routine traffic while it is read.
+    events.on('ui:hint', (e) => {
+      if (e?.from && e.text && ctx.state.mode === 'play') radio.hold(tipHoldSeconds(e.text));
+    }),
+    // The seiner inside the Marmot Island rookery buffer: NOAA Fisheries reminds it of the no-approach zone.
+    events.on('wildlife:disturbed', (e) => {
+      if (!e?.closed || ctx.state.mode !== 'play') return;
+      const site = ctx.systems.places?.get?.(e.siteId)?.name;
+      const where = site ? spokenName(site) : 'Marmot Island';
+      const me = seiner()?.boatName ?? 'Northern Dawn';
+      const text = `${me}, NOAA Fisheries on one-six. You are inside the ${where} sea lion rookery buffer. Steller sea lion rookeries carry a three-mile no-approach zone — turn away now and stay outside three miles.`;
+      radio.push({ from: FROM.nmfs, text, channel: CHANNELS.distress }, { priority: 5, ttl: 60, delay: 1.5, key: 'rookery', cooldown: 600 });
     }),
     events.on('weather:change', (e) => {
       if (ctx.state.mode !== 'play') return;
@@ -724,12 +788,12 @@ export async function create(ctx) {
         welcomeAt = null;
         tutorialWelcome();
       }
-      if (!ctx.state.freeExplore && clock.day <= 5 && lastOpen && peteCount < 4 && radio.time >= peteNextAt && (ctx.systems.fishing?.state ?? 'idle') === 'idle') {
+      if (!ctx.state.freeExplore && clock.day <= 5 && lastOpen && peteCount < 4 && radio.time >= peteNextAt && (ctx.systems.fishing?.state ?? 'idle') === 'idle' && !tutorialQuiet()) {
         peteNextAt = radio.time + 190 + radioRng.next() * 140;
         const m = compose('pete', { kind: 'pete' });
         if (m && radio.push(m, { priority: 1, ttl: 30 })) peteCount++;
       }
-      radio.update(dt, { open: lastOpen || !!ctx.state.freeExplore, hours: clock.hours, fishingDay: cal.isFishingDay(config, clock.day), preset: ctx.systems.sky?.weather?.preset ?? null, quiet: false }, ambient);
+      radio.update(dt, { open: lastOpen || !!ctx.state.freeExplore, hours: clock.hours, fishingDay: cal.isFishingDay(config, clock.day), preset: ctx.systems.sky?.weather?.preset ?? null, quiet: false, ambientScale: tutorialQuiet() ? TUTORIAL_AMBIENT_SCALE : 1 }, ambient);
       offerRest();
     },
 
@@ -768,6 +832,7 @@ export async function create(ctx) {
       lastSegKey = null;
       lastAppliedPreset = null;
       welcomeAt = null;
+      noaaDeferredDay = null;
       save.suspend();
     },
     dispose() {

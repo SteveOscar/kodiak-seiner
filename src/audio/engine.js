@@ -7,9 +7,9 @@ import { createVoiceTable } from './voices.js';
 import { airCutoff, travelDelay, TUNING, clamp } from './params.js';
 
 // Rough durations for admission (the recipe returns the exact end once scheduled).
-const EST = { 'surf-break': 7, thunder: 8, 'whale-blow': 3.2, breach: 3.5, radio: 4, stinger: 4, discovery: 5, horn: 2.2, 'anchor-chain': 4, sealion: 2 };
+const EST = { 'surf-break': 7, thunder: 8, 'whale-blow': 3.2, breach: 3.5, radio: 4, stinger: 4, discovery: 5, horn: 2.2, 'anchor-chain': 4, sealion: 2, stampede: 8, summit: 4.5 };
 // Simultaneous voices per recipe.
-const CAPS = { 'fish-jump': 6, splash: 5, gull: 4, footstep: 3, cork: 4, 'hull-slap': 3, clink: 2, 'surf-break': 3, 'whale-blow': 3, sealion: 4, eagle: 2, 'ui-click': 2, 'ui-toast': 2, radio: 3, thunder: 2, 'brail-dip': 2, 'brail-dump': 2, collision: 2, horn: 2, boil: 2, 'anchor-chain': 1 };
+const CAPS = { 'fish-jump': 6, splash: 5, gull: 4, footstep: 3, cork: 4, 'hull-slap': 3, clink: 2, 'surf-break': 3, 'whale-blow': 3, sealion: 4, eagle: 2, 'ui-click': 2, 'ui-toast': 2, radio: 3, thunder: 2, 'brail-dip': 2, 'brail-dump': 2, collision: 2, horn: 2, boil: 2, 'anchor-chain': 1, stampede: 1, summit: 1 };
 
 export function createPlayer(ac, kit, mixer, { maxVoices = TUNING.maxVoices } = {}) {
   const voices = createVoiceTable(maxVoices, { stealAge: 0.4 });

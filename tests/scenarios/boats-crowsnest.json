@@ -1,0 +1,175 @@
+[
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+  "timeout": 120000
+ },
+ {
+  "start": {
+   "freeExplore": true
+  }
+ },
+ {
+  "time": 8.3
+ },
+ {
+  "weather": "partly"
+ },
+ {
+  "teleport": [
+   5850,
+   -520,
+   200
+  ]
+ },
+ {
+  "wait": 2000
+ },
+ {
+  "eval": "window.__K = __KODIAK__; window.__S = __K.systems.seiner; window.__F = __K.systems.skiff; window.__cam = () => { const d = __K.systems.cameraRig.debugState(); return { mode: d.mode, y: d.pos[1], fov: d.fov, wx: __K.systems.sky.weather.preset, payout: +(__K.systems.fishing.hud?.payout ?? 0).toFixed(2), phase: __K.systems.fishing.state }; }; const f = __S.forward(); const r = { x: -f.z, z: f.x }; __K.systems.fish.spawnSchool?.({ x: __S.position.x + f.x * 120 + r.x * 60, z: __S.position.z + f.z * 120 + r.z * 60, species: 'pink', count: 5000, milling: true }); true"
+ },
+ {
+  "key": "KeyW",
+  "down": true
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "press": "Space"
+ },
+ {
+  "wait": 2600
+ },
+ {
+  "eval": "__cam()"
+ },
+ {
+  "shot": "cn-01-letgo-partly"
+ },
+ {
+  "wait": 16000
+ },
+ {
+  "eval": "__cam()"
+ },
+ {
+  "shot": "cn-02a-line-partly"
+ },
+ {
+  "weather": "overcast"
+ },
+ {
+  "wait": 3500
+ },
+ {
+  "eval": "__cam()"
+ },
+ {
+  "shot": "cn-02b-line-overcast"
+ },
+ {
+  "weather": "partly"
+ },
+ {
+  "key": "KeyD",
+  "down": true
+ },
+ {
+  "until": "(__KODIAK__.systems.fishing.hud?.payout ?? 0) > 0.5",
+  "timeout": 60000
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "eval": "__cam()"
+ },
+ {
+  "shot": "cn-02-payout50-partly"
+ },
+ {
+  "weather": "overcast"
+ },
+ {
+  "wait": 4000
+ },
+ {
+  "eval": "__cam()"
+ },
+ {
+  "shot": "cn-03-payout-overcast"
+ },
+ {
+  "weather": "partly"
+ },
+ {
+  "until": "__KODIAK__.systems.fishing.state === 'holding' || (__KODIAK__.systems.fishing.hud?.payout ?? 0) > 0.97",
+  "timeout": 60000
+ },
+ {
+  "key": "KeyD",
+  "up": true
+ },
+ {
+  "wait": 3500
+ },
+ {
+  "eval": "__cam()"
+ },
+ {
+  "shot": "cn-04-holding-partly"
+ },
+ {
+  "weather": "overcast"
+ },
+ {
+  "wait": 4000
+ },
+ {
+  "eval": "__cam()"
+ },
+ {
+  "shot": "cn-05-holding-overcast"
+ },
+ {
+  "weather": "partly"
+ },
+ {
+  "key": "KeyW",
+  "up": true
+ },
+ {
+  "eval": "__K.systems.fishing.debug.stage({ x: 5850, z: -580, phase: 'pursing', pursed: 0.3 })"
+ },
+ {
+  "until": "__KODIAK__.systems.fishing.state === 'pursing'",
+  "timeout": 20000
+ },
+ {
+  "eval": "__K.systems.cameraRig.setMode('crowsnest'); true"
+ },
+ {
+  "wait": 5000
+ },
+ {
+  "eval": "__cam()"
+ },
+ {
+  "shot": "cn-06-pursing-partly"
+ },
+ {
+  "weather": "rain"
+ },
+ {
+  "wait": 4000
+ },
+ {
+  "eval": "__cam()"
+ },
+ {
+  "shot": "cn-07-pursing-rain"
+ },
+ {
+  "state": "end"
+ }
+]

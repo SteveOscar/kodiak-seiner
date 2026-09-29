@@ -481,6 +481,9 @@ export async function create(ctx) {
       for (const s of d.sightings ?? []) if (s && (s.type === 'fish' || s.type === 'wildlife')) sightings.add({ ...s });
       for (const i of d.intel ?? []) if (i?.id && i.text) intel.push({ ...i });
       for (const q of d.perches ?? []) if (q?.placeId) perches.push({ ...q });
+      // The spotter's last call is an absolute game hour; a load may move the clock back.
+      spotterCallAt = -99;
+      spotterT = 0;
       silentHome();
     },
 
@@ -494,6 +497,7 @@ export async function create(ctx) {
       lastMark.clear();
       checkT = 0;
       spotterT = 0;
+      spotterCallAt = -99;
       silentHome();
     },
   };

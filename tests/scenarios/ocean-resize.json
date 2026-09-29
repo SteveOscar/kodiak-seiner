@@ -1,0 +1,122 @@
+[
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+  "timeout": 150000
+ },
+ {
+  "start": {}
+ },
+ {
+  "eval": "document.querySelectorAll('vite-error-overlay').forEach((e) => e.remove()); 1"
+ },
+ {
+  "weather": "clear"
+ },
+ {
+  "eval": "__KODIAK__.systems.water.overrideSea({ windSpeed: 0.8, swell: 0.3 }); 1"
+ },
+ {
+  "time": 8
+ },
+ {
+  "teleport": [
+   6083,
+   -852,
+   250
+  ]
+ },
+ {
+  "camera": {
+   "pos": [
+    6300,
+    9,
+    -700
+   ],
+   "look": [
+    5000,
+    30,
+    -1250
+   ]
+  }
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "shot": "p0-initial"
+ },
+ {
+  "until": "(() => { const s = __KODIAK__.systems.water.qaPasses.reflectionStatus?.(); return !!(s && s.complete && s.uniformDepthCurrent && s.color[0] === s.depth[0] && s.color[1] === s.depth[1] && s.color[0] === s.expected[0] && __KODIAK__.systems.water.debugState().reflection > 0); })()",
+  "timeout": 6000
+ },
+ {
+  "eval": "JSON.stringify({ pr: __KODIAK__.ctx.renderer.getPixelRatio(), st: __KODIAK__.systems.water.qaPasses.reflectionStatus?.(), ds: __KODIAK__.systems.water.debugState().reflection })",
+  "label": "status0"
+ },
+ {
+  "eval": "__KODIAK__.ctx.pipeline.setPixelRatio(0.875); 1"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "eval": "__KODIAK__.ctx.pipeline.setPixelRatio(1.0); 1"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "shot": "p1-ratio1.0"
+ },
+ {
+  "until": "(() => { const s = __KODIAK__.systems.water.qaPasses.reflectionStatus?.(); return !!(s && s.complete && s.uniformDepthCurrent && s.color[0] === s.depth[0] && s.color[1] === s.depth[1] && s.color[0] === s.expected[0] && __KODIAK__.systems.water.debugState().reflection > 0); })()",
+  "timeout": 6000
+ },
+ {
+  "eval": "JSON.stringify({ pr: __KODIAK__.ctx.renderer.getPixelRatio(), st: __KODIAK__.systems.water.qaPasses.reflectionStatus?.(), ds: __KODIAK__.systems.water.debugState().reflection })",
+  "label": "status1"
+ },
+ {
+  "eval": "__KODIAK__.ctx.pipeline.setPixelRatio(1.5); 1"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "shot": "p2-ratio1.5"
+ },
+ {
+  "until": "(() => { const s = __KODIAK__.systems.water.qaPasses.reflectionStatus?.(); return !!(s && s.complete && s.uniformDepthCurrent && s.color[0] === s.depth[0] && s.color[1] === s.depth[1] && s.color[0] === s.expected[0] && __KODIAK__.systems.water.debugState().reflection > 0); })()",
+  "timeout": 6000
+ },
+ {
+  "eval": "JSON.stringify({ pr: __KODIAK__.ctx.renderer.getPixelRatio(), st: __KODIAK__.systems.water.qaPasses.reflectionStatus?.(), ds: __KODIAK__.systems.water.debugState().reflection })",
+  "label": "status2"
+ },
+ {
+  "time": 20
+ },
+ {
+  "eval": "__KODIAK__.ctx.pipeline.setPixelRatio(1.25); 1"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "time": 8
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "shot": "p3-resized-while-idle"
+ },
+ {
+  "until": "(() => { const s = __KODIAK__.systems.water.qaPasses.reflectionStatus?.(); return !!(s && s.complete && s.uniformDepthCurrent && s.color[0] === s.depth[0] && s.color[1] === s.depth[1] && s.color[0] === s.expected[0] && __KODIAK__.systems.water.debugState().reflection > 0); })()",
+  "timeout": 6000
+ },
+ {
+  "eval": "JSON.stringify({ pr: __KODIAK__.ctx.renderer.getPixelRatio(), st: __KODIAK__.systems.water.qaPasses.reflectionStatus?.(), ds: __KODIAK__.systems.water.debugState().reflection })",
+  "label": "status3"
+ }
+]

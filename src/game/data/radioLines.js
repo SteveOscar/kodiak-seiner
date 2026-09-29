@@ -4,7 +4,8 @@
 //
 // Tokens: {me} player's boat, {boat} another fleet boat, {skipper} that boat's skipper, {cape} {bay} {place}
 // {harbor} nearby names, {tender}, {pinkc} {redc} {dogc} {silverc} spoken prices, {fuel} tender fuel price,
-// {lbs}, {dist} {dir} {rel} directions, {weekday} {date}.
+// {lbs}, {dist} {dir} {rel} directions, {weekday} {date}, {towFee} {towTotal} spoken tow price, {opener} {go}
+// (Pete's welcome, worded from the clock).
 // `w` weights a line within its category; `wx` limits it to sky presets.
 
 export const CHANNELS = { fleet: '10', distress: '16', uscg: '22A', noaa: 'WX1' };
@@ -16,6 +17,7 @@ export const FROM = {
   pete: 'Uncle Pete',
   spotter: 'Spotter Two-Seven Kilo',
   trooper: 'Wildlife Trooper P/V Enforcer',
+  nmfs: 'NOAA Fisheries',
 };
 
 export const LINES = {
@@ -266,7 +268,7 @@ export const LINES = {
   ],
   holdFull: ["Pete here. Sounds like you're plugged, {me}. Go see a tender before you lose any more fish."],
   lowFuel: ['{me}, you sound thirsty. We have diesel — come alongside.'],
-  tow: ["{tender} to {me}: heard you're out of fuel. We can come get you — seven-fifty for the tow and we'll put some diesel in you. Say the word."],
+  tow: ["{tender} to {me}: heard you're out of fuel. We can come get you — {towFee} for the tow plus diesel to get you going, call it {towTotal}. Say the word."],
   fogIn: ["Fog's rolling in. Radar on, everybody.", "Here comes the fog. Can't see {boat} anymore — I'll miss that ugly boat."],
   blowIn: ['Here comes the blow. Batten down, boys.', "Wind's filling in hard from the southeast. Get your skiffs aboard."],
   goal: [
@@ -277,10 +279,11 @@ export const LINES = {
   highliner: ["Tender's saying {me} is highliner. Karluk Queen's not gonna like that one bit."],
 };
 
-// Pete's welcome on a new season, pointing at the tutorial school.
+// Pete's welcome on a new season, pointing at the tutorial school. {opener} / {go} are worded from the clock
+// ("Opener's at six." / "Opens at six — go get 'em." before six, "We're open." after).
 export const WELCOME = [
-  "Morning, {me}! Pete here. Opener's at six. I saw humpies popping {dist} {dir} of you — {rel}. Go have a look.",
-  "{me}, it's Uncle Pete. Big school of humpies milling {dist} {dir} of you, {rel}. Opens at six — go get 'em.",
+  "Morning, {me}! Pete here. {opener} I saw humpies popping {dist} {dir} of you — {rel}. Go have a look.",
+  "{me}, it's Uncle Pete. Big school of humpies milling {dist} {dir} of you, {rel}. {go}",
 ];
-export const WELCOME_NONE = ["Morning, {me}! Pete here. Opener's at six. Watch for jumpers along the beaches — humpies pop like popcorn."];
+export const WELCOME_NONE = ["Morning, {me}! Pete here. {opener} Watch for jumpers along the beaches — humpies pop like popcorn."];
 export const EXPLORE_WELCOME = ['Pete here. No openers, no fish tickets — just the island. Go see what’s around the next point, {me}.'];

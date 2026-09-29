@@ -37,6 +37,7 @@ export function createMist(ctx, rng, mistNoiseTexture, fogUniforms, coverTexture
     uTime: uniforms.uTime,
     uDrift: { value: new THREE.Vector3() },
     uDensity: { value: 1 },
+    uOverhead: { value: 0 },
   };
   const material = new THREE.ShaderMaterial({
     name: 'sky-mist',
@@ -77,6 +78,7 @@ export function createMist(ctx, rng, mistNoiseTexture, fogUniforms, coverTexture
       uniform float fogDensity;
       uniform vec3 uDrift;
       uniform float uDensity;
+      uniform float uOverhead;
       varying vec3 vWorld;
       varying vec3 vCenter;
       varying vec3 vRadii;
@@ -130,8 +132,13 @@ export function createMist(ctx, rng, mistNoiseTexture, fogUniforms, coverTexture
           + texture2D( uTerrainShadow, hmUv( pMid.xz + vec2( -30.0, 80.0 ) ) ).r + texture2D( uTerrainShadow, hmUv( pMid.xz + vec2( 30.0, -80.0 ) ) ).r;
         float lit = mix( 1.0, sh * 0.25, 0.6 );
         vec3 keyRad = keyW * phase * lit;
-        // Bays: a flat-topped pool whose top undulates; its extent follows a slow 2D coverage field.
+        // Bays: a pool that thins toward a ragged, noisy top; its extent follows a slow 2D coverage field. Thin pools
+        // (fine weather) are shallow and faint, so a clear morning keeps wisps on the water instead of a slab.
         vec2 cov2 = texture2D( uCoverNoise, vCenter.xz / 1900.0 + seed ).rg;
+        float amount = clamp( presence / 0.6, 0.0, 1.0 );
+        // Overhead gameplay camera (crow's nest): banks between the camera and the sea below fade so the set stays
+        // readable; banks toward the horizon keep their look.
+        float overhead = 1.0 - 0.92 * uOverhead * smoothstep( 0.2, 0.55, - rd.y );
         float tA = t0;
         vec3 pA = ro + rd * t0;
         float aboveA = pA.y - groundAt( pA );
@@ -157,10 +164,16 @@ export function createMist(ctx, rng, mistNoiseTexture, fogUniforms, coverTexture
           float lift;
           if ( bay > 0.5 ) {
             vec2 cv = texture2D( uCoverNoise, p.xz / 1500.0 + seed * 3.1 ).rg;
-            float top = vRadii.y * ( 0.4 + 0.75 * cv.r );
-            float g = 1.0 - smoothstep( top * 0.35, top, p.y );
+            // The top height varies in plan (nearly constant through the layer's depth, so the march samples a smooth
+            // field instead of speckle).
+            float nt = texture( uMistNoise, p * vec3( 1.0 / 230.0, 1.0 / 900.0, 1.0 / 230.0 ) + uDrift * 1.7 + seed * 5.0 ).g;
+            float top = vRadii.y * ( 0.3 + 0.8 * cv.r ) * ( 0.6 + 0.4 * amount ) * ( 0.4 + 1.2 * nt );
+            float g = 1.0 - smoothstep( top * 0.2, top, p.y );
             float cover = smoothstep( 0.42, 0.78, n * 0.7 + cv.g * 0.35 + cov2.r * 0.25 + presence * 0.22 );
-            dens = g * cover * edge * ( 0.45 + 0.55 * presence ) * 0.05;
+            // A soft foot where the pool meets the water, widening with distance: on glassy water the reflection has
+            // no mist, so a crisp waterline reads as a hard white stripe.
+            float foot = smoothstep( 0.0, 1.5 + t * 0.005, above );
+            dens = g * cover * edge * foot * amount * 0.05;
             lift = clamp( p.y / max( top, 1.0 ), 0.0, 1.0 );
           } else {
             float hug = exp( - above / 70.0 ) * 0.85 + 0.3;
@@ -169,7 +182,7 @@ export function createMist(ctx, rng, mistNoiseTexture, fogUniforms, coverTexture
             lift = clamp( 0.5 + 0.5 * q.y + 0.25 * above / max( vRadii.y, 1.0 ), 0.0, 1.0 );
           }
           // Low presence thins the bank away entirely (clear days keep at most faint wisps).
-          dens *= uDensity * smoothstep( 0.0, mix( 0.5, 0.12, bay ), presence );
+          dens *= uDensity * smoothstep( 0.0, mix( 0.5, 0.12, bay ), presence ) * overhead;
           if ( dens > 1e-5 ) {
             float st = exp( - dens * seg );
             vec3 light = uSkyColor * ( 0.95 + 0.35 * lift ) + keyRad * ( 0.3 + 0.7 * lift );
@@ -212,6 +225,7 @@ export function createMist(ctx, rng, mistNoiseTexture, fogUniforms, coverTexture
   const quat = new THREE.Quaternion();
   let insideFog = 0;
   let insideTop = 0;
+  let overhead = 0;
   let lastRefresh = -1e9;
   const lastCam = new THREE.Vector3(1e9, 0, 0);
   const drift = mistUniforms.uDrift.value;
@@ -220,6 +234,12 @@ export function createMist(ctx, rng, mistNoiseTexture, fogUniforms, coverTexture
 
   // env: { mist, fog, cloudCover, hours, day, cloudBase, windSpeed, windX, windZ }
   function update(dt, realTime, env, camera) {
+    // Crow's-nest view (high, looking down on the set): fade what lies between the camera and the sea.
+    const mode = ctx.systems?.cameraRig?.mode;
+    const want = mode === 'crowsnest' ? Math.min(1, Math.max(0, (camera.position.y - 20) / 30)) : 0;
+    overhead += (want - overhead) * Math.min(1, (ctx.time?.realDt ?? dt) * 2.5);
+    if (Math.abs(want - overhead) < 1e-3) overhead = want;
+    mistUniforms.uOverhead.value = overhead;
     drift.x += (env.windX ?? 0) * dt / 420 * 0.6;
     drift.z += (env.windZ ?? 0) * dt / 420 * 0.6;
     drift.y += dt * 0.004;
@@ -256,7 +276,7 @@ export function createMist(ctx, rng, mistNoiseTexture, fogUniforms, coverTexture
       const e2 = ex * ex + ey * ey + ez * ez;
       const inside = 1 - Math.min(1, Math.max(0, (e2 - 0.8) / 0.7));
       if (inside > 0) {
-        const f = inside * presence[i] * presence[i] * (s.kind === 'bay' ? 1 : 0.8);
+        const f = inside * presence[i] * presence[i] * (s.kind === 'bay' ? 1 : 0.8) * (1 - 0.85 * overhead);
         if (f > insideFog) {
           insideFog = f;
           insideTop = s.y + s.ry * 0.8;
@@ -310,6 +330,10 @@ export function createMist(ctx, rng, mistNoiseTexture, fogUniforms, coverTexture
     },
     get insideTop() {
       return insideTop;
+    },
+    // 0..1: how far the overhead (crow's-nest) readability fade is engaged.
+    get overhead() {
+      return overhead;
     },
     // QA: pin every site's target presence (null restores weather-driven presence).
     debugForce(v) {

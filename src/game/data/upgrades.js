@@ -1,4 +1,4 @@
-// Upgrade catalog (bought at the Kodiak harbour) and the modifiers they produce. Pure module.
+// Upgrade catalog (bought at the Kodiak harbor) and the modifiers they produce. Pure module.
 //
 // Each item has tiers bought in order; `upgrades[id]` is the number of tiers owned. The spotter plane is a day
 // charter (consumable) rather than a tier. Legal gear caps: 250 fathoms (457 m) of corkline, ~325 meshes (22 m) deep.
@@ -136,7 +136,7 @@ export function upgradeById(id) {
   return UPGRADES.find((u) => u.id === id) ?? null;
 }
 
-// Catalog rows for the harbour menu at the current state.
+// Catalog rows for the harbor menu at the current state.
 export function catalogRows(config, upgrades, { cash = 0, day = 0, spotterUntilDay = -1 } = {}) {
   const rows = UPGRADES.map((u) => {
     const level = Math.max(0, Math.min(u.tiers.length, upgrades[u.id] ?? 0));

@@ -3,7 +3,7 @@
 // frame(), so the UI never builds DOM from inside another system's update.
 
 import { h, clear, keycap } from './dom.js';
-import { keycapify, radioDuration, toastDuration } from './lib/logic.js';
+import { keycapify, isPinnedRadio, nextRadio, pinnedReading, radioLife, radioOverflow, toastDuration } from './lib/logic.js';
 import { GLYPHS } from './lib/art.js';
 import { svgFrom } from './dom.js';
 import { clockTime } from './lib/format.js';
@@ -12,7 +12,6 @@ const MAX_TOASTS = 4;
 const MAX_RADIO = 2;
 const MAX_RADIO_QUEUE = 6;
 const CPS = 42; // typewriter characters per second
-const RADIO_GAP = 0.55; // seconds of quiet between transmissions
 const KIND_LABEL = {
   cape: 'Cape', bay: 'Bay', strait: 'Strait', town: 'Town', village: 'Village', harbor: 'Harbor', cannery: 'Cannery',
   hatchery: 'Hatchery', landmark: 'Landmark', island: 'Island', river: 'River', lake: 'Lake', peak: 'Peak',
@@ -30,7 +29,7 @@ export function createMessages(ctx, root) {
   root.append(layer, fadeEl);
 
   const toasts = []; // { el, t, life }
-  const radios = []; // { el, t, life, typing, tip }
+  const radios = []; // { el, t, life, typing, tip, pinned }
   const radioQueue = [];
   let banner = null; // { el, t, life }
   let bannerGap = 0; // seconds until the next banner may start (the last one is still fading out)
@@ -116,11 +115,12 @@ export function createMessages(ctx, root) {
   }
 
   // One transmission at a time, like a real channel: a caption types out fully (plus a short beat) before the next
-  // starts. Arrival order and pacing match WP-AUDIO's radio voice (42 characters per second, serialised), so the
-  // squelch and murmur line up with the caption being typed.
-  function makeRadio({ from, text, channel, tip, hours }, cps = CPS) {
+  // starts, at WP-AUDIO's radio voice pace (42 characters per second). Pinned cards (Uncle Pete's tips and calls)
+  // jump the queue, hold routine traffic while they are read, and keep their full text for their whole life; the
+  // rest collapse to one dimmed line once something newer arrives (lib/logic.js nextRadio / radioOverflow).
+  function makeRadio({ from, text, channel, tip, pinned, hours }, cps = CPS) {
     const ch = String(channel ?? '16').replace(/^ch\s*/i, '');
-    const el = h(`div.radio${tip ? '.radio-tip' : ''}`, null, [
+    const el = h(`div.radio${tip ? '.radio-tip' : ''}${pinned ? '.pinned' : ''}`, null, [
       h('div.radio-head', null, [
         h('span.radio-ch', null, [svgFrom(GLYPHS.radio), h('span', { text: /^wx/i.test(ch) ? 'WX' : `CH ${ch}` })]),
         h('span.radio-from', { text: from || 'VHF' }),
@@ -131,24 +131,25 @@ export function createMessages(ctx, root) {
     ]);
     radioBox.append(el);
     requestAnimationFrame(() => el.classList.add('in'));
-    radios.push({ el, t: 0, life: radioDuration(text, cps) + (tip ? 3 : 0), typing: String(text).length / cps, tip: !!tip });
-    while (radios.length > MAX_RADIO) retire(radios.shift());
+    radios.push({ el, t: 0, life: radioLife(text, { pinned, tip }, cps), typing: String(text).length / cps, tip: !!tip, pinned: !!pinned });
+    for (const r of radioOverflow(radios, MAX_RADIO)) {
+      retire(r);
+      radios.splice(radios.indexOf(r), 1);
+    }
     ctx.events?.emit?.('ui:radioShown', { from: from || 'VHF', channel: ch, tip: !!tip });
   }
 
   function enqueueRadio(r) {
-    radioQueue.push({ ...r, hours: ctx.clock?.hours });
+    radioQueue.push({ ...r, pinned: isPinnedRadio(r), hours: ctx.clock?.hours });
     while (radioQueue.length > MAX_RADIO_QUEUE) {
-      const i = radioQueue.findIndex((q) => !q.tip);
+      const i = radioQueue.findIndex((q) => !q.pinned);
       radioQueue.splice(i < 0 ? 0 : i, 1);
     }
   }
 
   function pumpRadio() {
-    if (!radioQueue.length) return;
-    const cur = radios[radios.length - 1];
-    if (cur && !cur.dead && cur.t < cur.typing + RADIO_GAP) return;
-    makeRadio(radioQueue.shift());
+    const i = nextRadio(radioQueue, radios);
+    if (i >= 0) makeRadio(radioQueue.splice(i, 1)[0]);
   }
 
   function makeHint({ text }) {
@@ -209,7 +210,7 @@ export function createMessages(ctx, root) {
       pumpRadio();
       if (bannerGap > 0) bannerGap -= realDt;
       if (!banner && bannerGap <= 0 && bannerQueue.length && hudVisible) showBanner(bannerQueue.shift());
-      if (!hint && hintQueue.length && mode === 'play') makeHint(hintQueue.shift());
+      if (!hint && hintQueue.length && mode === 'play' && !pinnedReading(radios)) makeHint(hintQueue.shift());
 
       for (const t of toasts) {
         t.t += realDt;
@@ -275,7 +276,7 @@ export function createMessages(ctx, root) {
     },
 
     debugState() {
-      return { toasts: toasts.length, radio: radios.length, radioQueued: radioQueue.length, banner: banner ? banner.el.querySelector('.banner-title')?.textContent : null, hintQueued: hintQueue.length + (hint ? 1 : 0) };
+      return { toasts: toasts.length, radio: radios.length, radioPinned: radios.filter((r) => r.pinned && !r.dead).length, radioQueued: radioQueue.length, banner: banner ? banner.el.querySelector('.banner-title')?.textContent : null, hintQueued: hintQueue.length + (hint ? 1 : 0) };
     },
   };
   return api;

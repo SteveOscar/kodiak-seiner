@@ -263,13 +263,24 @@ test('listener context, shore point, beach material', () => {
   assert.ok(hm.shoreDistance(sp.x, sp.z) < sd - 40, `shore point nearer the beach (${hm.shoreDistance(sp.x, sp.z)} vs ${sd})`);
 });
 
-test('brailer cycle events, thunder delay, poisson waits', () => {
-  assert.deepEqual(Sc.brailEvents(0, 2.8), ['dip', 'dump']);
-  assert.deepEqual(Sc.brailEvents(0.6, 0.61), []);
-  assert.deepEqual(Sc.brailEvents(1, 1), []);
-  assert.equal(Sc.brailEvents(0, 5.6).length, 4);
-  assert.equal(Sc.brailEvents(0, 28).length, 8, 'a stalled frame never floods');
-  assert.deepEqual(Sc.brailEvents(0.5, 0.6), ['dip']);
+test('brailer scoops (fishing:brail), thunder delay, poisson waits', () => {
+  // A full brailer load dips harder and dumps more salmon than a small catch's half-empty scoop.
+  const full = Sc.brailScoop({ lbs: 3300, loadLbs: 1500 });
+  const small = Sc.brailScoop({ lbs: 300, loadLbs: 1500 });
+  assert.ok(full.dipVolume > small.dipVolume && full.dumpCount > small.dumpCount);
+  assert.ok(full.dumpCount <= 18 && small.dumpCount >= 3);
+  // The bag thins toward the last scoop.
+  assert.ok(Sc.brailScoop({ lbs: 1500, progress: 0.9 }).dumpCount < Sc.brailScoop({ lbs: 1500, progress: 0 }).dumpCount);
+  // The dump lands as the brailer reaches the hatch (~0.51 of its cycle after the dip), tracking the cycle length.
+  assert.ok(Math.abs(Sc.brailScoop({ lbs: 1500, cycle: 2.8 }).dumpDelay - 0.51 * 2.8) < 1e-9);
+  assert.ok(Sc.brailScoop({ lbs: 1500, cycle: 4 }).dumpDelay > Sc.brailScoop({ lbs: 1500, cycle: 2.8 }).dumpDelay);
+  const junk = Sc.brailScoop({ lbs: 'x', loadLbs: NaN, progress: undefined, cycle: -1 });
+  assert.ok(Number.isFinite(junk.dipVolume) && Number.isFinite(junk.dumpCount) && Number.isFinite(junk.dumpDelay));
+  // The whip hoists right after a scoop and idles otherwise (a water haul never scoops).
+  assert.equal(Sc.brailWhipRate(0.3), 0.75);
+  assert.equal(Sc.brailWhipRate(2), 0.18);
+  assert.equal(Sc.brailWhipRate(1e9), 0.18);
+  assert.equal(Sc.brailWhipRate(-1), 0.18);
   assert.ok(Math.abs(Sc.thunderDelay(686) - 2) < 1e-9);
   assert.equal(Sc.thunderDelay(9000), 9);
   assert.equal(Sc.thunderDelay('x'), 0);
@@ -277,6 +288,42 @@ test('brailer cycle events, thunder delay, poisson waits', () => {
   let sum = 0;
   for (let i = 0; i < 20000; i++) sum += Sc.poissonWait(3, r);
   assert.ok(Math.abs(sum / 20000 - 3) < 0.1);
+});
+
+test('sea-lion stampede scales with the colony and stays bounded', () => {
+  const r = seq(11);
+  const islet = Sc.stampedePlan(12, r);
+  const rookery = Sc.stampedePlan(150, r);
+  assert.ok(rookery.roars.length > islet.roars.length && rookery.plunges.length > islet.plunges.length);
+  assert.ok(rookery.chorus > islet.chorus && rookery.dur > islet.dur && rookery.level >= islet.level);
+  for (const pl of [islet, rookery, Sc.stampedePlan(5000, r), Sc.stampedePlan(NaN, r)]) {
+    assert.ok(pl.roars.length <= 5 && pl.plunges.length <= 8, 'node count bounded however big the colony');
+    assert.ok(pl.dur >= 4 && pl.dur <= 8);
+    for (const e of [...pl.roars, ...pl.plunges]) assert.ok(e.t >= 0 && e.t <= pl.dur, `event inside the stampede (${e.t})`);
+    for (let i = 1; i < pl.plunges.length; i++) assert.ok(pl.plunges[i].t >= pl.plunges[i - 1].t);
+  }
+  assert.ok(islet.roars.some((x) => x.bull), 'a bull leads the roar');
+});
+
+test('radio captions: ui:radioShown finds the call that queued it, even when the UI reorders', () => {
+  const pending = [
+    { from: 'ADF&G', channel: '16', tip: false, text: 'a' },
+    { from: 'Double Eagle', channel: '10', tip: false, text: 'b' },
+    { from: 'Uncle Pete', channel: '10', tip: true, text: 'c' },
+    { from: 'ADF&G', channel: '16', tip: false, text: 'd' },
+  ];
+  // Pete's tip jumps the queue; then the oldest ADF&G call; a sender match wins over nothing when the channel differs.
+  assert.equal(Sc.matchRadio(pending, { from: 'Uncle Pete', channel: '10', tip: true }), 2);
+  assert.equal(Sc.matchRadio(pending, { from: 'ADF&G', channel: '16', tip: false }), 0);
+  assert.equal(Sc.matchRadio(pending, { from: 'Double Eagle', channel: '6', tip: false }), 1);
+  assert.equal(Sc.matchRadio(pending, { from: 'Uncle Pete', channel: '10', tip: false }), -1, 'a routine call is not a tip');
+  assert.equal(Sc.matchRadio(pending, { from: 'Coast Guard', channel: '16' }), -1);
+  assert.equal(Sc.matchRadio([], { from: 'x' }), -1);
+  assert.equal(Sc.matchRadio(null, null), -1);
+  // Same channel normalisation as the UI ('ch 16' → '16'; a missing sender reads 'VHF').
+  assert.equal(Sc.radioChannel('ch 16'), '16');
+  assert.equal(Sc.radioChannel(undefined, '10'), '10');
+  assert.equal(Sc.matchRadio([{ from: 'VHF', channel: '16', tip: false }], { from: 'VHF', channel: '16', tip: false }), 0);
 });
 
 test('nearest helpers, gull scene, slaps, sea lions, muffle', () => {
@@ -438,7 +485,7 @@ test('sound table: every recipe declared with a bus, priority and (if positional
     assert.ok(d.priority >= 1 && d.priority <= 10, `${name} priority`);
     if (d.bus === 'world') assert.ok(d.range > 0 && d.ref > 0, `${name} range/ref`);
   }
-  for (const k of ['fish-jump', 'gull', 'eagle', 'whale-blow', 'bear-huff', 'footstep', 'horn', 'anchor-chain', 'collision', 'radio', 'cash-register', 'discovery', 'stinger', 'ui-click', 'ui-open', 'brail-dip', 'brail-dump', 'hull-slap', 'surf-break', 'thunder', 'sealion']) {
+  for (const k of ['fish-jump', 'gull', 'eagle', 'whale-blow', 'bear-huff', 'footstep', 'horn', 'anchor-chain', 'collision', 'radio', 'cash-register', 'discovery', 'stinger', 'ui-click', 'ui-open', 'brail-dip', 'brail-dump', 'hull-slap', 'surf-break', 'thunder', 'sealion', 'stampede', 'summit']) {
     assert.ok(SOUNDS[k], `has ${k}`);
   }
 });

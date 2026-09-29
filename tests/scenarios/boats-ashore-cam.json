@@ -1,0 +1,204 @@
+[
+ {
+  "until": "window.__KODIAK__ && __KODIAK__.ctx.state.mode === 'title'",
+  "timeout": 240000
+ },
+ {
+  "start": {}
+ },
+ {
+  "time": 17.5
+ },
+ {
+  "weather": "partly"
+ },
+ {
+  "teleport": [
+   -2504,
+   48,
+   97
+  ]
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "eval": "window.__B = (() => { const K = __KODIAK__; const S = K.systems.seiner, F = K.systems.skiff, P = K.systems.player, R = K.systems.cameraRig, T = K.systems.terrain; const B = { minSkiff: 99, camInHull: 0, camInVeg: 0, n: 0 }; const inHull = (x, y, z) => { const h = S.heading, fx = Math.sin(h), fz = -Math.cos(h), rx = Math.cos(h), rz = Math.sin(h); const dx = x - S.position.x, dz = z - S.position.z; const u = dx * fx + dz * fz, v = dx * rx + dz * rz; if (Math.abs(u) < 9 && Math.abs(v) < 3.1 && y < S.position.y + 3) return true; if (Math.abs(u - 2.2) < 2.9 && Math.abs(v) < 2.1 && y < S.position.y + 7.6) return true; return false; }; const clear = () => { const h = S.heading, fx = Math.sin(h), fz = -Math.cos(h); const a = 9.3 - 3.2; const px = F.position.x - S.position.x, pz = F.position.z - S.position.z; const t = Math.max(-a, Math.min(a, px * fx + pz * fz)); return Math.hypot(px - fx * t, pz - fz * t) - 3.2; }; B.probe = () => { const c = K.ctx.camera.position; const g = T.heightAt(c.x, c.z); const surf = T.surfaceAt(c.x, c.z); return { phase: P.phase, fr: P.cameraFraming?.kind ?? null, mode: R.mode, fov: +K.ctx.camera.fov.toFixed(1), cam: [+c.x.toFixed(1), +c.y.toFixed(1), +c.z.toFixed(1)], camAGL: +(c.y - g).toFixed(1), surf, skiffClear: +clear().toFixed(1), skiff: F.state, camInHull: inHull(c.x, c.y, c.z) }; }; B.tick = () => { if (F.state !== 'stowed' && F.state !== 'released' && !(F.state === 'returning' && K.state().skiff.phase === 'winch')) { B.minSkiff = Math.min(B.minSkiff, clear()); const c = K.ctx.camera.position; if (inHull(c.x, c.y, c.z)) { B.camInHull++; B.hullAt = [P.phase, F.state, +c.x.toFixed(1), +c.y.toFixed(1), +c.z.toFixed(1)]; } B.n++; } const c = K.ctx.camera.position; if (P.active && T.surfaceAt(c.x, c.z) === 'alder' && c.y - T.heightAt(c.x, c.z) < 3.4) B.camInVeg++; }; B.iv = setInterval(B.tick, 100); B.stats = () => ({ minSkiff: +B.minSkiff.toFixed(2), camInHull: B.camInHull, camInVeg: B.camInVeg, samples: B.n, hullAt: B.hullAt }); return B; })(); JSON.stringify({ s: __KODIAK__.systems.seiner.position, h: __KODIAK__.systems.seiner.heading * 57.3 })"
+ },
+ {
+  "until": "__KODIAK__.ctx.interact.current.interact && __KODIAK__.ctx.interact.current.interact.id === 'go-ashore'",
+  "timeout": 20000
+ },
+ {
+  "press": "KeyE"
+ },
+ {
+  "wait": 3200
+ },
+ {
+  "eval": "__B.probe()"
+ },
+ {
+  "shot": "f01-ferry"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "eval": "__B.probe()"
+ },
+ {
+  "shot": "f02-ferry"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "eval": "__B.probe()"
+ },
+ {
+  "shot": "f03-ferry"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "eval": "__B.probe()"
+ },
+ {
+  "shot": "f04-ferry"
+ },
+ {
+  "until": "__KODIAK__.systems.player.phase === 'foot' && __KODIAK__.ctx.state.mode === 'play'",
+  "timeout": 60000
+ },
+ {
+  "wait": 800
+ },
+ {
+  "eval": "__B.stats()"
+ },
+ {
+  "shot": "f05-ashore"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "eval": "__KODIAK__.systems.player.returnToBoat()"
+ },
+ {
+  "wait": 3500
+ },
+ {
+  "eval": "__B.probe()"
+ },
+ {
+  "shot": "r01-return"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "eval": "__B.probe()"
+ },
+ {
+  "shot": "r02-return"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "eval": "__B.probe()"
+ },
+ {
+  "shot": "r03-return"
+ },
+ {
+  "until": "__KODIAK__.ctx.state.control === 'boat' && __KODIAK__.ctx.state.mode === 'play'",
+  "timeout": 90000
+ },
+ {
+  "eval": "__B.stats()"
+ },
+ {
+  "until": "__KODIAK__.ctx.interact.current.interact && __KODIAK__.ctx.interact.current.interact.id === 'go-ashore'",
+  "timeout": 20000
+ },
+ {
+  "eval": "__KODIAK__.systems.player.debugAshore()"
+ },
+ {
+  "until": "__KODIAK__.systems.player.phase === 'foot' && __KODIAK__.ctx.state.mode === 'play'",
+  "timeout": 30000
+ },
+ {
+  "eval": "(() => { const K = __KODIAK__, T = K.systems.terrain, P = K.systems.player; const p = P.position; const goal = { x: -2121, z: 222 }; let best = null; for (let r = 30; r <= 500; r += 10) for (let a = 0; a < 72; a++) { const x = p.x + Math.sin(a / 72 * 6.283) * r, z = p.z - Math.cos(a / 72 * 6.283) * r; if (T.surfaceAt(x, z) !== 'alder') continue; const h = T.heightAt(x, z); if (h < 8) continue; const d = Math.hypot(goal.x - x, goal.z - z); const sl = Math.abs(T.heightAt(x + 3, z) - T.heightAt(x - 3, z)) + Math.abs(T.heightAt(x, z + 3) - T.heightAt(x, z - 3)); if (sl > 5) continue; if (!best || d < best.d) best = { x, z, d, h }; } if (!best) return 'no alder'; window.__AL = best; const hd = Math.atan2(goal.x - best.x, -(goal.z - best.z)) * 57.2958; P.placeAt(best.x, best.z, hd); P.debugDrive({ headingDeg: hd }); return JSON.stringify({ best, hd }); })()"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "eval": "__B.probe()"
+ },
+ {
+  "shot": "a01-alder"
+ },
+ {
+  "wait": 2000
+ },
+ {
+  "eval": "__B.probe()"
+ },
+ {
+  "shot": "a02-alder"
+ },
+ {
+  "wait": 2000
+ },
+ {
+  "eval": "__B.probe()"
+ },
+ {
+  "shot": "a03-alder"
+ },
+ {
+  "wait": 2000
+ },
+ {
+  "eval": "__B.probe()"
+ },
+ {
+  "shot": "a04-alder"
+ },
+ {
+  "eval": "__B.stats()"
+ },
+ {
+  "eval": "(() => { const K = __KODIAK__, T = K.systems.terrain, P = K.systems.player; P.debugDrive(null); const c = { x: -2121, z: 222 }; let best = null; for (let r = 0; r <= 200; r += 5) for (let a = 0; a < (r ? 48 : 1); a++) { const x = c.x + Math.sin(a / 48 * 6.283) * r, z = c.z - Math.cos(a / 48 * 6.283) * r; const h = T.heightAt(x, z); if (!best || h > best.h) best = { x, z, h }; } const s = K.systems.seiner.position; const hd = Math.atan2(best.x - s.x, -(best.z - s.z)) * 57.2958; P.placeAt(best.x, best.z, hd); return JSON.stringify(best); })()"
+ },
+ {
+  "time": 20.8
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "eval": "__B.probe()"
+ },
+ {
+  "shot": "s01-summit-arrive"
+ },
+ {
+  "wait": 5000
+ },
+ {
+  "eval": "__B.probe()"
+ },
+ {
+  "shot": "s02-summit-idle"
+ },
+ {
+  "state": "end"
+ }
+]

@@ -49,7 +49,7 @@ export async function create(ctx) {
 
   const glows = createGlowSet(ctx, model.lightDefs, { parent: group, name: 'seiner-lights' });
   const lightIndex = Object.fromEntries(model.lightDefs.map((l, i) => [l.id, i]));
-  const smoke = createParticlePool(ctx, { max: 160, renderOrder: 201, name: 'seiner-exhaust' });
+  const smoke = createParticlePool(ctx, { max: 160, renderOrder: 201, name: 'seiner-exhaust', nearFade: [2, 8] });
   const spray = createParticlePool(ctx, { max: 420, renderOrder: 202, name: 'seiner-spray' });
   const pool = createLightPools(ctx, 1, { name: 'seiner-light-pool' });
   const rode = createRope(ctx, { segments: 12, sides: 5, radius: 0.035, color: '#3b3632', name: 'anchor-rode' });
@@ -242,8 +242,8 @@ export async function create(ctx) {
     const stern = local(model.points.stern, tmp2);
     const L = tuning.length;
 
-    // Wake: churned prop wash astern that lingers as a trail, the bow wave peeling off the shoulders along the
-    // Kelvin arms (19.5 degrees), and rings from the stem.
+    // Wake: churned prop wash astern that lingers as a trail, the bow wave along the hull, and rings from the stem.
+    // The Kelvin V itself comes from the water's wake simulation, forced by these moving stamps (WP-OCEAN).
     if (w?.stamp) {
       if (aspeed > 0.4 || load > 0.15) {
         // Foam is a level that maps to coverage (~0.6 reads as solid), so the prop wash stays lacy: a jittered core
@@ -255,18 +255,6 @@ export async function create(ctx) {
           const jy = (Math.random() - 0.5) * 2.2;
           w.stamp(stern.x - fwd.x * 9 + rx * jy, stern.z - fwd.z * 9 + rz * jy, 2.4 + aspeed * 0.12, s * 0.62, 'foam');
           w.stamp(stern.x - fwd.x * 20, stern.z - fwd.z * 20, 3.2 + aspeed * 0.15, s * 0.34, 'foam');
-          const k = clamp((speed - 2.5) / 8, 0, 1);
-          if (k > 0.02) {
-            const bowX = hull.x + fwd.x * L * 0.4;
-            const bowZ = hull.z + fwd.z * L * 0.4;
-            for (const d of [5, 11, 18, 27, 38]) {
-              const lat = 2.6 + d * 0.354;
-              const fade = 1 - d / 48;
-              for (const side of [-1, 1]) {
-                w.stamp(bowX - fwd.x * d + rx * side * lat, bowZ - fwd.z * d + rz * side * lat, 1.1 + d * 0.03, k * 0.42 * fade, 'foam');
-              }
-            }
-          }
         }
         // Backing down: prop wash boils forward along the quarters.
         if (ctl.lever < -0.1 && load > 0.08) {

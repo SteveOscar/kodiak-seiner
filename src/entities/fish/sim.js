@@ -53,6 +53,14 @@ const FREE = new Set(['migrating', 'milling', 'spooked', 'sounding']);
 const CATCHABLE = new Set(['migrating', 'milling', 'spooked']);
 
 export const GUARANTEE = { count: 2, radius: 1500, minSpawn: 600, maxSpawn: 1450, minDepth: 8 };
+// Spooked schools flee at up to FLEE_SPEED; no school swims faster than MAX_SWIM (config `speed.max` overrides).
+export const FLEE_SPEED = 2.6;
+export const MAX_SWIM = 2.8;
+// Tutorial school: 380–420 m from the spawn (a quarter mile), in water ≥ net depth + margin within `clear` m.
+export const TUTORIAL = { rMin: 380, rMax: 420, margin: 4, clear: 80 };
+// Free-swimming schools cruise at least this deep (where the water allows) so they read as shadows under the surface;
+// only the bag and jumpers come right up.
+export const CRUISE_MIN_DEPTH = 1.8;
 const WORLD_LIMIT = 7400;
 const MAX_JUMPS = 90;
 
@@ -253,7 +261,7 @@ export function createFishSim({ config, rng, world }) {
       if (!pureMix && king && rSpawn.next() < (king.bycatchChance ?? 0.15)) m.king = 1 + Math.floor(rSpawn.next() * (king.count?.[1] ?? 3));
     }
     const total = catchTotal(m);
-    const d0 = depth ?? lerp(sp.depth?.[0] ?? 1, sp.depth?.[1] ?? 4, rSpawn.next());
+    const d0 = depth ?? Math.max(CRUISE_MIN_DEPTH, lerp(sp.depth?.[0] ?? 1, sp.depth?.[1] ?? 4, rSpawn.next()));
     const wd = world.depthAt(x, z);
     const d = clamp(d0, 0.6, Math.max(0.6, wd - 1));
     const jpm = sp.jumpsPerMin ? lerp(sp.jumpsPerMin[0], sp.jumpsPerMin[1], rSpawn.next()) : 1;
@@ -345,11 +353,57 @@ export function createFishSim({ config, rng, world }) {
     return n;
   }
 
+  // Shallowest water within `R` of (x, z) (centre plus two rings of 16), i.e. how deep the whole set circle is.
+  function minDepthAround(x, z, R) {
+    let m = world.depthAt(x, z);
+    for (const r of [R * 0.5, R]) {
+      for (let i = 0; i < 16 && m > 0; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        m = Math.min(m, world.depthAt(x + Math.cos(a) * r, z + Math.sin(a) * r));
+      }
+    }
+    return m;
+  }
+
+  // The tutorial school sits a quarter mile (~400 m, Pete's radio line) from the spawn in water deep enough that the
+  // first circle of the base seine does not touch bottom: ≥ net depth + 4 m everywhere within TUTORIAL.clear m.
+  function tutorialSpot(x, z, heading) {
+    const need = (world.netDepth?.() ?? config.net?.depth ?? 16) + TUTORIAL.margin;
+    const cands = [];
+    const scan = (rMin, rMax) => {
+      for (let r = rMin; r <= rMax + 1e-6; r += 10) {
+        for (let deg = 0; deg < 360; deg += 3) {
+          const a = (deg * Math.PI) / 180;
+          const px = x + Math.sin(a) * r;
+          const pz = z - Math.cos(a) * r;
+          if (world.depthAt(px, pz) < need || !waterOk(px, pz, { minDepth: need, minShore: 100 })) continue;
+          const m = minDepthAround(px, pz, TUTORIAL.clear);
+          const off = heading === null ? 0 : Math.abs(((a - heading + 3 * Math.PI) % (2 * Math.PI)) - Math.PI);
+          cands.push({ x: px, z: pz, m, r, off });
+        }
+      }
+    };
+    scan(TUTORIAL.rMin, TUTORIAL.rMax);
+    let ok = cands.filter((c) => c.m >= need);
+    if (!ok.length) {
+      // Nothing clean at a quarter mile: the nearest clean water farther out, else the deepest spot found.
+      scan(TUTORIAL.rMax + 10, 700);
+      ok = cands.filter((c) => c.m >= need).sort((p, q) => p.r - q.r);
+      if (ok.length) ok = ok.filter((c) => c.r <= ok[0].r + 20);
+      else ok = cands.sort((p, q) => q.m - p.m).slice(0, 1);
+    }
+    if (!ok.length) return null;
+    // Most margin first, then closest to the bow; a little variety among near-equal spots.
+    ok.sort((p, q) => q.m - p.m || p.off - q.off);
+    const top = ok.filter((c) => c.m >= ok[0].m - 1).sort((p, q) => p.off - q.off);
+    return top[Math.floor(rSpawn.next() * Math.min(3, top.length))];
+  }
+
   function spawnTutorial(x, z, heading = null) {
     for (const s of schools) if (s.tutorial && s.state !== 'captured') s.state = 'gone';
-    let p = sampleNear(x, z, 520, 680, { minDepth: 8, outOfView: false, preferHeading: heading, spread: 1.0 });
-    if (!p) p = sampleNear(x, z, 500, 700, { minDepth: 5, outOfView: false });
-    if (!p) p = world.nearestWater?.(x + 600, z, 80) ?? { x: x + 600, z };
+    let p = tutorialSpot(x, z, heading);
+    if (!p) p = sampleNear(x, z, 380, 700, { minDepth: 8, outOfView: false, preferHeading: heading, spread: 1.0 });
+    if (!p) p = world.nearestWater?.(x + 400, z, 80) ?? { x: x + 400, z };
     const sp = specCfg.pink;
     const s = makeSchool({
       x: p.x,
@@ -487,10 +541,13 @@ export function createFishSim({ config, rng, world }) {
       dz /= l;
       speed = speeds.milling * clamp(l / 3, 0.4, 2.5);
     } else if (s.state === 'spooked') {
-      dx = s.fleeX;
-      dz = s.fleeZ;
+      const l = Math.hypot(s.fleeX, s.fleeZ);
+      if (l > 1e-6) {
+        dx = s.fleeX / l;
+        dz = s.fleeZ / l;
+      }
       const k = clamp((s.stateUntil - now) / 20, 0, 1);
-      speed = lerp(speeds.migrating, 2.6, k);
+      speed = lerp(speeds.migrating, FLEE_SPEED, k);
     } else {
       // Migrating (and sounding, slowly): along the shore with the flood, keeping to an offshore band, homing late.
       world.shoreGradient(x, z, g);
@@ -520,8 +577,14 @@ export function createFishSim({ config, rng, world }) {
       dz /= l;
       speed = speeds.migrating * (0.55 + 0.45 * along) * (s.state === 'sounding' ? 0.5 : 1);
     }
+    speed = Math.min(speed, maxSwim(s));
     s.desiredX = dx * speed;
     s.desiredZ = dz * speed;
+  }
+
+  function maxSwim(s) {
+    const m = specCfg[s.species]?.speed?.max;
+    return Number.isFinite(m) && m > 0 ? m : MAX_SWIM;
   }
 
   function stateTransitions(s) {
@@ -556,6 +619,13 @@ export function createFishSim({ config, rng, world }) {
     const turn = Math.min(1, dt * (s.state === 'spooked' ? 2.5 : 0.8));
     s.velocity.x += (s.desiredX - s.velocity.x) * turn;
     s.velocity.z += (s.desiredZ - s.velocity.z) * turn;
+    const vmax = maxSwim(s);
+    const v2 = s.velocity.x * s.velocity.x + s.velocity.z * s.velocity.z;
+    if (v2 > vmax * vmax) {
+      const k = vmax / Math.sqrt(v2);
+      s.velocity.x *= k;
+      s.velocity.z *= k;
+    }
     world.currentAt(s.position.x, s.position.z, cur);
     const drift = s.state === 'trapped' ? 0 : 0.5;
     let nx = s.position.x + (s.velocity.x + cur.x * drift) * dt;
@@ -604,6 +674,7 @@ export function createFishSim({ config, rng, world }) {
     if (s.state === 'sounding') target = Math.max(14, 18 + 6 * Math.sin(s.millPhase));
     else if (s.state === 'spooked') target = s.baseDepth + 1.5;
     else if (s.state === 'milling') target = s.baseDepth * 0.85;
+    if (!s.net && !s.bag) target = Math.max(target, CRUISE_MIN_DEPTH);
     if (s.net && view.phase !== 'none') target = Math.min(target, Math.max(0.5, view.depth * 0.8));
     if (s.bag) target = s.bagDepth;
     target = clamp(target, 0.45, Math.max(0.45, wd - 0.8));
@@ -622,7 +693,13 @@ export function createFishSim({ config, rng, world }) {
     if (st === 'paying' || st === 'out') phase = 'open';
     else if (st === 'closed') phase = 'closed';
     else if (st === 'pursing') phase = (net.pursed ?? 0) >= PURSED ? 'pursed' : 'closed';
-    else if (st === 'hauling' || st === 'brailing') phase = 'pursed';
+    else if (st === 'hauling' || st === 'brailing') {
+      // fishing.abort() hauls back whatever is in the water under the same state: only a closed, pursed net holds
+      // fish. A never-closed (open) net releases them; a closed but unpursed one keeps leaking under the leadline.
+      const closed = net.closed ?? session?.closed ?? (net.pursed ?? 1) >= PURSED;
+      if (!closed) phase = 'none';
+      else phase = (net.pursed ?? 1) >= PURSED ? 'pursed' : 'closed';
+    }
     let poly = null;
     if (phase !== 'none') {
       try {
@@ -820,11 +897,20 @@ export function createFishSim({ config, rng, world }) {
         s.inHook = false;
         s.state = 'spooked';
         s.stateUntil = now + 10;
-        const gx = (view.gap.a.x + view.gap.b.x) / 2;
-        const gz = (view.gap.a.z + view.gap.b.z) / 2;
-        const l = Math.hypot(x - gx, z - gz) || 1;
-        s.fleeX = (x - view.centroid.x) / l;
-        s.fleeZ = (z - view.centroid.z) / l;
+        // Away from the middle of the set, out through the gap (a unit vector: steer() scales it by the flee speed).
+        const ox = x - view.centroid.x;
+        const oz = z - view.centroid.z;
+        const ol = Math.hypot(ox, oz);
+        if (ol > 1e-6) {
+          s.fleeX = ox / ol;
+          s.fleeZ = oz / ol;
+        } else {
+          const gx = (view.gap.a.x + view.gap.b.x) / 2 - view.centroid.x;
+          const gz = (view.gap.a.z + view.gap.b.z) / 2 - view.centroid.z;
+          const gl = Math.hypot(gx, gz) || 1;
+          s.fleeX = gx / gl;
+          s.fleeZ = gz / gl;
+        }
       }
     }
     const nowInside = pointInPolygon(s.position.x, s.position.z, poly);

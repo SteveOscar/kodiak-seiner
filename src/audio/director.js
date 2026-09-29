@@ -28,7 +28,7 @@ import {
   listenerContext,
   shorePoint,
   beachGravel,
-  brailEvents,
+  brailWhipRate,
   nearestOf,
   nearestN,
   gullScene,
@@ -98,8 +98,9 @@ export function createDirector(ctx, audio) {
   let brailT = 0;
   let hauledPrev = null;
   let dawnDay = -1;
-  // Shared with the event cues (cues.js): music triumph window and the radio queue.
-  const shared = { triumphUntil: -1, radioBusyUntil: 0 };
+  // Shared with the event cues (cues.js): music triumph window, the radio queue, the last brailer scoop (audio time)
+  // and a stampeding haulout ({ id, until }).
+  const shared = { triumphUntil: -1, radioBusyUntil: 0, brailAt: -1e9, stampede: null };
   let places = null;
   let streams = null;
   let lights = null;
@@ -434,8 +435,8 @@ export function createDirector(ctx, audio) {
     } else if (state === 'brailing') {
       mode = 'haul';
       brailT += simDt;
-      const ph = (brailT % 2.8) / 2.8;
-      rate = ph > 0.2 && ph < 0.62 ? 0.75 : 0.18;
+      // The whip hoists after each scoop (fishing:brail, see cues.js); water hauls never scoop, so it idles.
+      rate = brailWhipRate(ac.currentTime - shared.brailAt, f?.brailer?.cycle);
     } else if (state === 'report' && net?.state && net.state !== 'stowed') {
       mode = 'haul';
       rate = 0.3;
@@ -482,26 +483,16 @@ export function createDirector(ctx, audio) {
       }
     }
 
-    // The brailer: dips into the bag and dumps salmon into the hold.
-    if (state === 'brailing' && s?.position && simDt > 0) {
-      for (const e of brailEvents(brailT - simDt, brailT)) {
-        if (e === 'dip') {
-          const bp = bagPoint(s, net);
-          player.play('brail-dip', { position: pos(bp.x, 0.2, bp.z), volume: 0.9 });
-        } else {
-          const h = s.heading ?? 0;
-          const x = s.position.x - Math.sin(h) * 1.5;
-          const z = s.position.z + Math.cos(h) * 1.5;
-          const left = Math.max(0.3, 1 - brailT / 15);
-          player.play('brail-dump', { position: pos(x, (s.position.y ?? 0) + 1.5, z), params: { count: Math.round(6 + 12 * left) } });
-        }
-      }
-    }
-
-    // The bag boiling with thrashing fish as it dries up alongside.
+    // The bag boiling with thrashing fish as it dries up alongside (brailer scoops and dumps: fishing:brail in cues.js).
+    // While brailing it empties with the brailed pounds; a water haul's bag is empty.
     let bagLevel = 0;
     if (state === 'hauling' && Number.isFinite(hauled)) bagLevel = 0.32 * smoothstep(0.5, 0.9, hauled);
-    else if (state === 'brailing') bagLevel = 0.3 * Math.max(0.25, 1 - brailT / 14);
+    else if (state === 'brailing') {
+      const accepted = Number(f?.hud?.acceptedLbs);
+      const prog = clamp(Number(f?.hud?.brailProgress) || 0, 0, 1);
+      if (Number.isFinite(accepted)) bagLevel = accepted > 0 ? 0.3 * Math.max(0.2, 1 - prog) : 0;
+      else bagLevel = 0.3 * Math.max(0.25, 1 - brailT / 14);
+    }
     const bg = beds.bag.need(bagLevel, dt);
     if (bg && s?.position) {
       const bp = bagPoint(s, net);
@@ -619,9 +610,11 @@ export function createDirector(ctx, audio) {
       }
     }
 
-    // Sea lions roaring on a haulout.
+    // Sea lions roaring on a haulout; up to 3.5x as hard for a while after a stampede (wildlife:disturbed, cues.js).
     if (env.haulout) {
-      const rate = sealionRate(env.haulout.distance, env.haulout.members);
+      const st = shared.stampede;
+      const left = st && (st.id === env.haulout.item.id || st.id === null) ? (st.until - ac.currentTime) / 90 : 0;
+      const rate = sealionRate(env.haulout.distance, env.haulout.members) * (1 + 2.5 * clamp(left, 0, 1));
       if (rate > 0.03) {
         timers.sealion -= dt;
         if (timers.sealion <= 0) {
@@ -716,6 +709,7 @@ export function createDirector(ctx, audio) {
         simAcc = 0;
       }
       if (living() && realDt > 0) updateWorld(realDt);
+      cues.tick(realDt);
       updateMusic();
       player.collect();
       meterAcc += realDt;
@@ -734,6 +728,9 @@ export function createDirector(ctx, audio) {
       brailT = 0;
       fishingPrev = 'idle';
       shared.radioBusyUntil = 0;
+      shared.brailAt = -1e9;
+      shared.stampede = null;
+      cues.clearRadio();
     },
 
     stats() {

@@ -109,10 +109,14 @@ export function createTeleportPanel(ctx, { close, resume }) {
   }
 
   search.addEventListener('input', render);
+  // The search box keeps focus while the panel is open and the game's key routing ignores keys typed into a text
+  // field, so the panel handles its own keys here. Esc closes (back to the pause menu or chart it came from). T and
+  // M stay letters: they begin place names (Termination Point, Three Saints Bay, Marmot Island).
   search.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown') select(sel + 1);
     else if (e.key === 'ArrowUp') select(sel - 1);
     else if (e.key === 'Enter') rows[sel]?.click();
+    else if (e.key === 'Escape') close();
     else return;
     e.preventDefault();
     e.stopPropagation();

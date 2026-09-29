@@ -122,9 +122,15 @@ const smooth = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 
-// Morning fog pooling factor for local hours: strong around dawn, burned off by late morning.
+// Morning fog pooling factor for local hours: strong around dawn, burning off quickly from ~07:15 (gone by 09:00).
 export function morningFactor(hours) {
-  return smooth(3.5, 5.5, hours) * (1 - smooth(7.5, 10, hours)) + 0.35 * smooth(21.5, 23.5, hours) + 0.35 * (1 - smooth(0.5, 3.5, hours));
+  return smooth(3.5, 5.5, hours) * (1 - smooth(7.25, 9, hours)) + 0.35 * smooth(21.5, 23.5, hours) + 0.35 * (1 - smooth(0.5, 3.5, hours));
+}
+
+// How much radiation fog the weather lets pool in the bays: a clear, dry airmass keeps only thin wisps (~0.2 of a grey
+// morning's pool), a partly cloudy one about half; grey, moist days fill them. Marine fog is added separately.
+export function bayWeatherScale(mist = 0) {
+  return 0.2 + 0.8 * Math.min(1, Math.max(0, (mist - 0.12) / 0.68));
 }
 
 // Target presence 0..1 of a site. env: { mist 0..1, fog 0..1, cloudCover 0..1, hours, day, cloudBase }.
@@ -140,6 +146,7 @@ export function sitePresence(site, env) {
   }
   const morning = morningFactor(env.hours ?? 12);
   const fog = env.fog ?? 0;
-  const base = Math.max(morning * (0.45 + 0.55 * (env.mist ?? 0)) * (slow > 0.3 ? 1 : 0.25), fog);
+  const mist = env.mist ?? 0;
+  const base = Math.max(morning * (0.45 + 0.55 * mist) * bayWeatherScale(mist) * (slow > 0.3 ? 1 : 0.25), fog * 0.85);
   return Math.min(1, base * vary * (1 - 0.6 * Math.min(1, (env.windSpeed ?? 0) / 16)));
 }

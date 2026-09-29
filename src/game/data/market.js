@@ -129,6 +129,24 @@ export function numberWords(n) {
   return String(n);
 }
 
+// Dollars as said on the radio, to the nearest $50: 750 → "seven-fifty", 4500 → "forty-five hundred",
+// 4000 → "four thousand", 12000 → "twelve thousand".
+export function spokenDollars(x) {
+  const n = Math.max(0, Math.round(x / 50) * 50);
+  if (n < 100) return `${numberWords(n)} dollars`;
+  if (n < 1000) {
+    const h = Math.floor(n / 100);
+    const r = n % 100;
+    return r ? `${ONES[h]}-${numberWords(r)}` : `${ONES[h]} hundred`;
+  }
+  if (n % 1000 === 0 && n < 100000) return `${numberWords(n / 1000)} thousand`;
+  if (n < 10000) {
+    const hundreds = Math.round(n / 100);
+    return hundreds % 10 === 0 ? `${numberWords(hundreds / 10)} thousand` : `${numberWords(hundreds)} hundred`;
+  }
+  return `${numberWords(Math.round(n / 1000))} thousand`;
+}
+
 // Price as fishermen say it on the radio: 0.34 → "thirty-four", 1.2 → "a buck-twenty", 1.05 → "a buck-oh-five".
 export function spokenPrice(p) {
   const cents = Math.round(p * 100);

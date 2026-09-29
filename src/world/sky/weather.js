@@ -15,7 +15,7 @@ export const PRESETS = {
   clear: { cloudCover: 0.12, fog: 0, rain: 0, windDir: 50 * DEG, windSpeed: 4, swell: 0.35, visibility: 21000, cloudBase: 330, mist: 0.12, darkness: 0 },
   partly: { cloudCover: 0.42, fog: 0, rain: 0, windDir: 45 * DEG, windSpeed: 6, swell: 0.55, visibility: 16000, cloudBase: 300, mist: 0.35, darkness: 0 },
   overcast: { cloudCover: 0.93, fog: 0.12, rain: 0, windDir: 30 * DEG, windSpeed: 7, swell: 0.8, visibility: 9000, cloudBase: 114, mist: 0.8, darkness: 0.1 },
-  fog: { cloudCover: 0.75, fog: 1, rain: 0, windDir: 60 * DEG, windSpeed: 2.5, swell: 0.4, visibility: 600, cloudBase: 150, mist: 1, darkness: 0.05 },
+  fog: { cloudCover: 0.75, fog: 1, rain: 0, windDir: 60 * DEG, windSpeed: 2.5, swell: 0.4, visibility: 1100, cloudBase: 150, mist: 0.85, darkness: 0.05 },
   rain: { cloudCover: 1, fog: 0.35, rain: 0.45, windDir: 20 * DEG, windSpeed: 9, swell: 1.1, visibility: 5500, cloudBase: 108, mist: 0.9, darkness: 0.3 },
   storm: { cloudCover: 1, fog: 0.5, rain: 1, windDir: 315 * DEG, windSpeed: 17, swell: 2.4, visibility: 2600, cloudBase: 92, mist: 1, darkness: 0.62 },
 };
@@ -54,7 +54,7 @@ export function createWeather(initial = 'partly') {
     transition: 1,
   };
 
-  // Visibility interpolates in log space (600 m → 60 km must not linger near the thick end).
+  // Visibility interpolates in log space (1 km → 20 km must not linger near the thick end) and lands exactly on the preset.
   // Clouds build before the rain starts and the rain stops before the clouds break.
   const LEADS = new Set(['cloudCover', 'mist']);
   const LAGS = new Set(['rain', 'darkness']);
@@ -69,7 +69,7 @@ export function createWeather(initial = 'partly') {
       base[key] = from[key] + (to[key] - from[key]) * kk;
     }
     base.windDir = from.windDir + wrapAngle(to.windDir - from.windDir) * k;
-    base.visibility = Math.exp(Math.log(from.visibility) + (Math.log(to.visibility) - Math.log(from.visibility)) * k);
+    base.visibility = k >= 1 ? to.visibility : Math.exp(Math.log(from.visibility) + (Math.log(to.visibility) - Math.log(from.visibility)) * k);
   }
 
   const api = {

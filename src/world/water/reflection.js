@@ -8,15 +8,30 @@
 //
 // Shared-state hygiene: restores render target, clear colour/alpha, autoClear, scissor, clipping planes and the
 // shadow-map update flag (a layer-1 pass must not redraw the shadow map with only layer-1 casters).
+//
+// The pass is rendered with a slightly wider field of view than the main camera (GUARD), so normal-tilted lookups
+// near the screen edges still land on the image; the shader fades the reflection out over the outer margin.
+//
+// Resizing: three r186 RenderTarget.setSize resizes only the colour texture. A DepthTexture keeps its old image size,
+// and the water surface samples it every frame, so it would be re-uploaded (immutable storage) at the old size before
+// the target is bound again, leaving the framebuffer incomplete for the rest of the session. resize() therefore gives
+// the target a new DepthTexture at the new size; callers must re-read refl.depthTexture afterwards.
 
 const LAYER_REFLECT = 1;
+export const REFLECTION_GUARD = 0.06; // extra half-extent of the reflection frustum (fraction of the main view)
 
 export function createReflection({ THREE, renderer, scene, camera, scale = 0.5 }) {
   const size = new THREE.Vector2();
   renderer.getDrawingBufferSize(size);
-  const w = () => Math.max(64, Math.round(size.x * scale));
-  const h = () => Math.max(36, Math.round(size.y * scale));
-  const depthTexture = new THREE.DepthTexture(w(), h(), THREE.FloatType);
+  // The guard band widens the frustum, so the target grows with it to keep the texel density on screen.
+  const w = () => Math.max(64, Math.round(size.x * scale * (1 + REFLECTION_GUARD)));
+  const h = () => Math.max(36, Math.round(size.y * scale * (1 + REFLECTION_GUARD)));
+  const makeDepth = () => {
+    const d = new THREE.DepthTexture(w(), h(), THREE.FloatType);
+    d.name = 'water.reflection.depth';
+    return d;
+  };
+  const depthTexture = makeDepth();
   const target = new THREE.WebGLRenderTarget(w(), h(), {
     type: THREE.HalfFloatType,
     format: THREE.RGBAFormat,
@@ -55,13 +70,44 @@ export function createReflection({ THREE, renderer, scene, camera, scale = 0.5 }
     textureMatrix,
     rendered: false,
 
+    // Matches the target to the drawing buffer. Returns true when it changed; refl.depthTexture is then a new object
+    // and the previous image is gone (refl.rendered is false until the next render).
     resize() {
       renderer.getDrawingBufferSize(size);
-      target.setSize(w(), h());
+      const W = w();
+      const H = h();
+      const d = refl.depthTexture;
+      if (W === target.width && H === target.height && d.image.width === W && d.image.height === H) return false;
+      target.setSize(W, H); // disposes the framebuffer and, through three, the old depth texture's GL storage
+      const next = makeDepth();
+      target.depthTexture = next;
+      refl.depthTexture = next;
+      d.dispose();
+      refl.rendered = false;
+      return true;
+    },
+
+    // QA: framebuffer completeness and attachment sizes (binds the target briefly; restores the previous one).
+    status() {
+      const gl = renderer.getContext();
+      const prev = renderer.getRenderTarget();
+      renderer.setRenderTarget(target);
+      const fb = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+      renderer.setRenderTarget(prev);
+      renderer.getDrawingBufferSize(size);
+      return {
+        complete: fb === gl.FRAMEBUFFER_COMPLETE,
+        status: fb,
+        color: [target.width, target.height],
+        depth: [refl.depthTexture.image.width, refl.depthTexture.image.height],
+        expected: [w(), h()],
+      };
     },
 
     // lights: Light objects that must light the pass (enabled on layer 1 for its duration only).
     render(lights) {
+      // Also catches drawing-buffer changes that bypass pipeline.onResize (renderer.setPixelRatio/setSize directly).
+      refl.resize();
       camera.updateMatrixWorld();
       camPos.setFromMatrixPosition(camera.matrixWorld);
       if (camPos.y <= 0.05) {
@@ -76,7 +122,8 @@ export function createReflection({ THREE, renderer, scene, camera, scale = 0.5 }
       mirror(up);
       reflCam.up.copy(up);
       reflCam.lookAt(lookAt);
-      reflCam.fov = camera.fov;
+      const halfTan = Math.tan(((camera.fov * Math.PI) / 180) * 0.5) / (camera.zoom || 1);
+      reflCam.fov = ((2 * Math.atan(halfTan * (1 + REFLECTION_GUARD))) * 180) / Math.PI;
       reflCam.aspect = camera.aspect;
       reflCam.near = camera.near;
       reflCam.far = camera.far;
@@ -123,7 +170,7 @@ export function createReflection({ THREE, renderer, scene, camera, scale = 0.5 }
 
     dispose() {
       target.dispose();
-      depthTexture.dispose();
+      refl.depthTexture.dispose();
     },
   };
   return refl;
