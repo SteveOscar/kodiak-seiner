@@ -18,9 +18,9 @@
 
 import * as THREE from 'three';
 
-export async function loadHeightmap({ url, metaUrl, config }) {
+export async function loadHeightmap({ url, metaUrl, config, onProgress }) {
   const meta = await (await fetch(metaUrl)).json();
-  const blob = await (await fetch(url)).blob();
+  const blob = await fetchWithProgress(url, onProgress);
   const bitmap = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
   const size = bitmap.width;
   const canvas = new OffscreenCanvas(size, size);
@@ -29,6 +29,25 @@ export async function loadHeightmap({ url, metaUrl, config }) {
   const px = g.getImageData(0, 0, size, size).data;
   bitmap.close?.();
   return createHeightmap({ size, pixels: px, meta, config });
+}
+
+// Streams a download so the boot screen can show progress (the heightmap is several MB). onProgress(fraction 0..1).
+async function fetchWithProgress(url, onProgress) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
+  const total = Number(res.headers.get('content-length')) || 0;
+  if (!onProgress || !total || !res.body) return res.blob();
+  const reader = res.body.getReader();
+  const chunks = [];
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    got += value.length;
+    onProgress(Math.min(1, got / total));
+  }
+  return new Blob(chunks, { type: res.headers.get('content-type') ?? 'image/png' });
 }
 
 // pixels: RGBA bytes (size * size * 4) as decoded from the PNG. Exported separately so Node tests can build one.

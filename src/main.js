@@ -84,6 +84,7 @@ async function boot() {
     url: './terrain/kodiak_height.png',
     metaUrl: './terrain/kodiak_meta.json',
     config,
+    onProgress: (f) => bootStatus(`Charting Kodiak Island… ${Math.round(f * 100)}%`),
   });
   uniforms.uHeightMap.value = heightmap.texture;
   uniforms.uWorldHalf.value = config.world.half;
