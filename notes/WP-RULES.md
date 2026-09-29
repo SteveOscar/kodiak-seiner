@@ -213,3 +213,7 @@ one Dijkstra over a 320² grid (~10 ms) per boat position (cached per 50 m), onl
 
 ## Core changes
 None.
+
+## Post-QA changes
+
+See [FIX-rules.md](FIX-rules.md) (2026-09-28 QA fix wave); it supersedes anything here that it contradicts.

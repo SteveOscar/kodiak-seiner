@@ -210,3 +210,7 @@ None.
 - WP-OCEAN: none; stamps follow the documented budget (fleet boats > 1 km from the focus don't stamp).
 - WP-TERRAIN: an instanced terrain draw currently samples a texture with a mismatched sampler type (the WebGL warning
   above); it breaks every `--strict` run.
+
+## Post-QA changes
+
+See [FIX-boats.md](FIX-boats.md) (2026-09-28 QA fix wave); it supersedes anything here that it contradicts.

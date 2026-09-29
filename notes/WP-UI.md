@@ -256,3 +256,7 @@ frozen-copy runner is kept for busy periods).
 ## Core changes
 
 None.
+
+## Post-QA changes
+
+See [FIX-ui.md](FIX-ui.md) (2026-09-28 QA fix wave); it supersedes anything here that it contradicts.

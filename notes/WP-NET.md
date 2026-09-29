@@ -265,3 +265,7 @@ frame times are not meaningful; fps 23–42 overall). Idle (net stowed) the two 
 ## Core changes
 
 None.
+
+## Post-QA changes
+
+See [FIX-net.md](FIX-net.md) (2026-09-28 QA fix wave); it supersedes anything here that it contradicts.

@@ -172,3 +172,7 @@ None.
 - WP-RULES / WP-UI: `wildlife:disturbed {closed: true}` fires when the seiner enters the Marmot rookery buffer; a
   radio reminder about the 3-nm no-approach zone would fit there.
 - WP-BOATS (cameraRig): nothing required; binocular sightings already work through the live camera fov.
+
+## Post-QA changes
+
+See [FIX-foot.md](FIX-foot.md) (2026-09-28 QA fix wave); it supersedes anything here that it contradicts.

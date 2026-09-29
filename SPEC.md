@@ -278,6 +278,9 @@ Bold names are REQUIRED (`src/systems/contract.js`); everything else is recommen
 - `uniforms.uTerrainShadow`: optional GPU sun-occlusion mask, R channel (1 = lit), same uv/orientation as
   uHeightMap, linear, R8/R16F; assign `.value` (no recompile). Terrain and water light themselves from uSunColor ×
   uTerrainShadow; mountain shadows fall across valleys and onto the water at low sun.
+- **`collidersNear(x, z, r, out?)`** (terrain and places): solid props as `{kind: 'circle', x, z, r, y0, y1}` or
+  `{kind: 'box', x, z, hx, hz, rot, y0, y1}` (trunks, boulders, driftwood; buildings, piers, floats, towers) for the
+  on-foot controller and camera.
 - Look: summer Kodiak — vivid emerald grass and alder; dark Sitka spruce in the north-east (Kodiak city/Chiniak,
   Afognak, Shuyak, Spruce and Woody islands), treeless to the south-west; grey-brown rock on steep slopes and cliffs;
   snow patches on the highest peaks and north gullies (more on the Peninsula volcanoes); gravel/sand beaches with
@@ -373,8 +376,8 @@ Bold names are REQUIRED (`src/systems/contract.js`); everything else is recommen
   in from offshore, follow the coast with the flood (`ctx.tide`), mill off points and at bay heads, and head for
   their stream as the run peaks; they mill with jumpRate ×1.5 within 30 game min of slack. **During an open period
   at least 2 catchable schools** (outside closed waters, depth ≥ 8 m) exist within 1,500 m of the seiner (spawned
-  ≥ 600 m away, out of view). On a new season, a milling pink school spawns 500–700 m from the spawn with
-  jumpRate ×3 and spooking disabled (the tutorial set).
+  ≥ 600 m away, out of view). On a new season, a milling pink school spawns 380–420 m from the spawn (a quarter
+  mile), in water at least net depth + 4 m, with jumpRate ×3 and spooking disabled (the tutorial set).
 - **Jump signatures** (the core skill): pink — short, low, frequent "popcorn" jumps, small splash; sockeye — clean
   straight leap, head-first re-entry, little splash; chum — heavy jump falling flat on its side, big splash, plus
   finning V-wakes when milling; coho — high, twisting, repeated tail-walking jumps; king — rarely jumps. Every jump
@@ -511,7 +514,8 @@ Bold names are REQUIRED (`src/systems/contract.js`); everything else is recommen
   harbour menu (upgrades, fuel, sleep), pause/settings (quality → reload, volumes, time speed, invert Y; "Abort set"
   while fishing), help, photo mode, fleet board, season goals. `#ui` children default to pointer-events none;
   interactive widgets use `.ui-interactive`.
-- Sleep: offer id 'sleep', priority 70, when `hours ≥ 22 || hours < 4`, moored, control 'boat', fishing idle →
+- Sleep: offer id 'sleep', priority 70 (62 when tied up at a place with services, so Sell and the harbor menu stay
+  on E), when `hours ≥ 22 || hours < 4`, moored, control 'boat', fishing idle →
   `clock.skip` to 05:00, autosave. Fast travel (map): only with control 'boat', fishing idle, skiff stowed; target =
   a place's dock or a tender standoff (`nearestWater({minShore: 40})`); cost = `clock.skip(distance / (0.7 ×
   maxSpeed) / 3600)` hours and matching fuel at 60% load; then `game.teleport`.
@@ -564,7 +568,8 @@ Single emitter per event unless noted. Add new events freely; document them in y
 | `fishing:skiffReleased` | `{ x, z }` | fishing |
 | `fishing:closedUp` | `{ polygon, estimate }` | fishing |
 | `fishing:snag` | `{ x, z }` | fishing |
-| `fishing:setComplete` | `{ setNumber, caught: Catch, accepted: Catch, released: Catch (kings + overflow), lbs: {species: lbs}, totalLbs, value, minutes, waterHaul, rating: 'water haul'|'fair'|'good'|'plugged', cited }` | fishing |
+| `fishing:setComplete` | `{ setNumber, caught: Catch, accepted: Catch, released: Catch (kings + overflow), lbs: {species: lbs}, totalLbs, value, valuedAt, minutes, waterHaul, rating: 'water haul'|'fair'|'good'|'plugged', cited, escapes: {leads, corks, gap, hole, overflow} }` | fishing |
+| `fishing:brail` | `{ x, z, lbs }` per brailer scoop | fishing |
 | `economy:cash` | `{ cash, delta, reason }` | economy |
 | `economy:delivered` | `{ ticket, date, tender, district, lines: [{species, code, count, lbs, price, value}], gross, crewShare, net }` | economy |
 | `economy:holdFull` | `{}` | economy |
@@ -576,7 +581,8 @@ Single emitter per event unless noted. Add new events freely; document them in y
 | `player:mode` | `{ control: 'boat'|'foot' }` | player |
 | `player:step` | `{ surface, run }` | player |
 | `ui:toast` | `{ text, kind, duration }` | anyone |
-| `ui:radio` | `{ from, text, channel }` | anyone |
+| `ui:radio` | `{ from, text, channel, pin? }` (pin: tutorial tips stay full-size and hold routine traffic) | anyone |
+| `ui:radioShown` | `{ from, channel, tip }` when a caption starts typing (audio squelch) | ui |
 | `ui:hint` | `{ id, text }` | anyone |
 
 ---
@@ -611,10 +617,11 @@ every tender). Upgrades (Kodiak harbour): purse winch (~$6k, affordable after th
 block, engine rebuild / new engine ($20–25k), deeper seine (cap ~22 m / 325 meshes), longer seine (cap 457 m / 250
 fathoms; gear shown in fathoms), sonar range tiers (150 → 300 → 500 m; marks and depth only), RSW (+price), hold
 expansion, deck lights, spotter-plane day charters (reveal schools on the chart; not allowed in the Mainland
-District). Goals on `stats.seasonGross` (`config.economy.goals`): $10k "Covered the grub and fuel bill" (~25 min),
-$40k "Permit loan paid off" (~1.5 h), $75k "Made the boat payment" (~2.5 h), and **Highliner** = first place on the
-fleet board (8 named fleet seiners whose gross advances each fishing day around 0.8× a competent player's rate, the
-top boat 1.2×; tenders radio the daily deliveries).
+District). Goals on `stats.seasonGross` (thresholds in `SEASON_GOALS`, src/game/data/fleetBoard.js, calibrated after
+QA to the measured ~2-minute set cycle): $15k "Covered the grub and fuel bill", $65k "Permit loan paid off", $120k
+"Made the boat payment", and **Highliner** = first place on the fleet board (8 named fleet seiners whose gross
+advances each fishing day around 0.8× a competent player's rate, the top boat 1.2×; tenders radio the daily
+deliveries).
 
 ### 8.4 Exploration
 60–90 places: all towns and villages, canneries, hatcheries, every major bay and strait (Uyak, Uganik, Kupreanof

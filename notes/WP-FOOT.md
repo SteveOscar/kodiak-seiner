@@ -158,3 +158,7 @@ gait frames), `foot-bench` (deckhand drawn vs hidden while walking).
 ## Core changes
 
 None.
+
+## Post-QA changes
+
+See [FIX-foot.md](FIX-foot.md) (2026-09-28 QA fix wave); it supersedes anything here that it contradicts.

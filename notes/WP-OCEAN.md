@@ -190,3 +190,7 @@ timings drift by 2–5× within a run; the numbers below are from the least cont
 - **WP-TERRAIN**: the shelf caustics read as large, high-contrast worm lines at low camera angles
   (`qa/ocean/final-shots/05b-beach-along.png`, `06b-look-down-shore.png`); smaller scale, lower contrast or fading
   with depth and view angle would read more like light through water.
+
+## Post-QA changes
+
+See [FIX-ocean.md](FIX-ocean.md) (2026-09-28 QA fix wave); it supersedes anything here that it contradicts.

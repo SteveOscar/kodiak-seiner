@@ -172,3 +172,7 @@ milling, gap escape, bag and single harvest, abort release, geometry and LODs.
 ## Core changes
 
 None.
+
+## Post-QA changes
+
+See [FIX-fish.md](FIX-fish.md) (2026-09-28 QA fix wave); it supersedes anything here that it contradicts.

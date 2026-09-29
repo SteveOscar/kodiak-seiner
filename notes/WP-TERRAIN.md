@@ -168,3 +168,7 @@ pairs taken at load ≈ 2–3.
 ## Core changes
 
 None.
+
+## Post-QA changes
+
+See [FIX-colliders.md](FIX-colliders.md) (2026-09-28 QA fix wave); it supersedes anything here that it contradicts.

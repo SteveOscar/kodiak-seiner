@@ -85,10 +85,12 @@ export const config = {
     fuelPremiumAway: 0.4, // extra per gallon at villages, canneries and tenders
     towCost: 750, // tow to the nearest tender when out of fuel (plus a fill to 25%)
     advanceLimit: -10000, // cannery advance: cash may go this negative; repaid from fish tickets
+    // Labels only: thresholds are SEASON_GOALS in src/game/data/fleetBoard.js, calibrated against the measured set
+    // cycle (~2 real minutes per set, 4 good sets per fishing period).
     goals: [
-      { gross: 10000, label: 'Covered the grub and fuel bill' },
-      { gross: 40000, label: 'Permit loan paid off' },
-      { gross: 75000, label: 'Made the boat payment' },
+      { gross: 15000, label: 'Covered the grub and fuel bill' },
+      { gross: 65000, label: 'Permit loan paid off' },
+      { gross: 120000, label: 'Made the boat payment' },
     ],
   },
 

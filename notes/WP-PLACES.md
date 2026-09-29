@@ -202,3 +202,7 @@ None.
 - `node tools/smoke.mjs --scenario=tests/scenarios/places-review.json --out=qa/places/review` (close-ups, daylight
   readings)
 - `node src/world/places/genFootprints.mjs` after any layout change.
+
+## Post-QA changes
+
+See [FIX-colliders.md](FIX-colliders.md) (2026-09-28 QA fix wave); it supersedes anything here that it contradicts.

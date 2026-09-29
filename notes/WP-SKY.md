@@ -205,3 +205,7 @@ None.
 - **WP-BOATS (cameraRig)**: keep copying the focus into `sky.shadowFocus` every frame (the shadow box and
   sun-visibility sampling follow it).
 - **All WPs with custom shaders**: see "Fog contract details" above; don't read `vFogDepth`/`fogNear` in custom code.
+
+## Post-QA changes
+
+See [FIX-sky.md](FIX-sky.md) (2026-09-28 QA fix wave); it supersedes anything here that it contradicts.

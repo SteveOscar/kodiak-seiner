@@ -197,3 +197,7 @@ samples, built once per sample rate (~45 ms total, spread over idle callbacks on
 ## Core changes
 
 None.
+
+## Post-QA changes
+
+See [FIX-audio.md](FIX-audio.md) (2026-09-28 QA fix wave); it supersedes anything here that it contradicts.

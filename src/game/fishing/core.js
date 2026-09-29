@@ -380,7 +380,7 @@ export function createFishingCore(ctx, { rng }) {
         harbourList = list.filter((p) => !p?.memorial && (p?.services?.length ?? 0) > 0 && Number.isFinite(p?.dock?.x));
       }
       for (const p of harbourList) {
-        if (Math.hypot(p.dock.x - x, p.dock.z - z) < T.letGo.harbourRange) return p.name ?? 'the harbour';
+        if (Math.hypot(p.dock.x - x, p.dock.z - z) < T.letGo.harbourRange) return p.name ?? 'the harbor';
       }
     }
     return null;
