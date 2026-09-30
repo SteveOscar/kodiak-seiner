@@ -154,6 +154,7 @@ export function createTitle(ctx, root, { saves, openPanel, confirm, onStart }) {
       toggle(el, 'on', true);
       el.classList.remove('leaving');
       lastShot = null;
+      picker.warm();
     },
     hide() {
       toggle(el, 'on', false);

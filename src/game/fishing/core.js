@@ -185,6 +185,8 @@ export function createFishingCore(ctx, { rng }) {
         }
         step(dt);
         backspace(dt);
+      } else if (core.state === 'report' && arcade() && ctx.state.mode === 'paused') {
+        stowBehindReport();
       }
       refreshHud();
     },
@@ -790,6 +792,16 @@ export function createFishingCore(ctx, { rng }) {
     }
     set.reportT = 0;
     enter('report');
+  }
+
+  // Arcade: the report card pauses the game, which would hold the skiff's run home and the empty bag until it is
+  // dismissed. The crew winches both aboard behind the card instead, so the next let-go is offered on dismissal.
+  function stowBehindReport() {
+    const sk = S().skiff;
+    if (sk && sk.state !== 'stowed') safe(() => sk.stow?.());
+    set.skiffHome = true;
+    const net = S().net;
+    if (net && net.state !== 'stowed') safe(() => net.stow?.());
   }
 
   function hardStop() {

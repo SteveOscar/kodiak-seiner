@@ -9,6 +9,9 @@ import { createGeo } from '../src/core/geo.js';
 import { config } from '../src/core/config.js';
 import { createPlacesApi } from '../src/world/places/api.js';
 import * as S from '../src/ui/lib/start.js';
+import { TUTORIAL, createFishSim } from '../src/entities/fish/sim.js';
+import { createWorldAdapter } from '../src/entities/fish/world.js';
+import { createRng } from '../src/core/rng.js';
 
 const geo = createGeo(config.world.half);
 const R = resolve(geo);
@@ -21,8 +24,20 @@ async function realOptions(mode) {
   const minDepth = config.boat.groundingDepth + 1.5;
   const isOpenWater = (x, z) => heightmap.shoreDistance(x, z) >= 40 && heightmap.heightAt(x, z) < -minDepth;
   const targets = w.season.travel.teleportTargets();
-  const options = S.buildStartOptions({ mode, places: R.places, districts: R.districts, targets, spawn, closedWaters: w.season.closedWaters, isOpenWater });
+  const options = S.buildStartOptions({ mode, places: R.places, districts: R.districts, targets, spawn, closedWaters: w.season.closedWaters, isOpenWater, sea: heightmap, netDepth: config.net.depth });
   return { w, options, targets, spawn, isOpenWater };
+}
+
+// Shallowest water on a straight run of `len` m from (x, z) along heading h, and within `r` m of a point.
+function minAlong(hm, x, z, h, len) {
+  let m = Infinity;
+  for (let s = 0; s <= len; s += 5) m = Math.min(m, hm.depthAt(x + Math.sin(h) * s, z - Math.cos(h) * s));
+  return m;
+}
+function minWithin(hm, x, z, r) {
+  let m = hm.depthAt(x, z);
+  for (const rr of [r / 2, r]) for (let i = 0; i < 32; i++) m = Math.min(m, hm.depthAt(x + Math.cos((i / 32) * Math.PI * 2) * rr, z + Math.sin((i / 32) * Math.PI * 2) * rr));
+  return m;
 }
 
 test('New Season lists the working ports, the City of Kodiak first, recommended and at the classic spawn', async () => {
@@ -56,14 +71,76 @@ test('New Season lists the working ports, the City of Kodiak first, recommended 
   assert.match(options.find((o) => o.id === 'larsen-bay').line, /Uyak Bay/);
   assert.equal(options.find((o) => o.id === 'alitak-cannery').services, 'Buys fish · fuel · ice');
 
-  // Every start is in open water outside the stream closures; outside the markers it is the teleport arrival pose.
+  // Every start is at its port in open water outside the stream closures, bow toward open water: the first throttle
+  // runs 300 m without touching bottom (the Free Explore arrival pose faced the beach from ~70 m off it).
+  const hm = w.ctx.heightmap;
+  const ports = R.places.filter((q) => S.WORKING_KINDS.includes(q.kind) && !q.memorial);
   for (const o of rest) {
+    const p = R.places.find((q) => q.id === o.id);
+    const d = Math.hypot(o.pose.x - p.x, o.pose.z - p.z);
     assert.ok(isOpenWater(o.pose.x, o.pose.z), `${o.id} starts in open water`);
+    assert.ok(hm.depthAt(o.pose.x, o.pose.z) >= S.SEASON_START.depth && hm.shoreDistance(o.pose.x, o.pose.z) >= S.SEASON_START.shore, `${o.id} has sea room`);
     assert.ok(!w.season.isClosedWater(o.pose.x, o.pose.z), `${o.id} starts inside closed waters`);
-    const t = targets.find((x) => x.placeId === o.id);
-    if (!w.season.isClosedWater(t.x, t.z)) assert.deepEqual(o.pose, { x: t.x, z: t.z, heading: t.heading }, o.id);
-    else assert.ok(Math.hypot(o.pose.x - t.x, o.pose.z - t.z) < 700, `${o.id} moved just outside the markers`);
+    assert.ok(d <= S.SEASON_START.maxFromPlace, `${o.id} starts ${Math.round(d)} m from the port`);
+    for (const q of ports) {
+      if (q !== p && Math.hypot(q.x - p.x, q.z - p.z) > S.SAME_HARBOR) assert.ok(d <= Math.hypot(o.pose.x - q.x, o.pose.z - q.z), `${o.id} starts nearer ${q.id}`);
+    }
+    assert.ok(minAlong(hm, o.pose.x, o.pose.z, o.pose.heading, 300) > config.boat.groundingDepth + 3, `${o.id}: clear water 300 m ahead`);
     assert.deepEqual(S.startAtFor(o), o.pose);
+  }
+});
+
+test('the start search mirrors the fish sim\'s tutorial placement', () => {
+  assert.equal(S.TUTORIAL_SPOT.rMin, TUTORIAL.rMin);
+  assert.equal(S.TUTORIAL_SPOT.rMax, TUTORIAL.rMax);
+  assert.equal(S.TUTORIAL_SPOT.margin, TUTORIAL.margin);
+  assert.equal(S.TUTORIAL_SPOT.clear, TUTORIAL.clear);
+  assert.equal(S.SEASON_START.netDepth, config.net.depth);
+});
+
+test('New Season away from Kodiak: the real fish sim puts the tutorial school in water the set can circle, a clear run from the bow', async () => {
+  const { w, options } = await realOptions('season');
+  const hm = w.ctx.heightmap;
+  const world = createWorldAdapter(w.ctx);
+  const risky = [];
+  for (const o of options.filter((x) => !x.home)) {
+    const t = w.season.travel.teleportTargets().find((x) => x.placeId === o.id);
+    const place = R.places.find((q) => q.id === o.id);
+    const others = R.places.filter((q) => q !== place && S.WORKING_KINDS.includes(q.kind) && Math.hypot(q.x - place.x, q.z - place.z) > S.SAME_HARBOR);
+    const r = S.seasonStartPose(t, hm, { place, others, closedWaters: w.season.closedWaters });
+    assert.deepEqual({ x: r.x, z: r.z, heading: r.heading }, o.pose, o.id);
+    if (r.risk > 0) {
+      risky.push(o.id);
+      continue;
+    }
+    for (let seed = 1; seed <= 12; seed++) {
+      const sim = createFishSim({ config, rng: createRng(seed * 7919), world });
+      const s = sim.spawnTutorial(o.pose.x, o.pose.z, o.pose.heading);
+      const { x, z } = s.position;
+      const d = Math.hypot(x - o.pose.x, z - o.pose.z);
+      const brg = Math.atan2(x - o.pose.x, -(z - o.pose.z));
+      const off = Math.abs(((((brg - o.pose.heading) * 180) / Math.PI + 540) % 360) - 180);
+      assert.ok(d >= 370 && d <= 710, `${o.id} seed ${seed}: school ${Math.round(d)} m out`);
+      assert.ok(off <= 60, `${o.id} seed ${seed}: school ${Math.round(off)}° off the bow`);
+      assert.ok(minWithin(hm, x, z, 80) >= S.SEASON_START.circleDepth - 0.5, `${o.id} seed ${seed}: the circle round the school touches ${minWithin(hm, x, z, 80).toFixed(1)} m`);
+      assert.ok(minAlong(hm, o.pose.x, o.pose.z, brg, d) >= S.SEASON_START.runDepth - 0.5, `${o.id} seed ${seed}: shoal between the boat and the school`);
+    }
+  }
+  // Port Lions sits up a narrow inlet with no water deep enough for the sim to choose a spot, and no start nearer it
+  // than Ouzinkie clears the sim's random drop: its start is the least risky one (notes/FIX-verify-start.md).
+  assert.deepEqual(risky, ['port-lions']);
+});
+
+test('Port Lions: the tutorial school always lands where its first circle stays navigable', async () => {
+  const { w, options } = await realOptions('season');
+  const hm = w.ctx.heightmap;
+  const world = createWorldAdapter(w.ctx);
+  const o = options.find((x) => x.id === 'port-lions');
+  for (let seed = 1; seed <= 40; seed++) {
+    const sim = createFishSim({ config, rng: createRng(seed * 104729), world });
+    const s = sim.spawnTutorial(o.pose.x, o.pose.z, o.pose.heading);
+    const { x, z } = s.position;
+    assert.ok(minWithin(hm, x, z, 80) >= 5.5, `seed ${seed}: circle touches ${minWithin(hm, x, z, 80).toFixed(1)} m`);
   }
 });
 
@@ -94,6 +171,66 @@ test('search filters by name, kind, district and nearby grounds; Surprise me onl
   const villages = S.filterStartOptions(options, 'village');
   assert.ok(villages.length >= 5 && villages.every((o) => o.kindLabel === 'Village' || /village/i.test(o.name) || /village/i.test(o.districtName)));
   assert.deepEqual(S.filterStartOptions(options, 'no such place'), []);
+});
+
+test('search puts the place the player named first: whole name, then name start, word start, kind/district, grounds', async () => {
+  const { options } = await realOptions('explore');
+  // "deadman" is in several villages' nearby grounds; Deadman Bay itself leads and is what Enter starts at.
+  const deadman = S.filterStartOptions(options, 'deadman');
+  assert.equal(deadman[0].id, 'deadman-bay', deadman.map((o) => o.id).join(','));
+  assert.ok(deadman.some((o) => o.id === 'kaguyak'), 'grounds matches still listed');
+  assert.equal(S.filterStartOptions(options, 'Deadman Bay')[0].id, 'deadman-bay');
+  assert.equal(S.filterStartOptions(options, 'alitak')[0].id, 'alitak-bay');
+  assert.equal(S.filterStartOptions(options, 'uyak')[0].id, 'uyak-bay');
+  assert.equal(S.filterStartOptions(options, 'st paul')[0].id, 'st-paul-harbor');
+  assert.equal(S.filterStartOptions(options, 'saints')[0].id, 'three-saints-bay');
+  // Groups stay contiguous, so the panel draws each district header once.
+  for (const q of ['deadman', 'bay', 'cape', 'kodiak', 'village']) {
+    const groups = S.groupStartOptions(S.filterStartOptions(options, q)).map((g) => g.id);
+    assert.equal(new Set(groups).size, groups.length, q);
+  }
+  const o = { name: 'Awa’uq Bay', kindLabel: 'Bay', districtName: 'Eastside Kodiak', grounds: ['Ugak Bay'] };
+  assert.equal(S.matchRank(o, 'awauq bay'), 0);
+  assert.equal(S.matchRank(o, 'awa'), 1);
+  assert.equal(S.matchRank(o, 'bay'), 2);
+  assert.equal(S.matchRank(o, 'uq b'), 3);
+  assert.equal(S.matchRank(o, 'eastside'), 4);
+  assert.equal(S.matchRank(o, 'ugak'), 5);
+  assert.equal(S.matchRank(o, 'zzz'), -1);
+});
+
+test('seasonStartPose leaves the beach: sea room, bow to open water and the school, or null without water', () => {
+  // A straight coast along z = 0 with land to the north; the seabed shelves 5 cm per m to 30 m deep.
+  const sea = {
+    depthAt: (x, z) => Math.max(0, Math.min(30, z * 0.05)),
+    shoreDistance: (x, z) => z,
+  };
+  const beach = { x: 0, z: 70, heading: 0 }; // 70 m off, facing the beach (north)
+  const r = S.seasonStartPose(beach, sea, { place: { x: 0, z: -50 } });
+  assert.ok(r && r.risk === 0 && r.school, JSON.stringify(r));
+  assert.ok(sea.depthAt(r.x, r.z) >= S.SEASON_START.depth && r.z >= S.SEASON_START.shore);
+  assert.ok(Math.cos(r.heading) < 0, 'the bow points offshore (south), away from the beach');
+  assert.ok(minAlong(sea, r.x, r.z, r.heading, 300) >= S.SEASON_START.depth);
+  // The nearest such start: no farther out than the first lattice ring with a school spot in 20 m clean water.
+  assert.ok(Math.hypot(r.x - beach.x, r.z - beach.z) <= 700, `${Math.round(Math.hypot(r.x - beach.x, r.z - beach.z))} m`);
+  // Stream markers are avoided.
+  const closed = [{ x: r.x, z: r.z, radius: 150 }];
+  const r2 = S.seasonStartPose(beach, sea, { place: { x: 0, z: -50 }, closedWaters: closed });
+  assert.ok(Math.hypot(r2.x - r.x, r2.z - r.z) > 150);
+  // Not nearer another port than this one.
+  const r3 = S.seasonStartPose(beach, sea, { place: { x: 0, z: -50 }, others: [{ x: 0, z: 400 }] });
+  assert.ok(Math.hypot(r3.x, r3.z + 50) <= Math.hypot(r3.x, r3.z - 400));
+  assert.equal(S.seasonStartPose(beach, { depthAt: () => 0, shoreDistance: () => -10 }), null);
+  assert.equal(S.seasonStartPose(null, sea), null);
+  // seasonPoseFor caches per place and pose.
+  const cache = new Map();
+  let calls = 0;
+  const counted = { depthAt: (x, z) => (calls++, sea.depthAt(x, z)), shoreDistance: sea.shoreDistance };
+  const a = S.seasonPoseFor('p', beach, { sea: counted, cache });
+  const n = calls;
+  assert.deepEqual(S.seasonPoseFor('p', beach, { sea: counted, cache }), a);
+  assert.equal(calls, n, 'second lookup is cached');
+  assert.deepEqual(Object.keys(a).sort(), ['heading', 'x', 'z']);
 });
 
 test('preselection: the remembered choice for the mode, else Kodiak, else the first', () => {

@@ -57,7 +57,7 @@ export const GUARANTEE = { count: 2, radius: 1500, minSpawn: 600, maxSpawn: 1450
 export const FLEE_SPEED = 2.6;
 export const MAX_SWIM = 2.8;
 // Tutorial school: 380–420 m from the spawn (a quarter mile), in water ≥ net depth + margin within `clear` m.
-export const TUTORIAL = { rMin: 380, rMax: 420, margin: 4, clear: 80 };
+export const TUTORIAL = { rMin: 380, rMax: 420, margin: 4, clear: 80, inletDepth: 8, inletCircle: 6 };
 // Free-swimming schools cruise at least this deep (where the water allows) so they read as shadows under the surface;
 // only the bag and jumpers come right up.
 export const CRUISE_MIN_DEPTH = 1.8;
@@ -386,11 +386,29 @@ export function createFishSim({ config, rng, world }) {
     scan(TUTORIAL.rMin, TUTORIAL.rMax);
     let ok = cands.filter((c) => c.m >= need);
     if (!ok.length) {
-      // Nothing clean at a quarter mile: the nearest clean water farther out, else the deepest spot found.
+      // Nothing clean at a quarter mile: the nearest clean water farther out.
       scan(TUTORIAL.rMax + 10, 700);
       ok = cands.filter((c) => c.m >= need).sort((p, q) => p.r - q.r);
       if (ok.length) ok = ok.filter((c) => c.r <= ok[0].r + 20);
-      else ok = cands.sort((p, q) => q.m - p.m).slice(0, 1);
+      else {
+        // Narrow inlets (Port Lions): shallower than the seine is fine as long as the whole first circle stays
+        // navigable, so the set never runs the seiner aground. Else the deepest spot found.
+        const navigable = [];
+        for (let r = TUTORIAL.rMin; r <= 900; r += 10) {
+          for (let deg = 0; deg < 360; deg += 3) {
+            const a = (deg * Math.PI) / 180;
+            const px = x + Math.sin(a) * r;
+            const pz = z - Math.cos(a) * r;
+            if (world.depthAt(px, pz) < TUTORIAL.inletDepth || !waterOk(px, pz, { minDepth: TUTORIAL.inletDepth, minShore: 60 })) continue;
+            const m = minDepthAround(px, pz, TUTORIAL.clear);
+            if (m < TUTORIAL.inletCircle) continue;
+            const off = heading === null ? 0 : Math.abs(((a - heading + 3 * Math.PI) % (2 * Math.PI)) - Math.PI);
+            navigable.push({ x: px, z: pz, m, r, off });
+          }
+        }
+        navigable.sort((p, q) => p.r - q.r);
+        ok = navigable.length ? navigable.filter((c) => c.r <= navigable[0].r + 40) : cands.sort((p, q) => q.m - p.m).slice(0, 1);
+      }
     }
     if (!ok.length) return null;
     // Most margin first, then closest to the bow; a little variety among near-equal spots.

@@ -166,6 +166,61 @@ test('arcade set: the crew purses, hauls and brails in under 8 s with no winch, 
   assert.equal(g.offer('action')?.id, 'fishing-letgo', F.canSet().reason ?? '');
 });
 
+test('arcade: "Close up!" to the report is under 8 s', async () => {
+  assert.ok(A.closeSeconds + A.purseSeconds + A.haulSeconds + A.brailSeconds < 8);
+  const g = await makeGame({ mode: 'arcade', overrides: fishOverride() });
+  const F = g.fishing;
+  const { close } = layAndClose(g);
+  const rest = g.until(() => F.state === 'report', 12);
+  assert.ok(close + rest < 8, `Space → report ${(close + rest).toFixed(2)} s (closing ${close.toFixed(2)})`);
+});
+
+test('arcade report card: the crew stows a skiff still out and the net behind it, the let-go is ready on dismissal', async () => {
+  const g = await makeGame({ mode: 'arcade', overrides: fishOverride() });
+  const F = g.fishing;
+  const sk = g.ctx.systems.skiff;
+  layAndClose(g);
+  // A skiff far off when the rings come up (a hook's beach end, a slow close) is still on its way home at the report.
+  let sent = false;
+  g.until(
+    () => F.state === 'report',
+    12,
+    () => {
+      if (F.state === 'hauling' && !sent) {
+        sent = true;
+        sk.position.set(g.seiner.position.x + 250, 0, g.seiner.position.z);
+      }
+    },
+  );
+  assert.equal(F.state, 'report');
+  assert.equal(sk.state, 'returning');
+  assert.notEqual(g.net.state, 'stowed');
+  // WP-UI shows the report as a pausing panel: the systems tick with dt 0 in mode 'paused' while it is up.
+  g.ctx.state.mode = 'paused';
+  for (let i = 0; i < 3; i++) g.fishing.update(0);
+  assert.equal(F.state, 'report', 'the report stays up while paused');
+  assert.equal(sk.state, 'stowed');
+  assert.equal(g.net.state, 'stowed');
+  // Dismissed: idle on the first frame of play and the let-go is offered straight away.
+  g.ctx.state.mode = 'play';
+  g.frame();
+  assert.equal(F.state, 'idle');
+  g.seiner.setPose(OPEN.x, OPEN.z, Math.PI / 2); // clear of the stub tender
+  g.frame();
+  assert.equal(g.offer('action')?.id, 'fishing-letgo', F.canSet().reason ?? '');
+  // Realistic sets are untouched: the report waits for the skiff to come home under its own power.
+  const r = await makeGame({ mode: 'realistic', overrides: fishOverride() });
+  layAndClose(r);
+  r.fishing.core.debug.auto.purse = true;
+  r.fishing.core.debug.auto.haul = true;
+  r.until(() => r.fishing.state === 'report', 120);
+  assert.equal(r.fishing.state, 'report');
+  r.ctx.systems.skiff.position.set(r.seiner.position.x + 250, 0, r.seiner.position.z);
+  r.ctx.state.mode = 'paused';
+  r.fishing.update(0);
+  assert.notEqual(r.ctx.systems.skiff.state, 'stowed');
+});
+
 test('arcade close-up is offered from twice the realistic distance', async () => {
   const g = await makeGame({ mode: 'arcade' });
   const F = g.fishing;
